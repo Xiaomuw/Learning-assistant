@@ -1,10 +1,38 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Node / Next
 node_modules/
 .next/
 dist/
 build/
 out/
 coverage/
+
+# Logs
 *.log
+
+# Environment
 .env
-.env.local
-.DS_Store
+.env.*
+!.env.example
+
+# Runtime data
+backend/chroma_data/
+backend/data/*.db
+backend/data/memory/*.json
