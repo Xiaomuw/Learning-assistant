@@ -6,11 +6,11 @@ import {
   ArrowRight,
   BrainCircuit,
   NotebookPen,
-  Sparkles,
   Target,
 } from "lucide-react";
 import ExplanationCard from "./ExplanationCard";
-import type { Message } from "@/lib/api";
+import MessageProcessPanel from "./MessageProcessPanel";
+import type { Message, MessageProcess } from "@/lib/api";
 
 interface ChatWindowProps {
   messages: Message[];
@@ -23,6 +23,29 @@ const SUGGESTIONS = [
   "帮我复习 TCP 三次握手",
   "给我出两道数据库索引练习题",
 ];
+
+function processWithAnswerThinking(message: Message): MessageProcess | undefined {
+  if (!message.process) {
+    return undefined;
+  }
+  const thinking = message.explanation?.thinking?.trim();
+  if (!thinking || message.process.reasoningSummary?.trim()) {
+    return message.process;
+  }
+  return {
+    ...message.process,
+    reasoningSummary: thinking,
+  };
+}
+
+function fallbackModelBadge(process?: MessageProcess) {
+  const execution = process?.execution;
+  if (!execution?.fallbackUsed) {
+    return "";
+  }
+  const fallbackModel = execution.fallbackModelId || execution.modelId || "备用模型";
+  return `已使用备用模型：${fallbackModel}`;
+}
 
 export default function ChatWindow({
   messages,
@@ -85,6 +108,8 @@ export default function ChatWindow({
 
       {messages.map((message, index) => {
         const isUser = message.role === "user";
+        const visibleProcess = processWithAnswerThinking(message);
+        const fallbackBadge = fallbackModelBadge(visibleProcess);
 
         return (
           <article
@@ -113,19 +138,101 @@ export default function ChatWindow({
                     <span className="neo-badge -rotate-2 bg-neo-secondary">
                       Coach
                     </span>
-                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em]">
-                      <Sparkles size={14} strokeWidth={2.8} />
-                      流式讲解
-                    </div>
+                    {message.process?.currentStage && (
+                      <span className="neo-badge bg-white">
+                        {message.process.currentStage}
+                      </span>
+                    )}
+                    {fallbackBadge && (
+                      <span className="neo-badge bg-neo-accent">
+                        {fallbackBadge}
+                      </span>
+                    )}
                   </div>
 
-                  <p className="mt-4 text-sm font-bold leading-relaxed whitespace-pre-wrap">
-                    {message.content || "正在组织讲解内容..."}
-                  </p>
+                  {visibleProcess && (
+                    <MessageProcessPanel
+                      process={visibleProcess}
+                      autoOpen={isStreaming && index === messages.length - 1}
+                    />
+                  )}
+
+                  {message.content && (
+                    <p className="mt-4 text-sm font-bold leading-relaxed whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                  )}
 
                   {message.explanation && (
                     <div className="mt-4">
-                      <ExplanationCard explanation={message.explanation} />
+                      <ExplanationCard
+                        explanation={message.explanation}
+                        questionType={message.questionType ?? "concept"}
+                        onSuggestionClick={onSuggestionClick}
+                      />
+                    </div>
+                  )}
+
+                  {message.quizClarification && (
+                    <div className="mt-4">
+                      <div className="neo-card-muted p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="neo-label">Practice Setup</p>
+                            <h3 className="mt-1 text-lg font-black">
+                              {message.quizClarification.title}
+                            </h3>
+                          </div>
+                          <span className="neo-badge bg-white">待选择</span>
+                        </div>
+                        <p className="mt-3 text-sm font-bold leading-relaxed">
+                          {message.quizClarification.description}
+                        </p>
+
+                        <div className="mt-4 grid gap-2">
+                          {message.quizClarification.recommended_options.map((option) => (
+                            <button
+                              key={`${option.source}-${option.value}`}
+                              type="button"
+                              onClick={() =>
+                                onSuggestionClick?.(`围绕 ${option.value} 出 5 道单选题`)
+                              }
+                              className="flex w-full items-center justify-between border-[3px] border-neo-ink bg-white px-4 py-3 text-left text-sm font-black shadow-neo-sm transition-all duration-100 ease-linear hover:-translate-y-1"
+                            >
+                              <span>{option.label}</span>
+                              <ArrowRight size={16} strokeWidth={2.8} />
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="border-[3px] border-neo-ink bg-white p-3 shadow-neo-sm">
+                            <p className="neo-label">题型</p>
+                            <p className="mt-1 text-sm font-black">单选题</p>
+                          </div>
+                          <div className="border-[3px] border-neo-ink bg-white p-3 shadow-neo-sm">
+                            <p className="neo-label">难度</p>
+                            <p className="mt-1 text-sm font-black">自适应</p>
+                          </div>
+                          <div className="border-[3px] border-neo-ink bg-white p-3 shadow-neo-sm">
+                            <p className="neo-label">数量</p>
+                            <p className="mt-1 text-sm font-black">5 道</p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSuggestionClick?.(
+                              message.quizClarification?.custom_input_placeholder ??
+                                "围绕 HashMap 出 5 道单选题"
+                            )
+                          }
+                          className="neo-button-secondary mt-4 w-full justify-center"
+                        >
+                          {message.quizClarification.custom_input_placeholder}
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -151,7 +258,7 @@ export default function ChatWindow({
                           {message.quiz.map((item, quizIndex) => (
                             <div
                               key={`${item.question}-${quizIndex}`}
-                              className="border-[3px] border-neo-ink bg-white p-4 shadow-neo-sm"
+                              className="rounded-[1.25rem] border-[3px] border-neo-ink bg-white p-4 shadow-neo-sm"
                             >
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="neo-badge bg-neo-accent">
@@ -161,19 +268,52 @@ export default function ChatWindow({
                                   <Target size={12} strokeWidth={2.8} />
                                   {item.knowledge_point}
                                 </span>
+                                {item.source_type === "question_bank" && item.source_name ? (
+                                  <span className="neo-badge bg-neo-secondary">
+                                    {item.source_year
+                                      ? `${item.source_name} · ${item.source_year}`
+                                      : item.source_name}
+                                  </span>
+                                ) : (
+                                  <span className="neo-badge bg-neo-secondary">AI 补题</span>
+                                )}
                               </div>
                               <p className="mt-3 text-sm font-bold leading-relaxed">
                                 {item.question}
                               </p>
-                              <div className="mt-3 border-[3px] border-neo-ink bg-neo-bg p-3">
-                                <div className="flex items-center gap-2">
-                                  <NotebookPen size={14} strokeWidth={2.8} />
-                                  <p className="neo-label">Hint</p>
+                              {Array.isArray(item.options) && item.options.length > 0 ? (
+                                <div className="mt-3 space-y-2">
+                                  {item.options.map((option) => (
+                                    <div
+                                      key={`${item.question_id}-${option.key}`}
+                                      className="rounded-[1rem] border-[3px] border-neo-ink bg-neo-bg p-3"
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        <span className="neo-badge bg-neo-secondary">{option.key}</span>
+                                        <div className="flex-1">
+                                          <p className="text-sm font-bold leading-relaxed">
+                                            {option.text}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
-                                <p className="mt-2 text-sm font-bold leading-relaxed">
-                                  {item.hint}
-                                </p>
-                              </div>
+                              ) : null}
+                              <p className="mt-3 text-xs font-black uppercase tracking-[0.16em] text-neo-ink/70">
+                                进入练习页提交作答后，会显示正反馈、错因和完整解析。
+                              </p>
+                              {item.hint ? (
+                                <div className="mt-3 border-[3px] border-neo-ink bg-neo-bg p-3">
+                                  <div className="flex items-center gap-2">
+                                    <NotebookPen size={14} strokeWidth={2.8} />
+                                    <p className="neo-label">Hint</p>
+                                  </div>
+                                  <p className="mt-2 text-sm font-bold leading-relaxed">
+                                    {item.hint}
+                                  </p>
+                                </div>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -186,25 +326,6 @@ export default function ChatWindow({
           </article>
         );
       })}
-
-      {isStreaming && (
-        <div className="flex animate-stamp-in justify-start">
-          <div className="flex items-center gap-2 border-[3px] border-neo-ink bg-neo-secondary px-4 py-3 shadow-neo-sm">
-            <span className="h-3 w-3 bg-neo-ink animate-pulse-dot" />
-            <span
-              className="h-3 w-3 bg-neo-ink animate-pulse-dot"
-              style={{ animationDelay: "0.15s" }}
-            />
-            <span
-              className="h-3 w-3 bg-neo-ink animate-pulse-dot"
-              style={{ animationDelay: "0.3s" }}
-            />
-            <span className="text-xs font-black uppercase tracking-[0.16em]">
-              处理中
-            </span>
-          </div>
-        </div>
-      )}
 
       <div ref={bottomRef} />
     </div>

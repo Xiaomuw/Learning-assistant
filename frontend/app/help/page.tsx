@@ -37,15 +37,15 @@ export default function HelpPage() {
             </div>
             <div className="mt-4 space-y-3">
               <div className="neo-card bg-white p-4">
-                <p className="font-black">1. 创建笔记本</p>
+                <p className="font-black">1. 选择系统默认库</p>
                 <p className="mt-2 text-sm font-bold leading-relaxed">
-                  你可以新建一个主题型笔记本，比如“数据库索引”“操作系统面试题”“HTTP 与 TCP”。
+                  408、数学和通用学科库由系统统一维护，新用户登录后即可直接使用。
                 </p>
               </div>
               <div className="neo-card bg-white p-4">
-                <p className="font-black">2. 添加来源</p>
+                <p className="font-black">2. 补充我的资料</p>
                 <p className="mt-2 text-sm font-bold leading-relaxed">
-                  支持上传 PDF，也可以给空笔记本自动生成基础内容，用来快速启动学习。
+                  你可以上传 PDF 或添加 URL，作为仅自己可见的补充资料参与 RAG 检索。
                 </p>
               </div>
               <div className="neo-card bg-white p-4">

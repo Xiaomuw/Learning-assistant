@@ -1,46 +1,28 @@
-# 多 Agent 学习助手 API 接口文档
+# 多 Agent 学习助手 API 文档
 
-> 版本：v0.1  
-> 更新日期：2026-04-12  
-> 后端服务默认端口：`8000`
+> 更新日期：2026-04-28
 
-## 1. 接口约定
+## 1. Base URL
 
-### 1.1 Base URL
+### 本地开发
 
-- 后端直连：`http://localhost:8000`
+- 后端：`http://127.0.0.1:8000`
 - 前端代理：`/api`
+
+### Docker
+
+- 宿主机访问后端：`http://127.0.0.1:8002`
+- 前端容器内部代理到：`http://backend:8000/api`
 
 说明：
 
-- 浏览器前端通常通过 `/api` 访问后端。
-- Docker 前端容器会把 `/api` 代理到 `backend:8000/api`。
-
-### 1.2 数据格式
-
-- 请求体：`application/json`
-- 文件上传：`multipart/form-data`
-- 流式响应：`text/event-stream`
-
-### 1.3 认证说明
-
-当前版本未接入登录鉴权，调用方通常使用默认用户 `default_user`。生产环境需补充认证机制。
-
-### 1.4 通用错误格式
-
-```json
-{
-  "detail": "错误说明"
-}
-```
+- 浏览器优先通过前端代理 `/api` 访问
+- `/api/subjects` 与 `/api/notebooks` 当前等价
+- 字段 `subject_id` 仍是兼容实现，产品语义上可理解为 `notebook_id`
 
 ## 2. 健康检查
 
 ### GET `/health`
-
-用于检查后端服务是否存活。
-
-#### 响应示例
 
 ```json
 {
@@ -53,77 +35,63 @@
 
 ### 3.1 POST `/api/chat`
 
-发起流式聊天请求，返回 SSE 事件流。
+SSE 流式接口。
 
 #### 请求体
 
 ```json
 {
-  "user_id": "default_user",
+  "user_id": "当前登录用户 ID",
   "session_id": "optional-session-id",
   "question": "TCP 和 HTTP 的关系是什么？",
-  "subject_id": "general"
+  "subject_id": "computer-network"
 }
 ```
-
-#### 字段说明
-
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `user_id` | 是 | 用户 ID |
-| `session_id` | 否 | 会话 ID，不传则自动生成 |
-| `question` | 是 | 用户问题，1-2000 字符 |
-| `subject_id` | 否 | 学科 ID，默认 `general` |
 
 #### SSE 事件类型
 
-| 事件名 | 说明 |
+| 事件 | 说明 |
 | --- | --- |
-| `routing` | 路由结果 |
+| `status` | 已接入引擎，开始处理 |
+| `routing` | 问题分类完成 |
 | `retrieval` | 检索结果摘要 |
-| `explanation` | 讲解内容 |
-| `quiz` | 练习题 |
+| `explanation` | 讲解结果或元问题回答 |
+| `quiz` | 题包结果 |
 | `memory` | 学习记忆更新 |
-| `done` | 流结束 |
+| `done` | 正常结束 |
 | `error` | 处理异常 |
 
-#### `routing` 示例
+#### 事件示例
+
+```text
+event: status
+data: {"message":"已连接学习引擎，正在判断问题类型。","session_id":"..."}
+```
 
 ```text
 event: routing
-data: {"question_type":"concept","elapsed":0.21}
+data: {"question_type":"smalltalk","elapsed":0.02}
 ```
-
-#### `retrieval` 示例
 
 ```text
 event: retrieval
-data: {"doc_count":3,"top_scores":[0.91,0.84,0.79],"elapsed":1.42}
+data: {"doc_count":3,"top_scores":[0.91,0.84,0.79],"elapsed":1.28}
 ```
-
-#### `explanation` 示例
 
 ```text
 event: explanation
-data: {
-  "explanation": {
-    "topic": "TCP 与 HTTP 的关系",
-    "thinking": "……",
-    "steps": ["……"],
-    "mistakes": ["……"],
-    "similar": ["……"]
-  },
-  "elapsed": 2.36
-}
+data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes":"...","similar":["..."]},"elapsed":2.14}
 ```
+
+说明：
+
+- `meta` 与 `smalltalk` 路径不会进入检索节点
+- `meta_node` 的返回也复用 `explanation` 事件
+- 服务端会发送 `ping=10` 心跳，避免长时间无字节输出导致前端误判断线
 
 ### 3.2 POST `/api/chat/sync`
 
-发起同步聊天请求，一次性返回最终结果。
-
-#### 请求体
-
-与 `/api/chat` 相同。
+同步接口，一次性返回最终状态摘要。
 
 #### 响应示例
 
@@ -132,57 +100,48 @@ data: {
   "session_id": "497b7d57-b8ab-4b55-91ea-0aa7b60f6ef1",
   "question_type": "concept",
   "explanation": {
-    "topic": "TCP 与 HTTP 的关系",
-    "thinking": "HTTP 是应用层协议，TCP 是传输层协议……",
-    "steps": [
-      "TCP 负责可靠传输",
-      "HTTP 负责定义请求与响应语义"
-    ],
-    "mistakes": [
-      "把 HTTP 当成传输协议"
-    ],
-    "similar": [
-      "HTTPS 与 TLS 的关系"
-    ]
+    "topic": "HTTP",
+    "thinking": "HTTP 是应用层协议。",
+    "steps": ["定义请求与响应语义"],
+    "mistakes": "不要把 HTTP 误认为传输层协议",
+    "similar": ["HTTPS"]
   },
   "quiz_items": [],
   "memory": {
-    "weak_points": [],
-    "error_count": {},
-    "recent_topics": [
-      "TCP 和 HTTP 的关系"
-    ],
-    "last_session": "497b7d57-b8ab-4b55-91ea-0aa7b60f6ef1"
+    "weak_points": ["HTTP"],
+    "error_count": {"HTTP": 1},
+    "recent_topics": ["HTTP"],
+    "last_session": "497b7d57-b8ab-4b55-91ea-0aa7b60f6ef1@2026-04-15T00:00:00Z"
   }
 }
 ```
 
-## 4. 学科接口
+## 4. 笔记本 / 学科接口
 
 ### 4.1 GET `/api/subjects`
+### 4.2 GET `/api/notebooks`
 
-获取全部学科列表。
-
-#### 响应示例
+返回相同结果：
 
 ```json
 [
   {
-    "id": "general",
-    "name": "通用知识",
-    "icon": "📚",
-    "description": "默认通用知识库",
+    "id": "data-structure",
+    "name": "数据结构与算法",
+    "icon": "🌳",
+    "description": "线性表、树、图、排序、查找、动态规划、贪心等",
     "doc_count": 12,
-    "created_at": "2026-04-12T11:11:11"
+    "created_at": "2026-04-12T11:11:11Z"
   }
 ]
 ```
 
-### 4.2 POST `/api/subjects`
+当前产品只展示四个固定知识库：`data-structure`、`computer-network`、
+`computer-organization`、`operating-system`。旧的 `general` 等历史知识库不再作为可选项；
+模型通用知识由模型自身提供，知识库只作为辅助参考。
 
-创建新学科。
-
-#### 请求体
+### 4.3 POST `/api/subjects`
+### 4.4 POST `/api/notebooks`
 
 ```json
 {
@@ -192,241 +151,141 @@ data: {
 }
 ```
 
-#### 成功响应
+### 4.5 PUT `/api/subjects/{subject_id}`
+### 4.6 PUT `/api/notebooks/{subject_id}`
 
-状态码：`201`
+更新名称、图标、简介。
 
-```json
-{
-  "id": "ji-suan-ji-wang-luo",
-  "name": "计算机网络",
-  "icon": "🌐",
-  "description": "网络协议、分层模型与排障",
-  "doc_count": 0,
-  "created_at": "2026-04-12T11:22:33"
-}
-```
+### 4.7 GET `/api/subjects/{subject_id}`
+### 4.8 GET `/api/notebooks/{subject_id}`
 
-#### 失败场景
+获取单个笔记本详情。
 
-- `409`：学科名称重复
+### 4.9 DELETE `/api/subjects/{subject_id}`
+### 4.10 DELETE `/api/notebooks/{subject_id}`
 
-### 4.3 GET `/api/subjects/{subject_id}`
+删除结构化记录并尝试删除对应 PGVector collection。
 
-获取单个学科详情。
+### 4.11 POST `/api/subjects/{subject_id}/generate`
+### 4.12 POST `/api/notebooks/{subject_id}/generate`
 
-#### 成功响应
+为没有上传资料的笔记本自动生成基础知识内容并入库。
 
-```json
-{
-  "id": "general",
-  "name": "通用知识",
-  "icon": "📚",
-  "description": "默认通用知识库",
-  "doc_count": 12,
-  "created_at": "2026-04-12T11:11:11"
-}
-```
+### 4.13 GET `/api/subjects/{subject_id}/knowledge/status`
+### 4.14 GET `/api/notebooks/{subject_id}/knowledge/status`
 
-#### 失败场景
-
-- `404`：学科不存在
-
-### 4.4 DELETE `/api/subjects/{subject_id}`
-
-删除学科及其关联知识库。
-
-#### 成功响应
-
-```json
-{
-  "message": "学科 'general' 已删除"
-}
-```
-
-### 4.5 POST `/api/subjects/{subject_id}/generate`
-
-为指定学科自动生成知识框架并入库。
-
-#### 成功响应
+查看 notebook 对应 PGVector 知识库状态：
 
 ```json
 {
   "subject_id": "computer-network",
-  "subject_name": "计算机网络",
-  "chapters": 10,
-  "total_chunks": 24,
-  "chapter_titles": [
-    "网络体系结构",
-    "传输层协议",
-    "应用层协议"
-  ],
-  "message": "已为 '计算机网络' 生成 10 个章节的知识框架"
+  "collection_name": "learning_computer-network",
+  "doc_count": 24,
+  "chapter_count": 8,
+  "question_count": 6,
+  "url_count": 4,
+  "pdf_count": 6,
+  "embedding_ready": true
 }
 ```
-
-#### 失败场景
-
-- `404`：学科不存在
-- `500`：模型生成失败或解析失败
 
 ## 5. 知识入库接口
 
 ### 5.1 POST `/api/upload`
 
-上传 PDF 文件并写入指定学科的向量库。
-
-#### Content-Type
-
 `multipart/form-data`
 
-#### 表单字段
+字段：
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `file` | 是 | PDF 文件 |
-| `subject_id` | 否 | 学科 ID，默认 `general` |
+- `file`: PDF 文件
+- `subject_id`: 目标笔记本 ID
 
-#### 成功响应
+响应示例：
 
 ```json
 {
-  "filename": "network.pdf",
-  "total_pages": 18,
-  "total_chunks": 37,
+  "filename": "tcp.pdf",
+  "total_pages": 8,
+  "total_chunks": 26,
   "subject_id": "computer-network",
   "message": "上传并入库成功（学科: computer-network）"
 }
 ```
 
-#### 失败场景
-
-- `400`：非 PDF 文件
-- `404`：学科不存在
-- `422`：PDF 无法解析或内容为空
-- `500`：入库失败
-
 ### 5.2 POST `/api/upload/urls`
-
-抓取网页正文并写入指定学科向量库。
-
-#### 请求体
 
 ```json
 {
   "subject_id": "computer-network",
   "urls": [
-    "https://developer.mozilla.org/en-US/docs/Web/HTTP",
-    "https://en.wikipedia.org/wiki/Transmission_Control_Protocol"
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview"
   ]
 }
 ```
-
-#### 成功响应
-
-```json
-{
-  "total_urls": 2,
-  "successful_urls": 2,
-  "total_chunks": 21,
-  "subject_id": "computer-network",
-  "message": "成功抓取 2/2 个网页"
-}
-```
-
-#### 失败场景
-
-- `404`：学科不存在
-- `422`：所有 URL 内容抓取失败或正文过少
 
 ## 6. 用户数据接口
 
 ### 6.1 GET `/api/users/{user_id}/memory`
 
-获取用户学习记忆。
+获取学习记忆。
 
-#### 响应示例
+### 6.2 GET `/api/users/{user_id}/knowledge/mastery?subject_id=...`
+
+获取精细化知识点掌握度。`subject_id` 可选，不传则返回该用户全部 notebook 的统计。
 
 ```json
 {
-  "weak_points": [
-    "HTTP 状态码"
-  ],
-  "error_count": {
-    "HTTP 状态码": 2
-  },
-  "recent_topics": [
-    "TCP 和 HTTP 的关系"
-  ],
-  "last_session": "497b7d57-b8ab-4b55-91ea-0aa7b60f6ef1"
+  "user_id": "user-1",
+  "subject_id": "computer-network",
+  "items": [
+    {
+      "knowledge_point": "HTTP 缓存",
+      "exposure_count": 3,
+      "attempt_count": 2,
+      "correct_count": 1,
+      "wrong_count": 1,
+      "mastery_score": 45,
+      "mastery_level": "weak"
+    }
+  ]
 }
 ```
 
-### 6.2 GET `/api/users/{user_id}/sessions`
+### 6.3 GET `/api/users/{user_id}/sessions`
 
-获取用户全部聊天历史。
+获取最近聊天历史。
 
-#### 响应示例
+每条 session 现在额外包含：
 
-```json
-[
-  {
-    "id": "497b7d57-b8ab-4b55-91ea-0aa7b60f6ef1",
-    "user_id": "default_user",
-    "subject_id": "general",
-    "title": "TCP 和 HTTP 的关系",
-    "messages": [
-      {
-        "role": "user",
-        "content": "TCP 和 HTTP 的关系是什么？",
-        "timestamp": 1776000000000
-      },
-      {
-        "role": "assistant",
-        "content": "HTTP 是应用层协议……",
-        "timestamp": 1776000001000
-      }
-    ],
-    "latest_quiz": [],
-    "created_at": "2026-04-12T11:22:33",
-    "updated_at": "2026-04-12T11:22:39"
-  }
-]
-```
+- `session_memory`
+  - `summary_text`
+  - `active_topic`
+  - `current_goal`
+  - `open_loops`
+  - `resolved_points`
+  - `last_question_type`
+  - `last_updated_at`
 
-### 6.3 DELETE `/api/users/{user_id}/sessions/{session_id}`
+### 6.4 DELETE `/api/users/{user_id}/sessions/{session_id}`
 
 删除一条聊天历史。
 
-#### 成功响应
+### 6.5 GET `/api/users/{user_id}/quiz/latest`
+
+获取最近一组题包。
+
+### 6.5 GET `/api/users/{user_id}/profile`
+
+获取用户昵称与 Agent 风格配置。
+
+### 6.6 PUT `/api/users/{user_id}/profile`
 
 ```json
 {
-  "message": "聊天记录已删除"
-}
-```
-
-#### 失败场景
-
-- `404`：聊天记录不存在
-
-### 6.4 GET `/api/users/{user_id}/quiz/latest`
-
-获取最近一次题包。
-
-#### 响应示例
-
-```json
-{
-  "quiz_items": [
-    {
-      "difficulty": "基础",
-      "question": "请说明 HTTP 和 HTTPS 的区别。",
-      "hint": "从加密与端口角度思考",
-      "answer": "HTTPS = HTTP + TLS/SSL……",
-      "knowledge_point": "HTTP"
-    }
-  ]
+  "display_name": "学习者_7492",
+  "agent_style_name": "苏格拉底教练",
+  "agent_style_prompt": "你要像启发式教练一样说话，先提问，再引导，再总结。",
+  "onboarding_completed": true
 }
 ```
 
@@ -434,36 +293,15 @@ data: {
 
 ### 7.1 GET `/api/settings/model`
 
-获取当前聊天模型与可选模型列表。
+返回：
 
-#### 响应示例
+- `current_model`
+- `embedding_model`
+- `available_models`
 
-```json
-{
-  "current_model": "openai-gpt-oss-20b",
-  "embedding_model": "text-embedding-3-small",
-  "available_models": [
-    {
-      "id": "openai-gpt-oss-20b",
-      "label": "GPT-OSS-20b",
-      "provider": "OpenAI",
-      "family": "GPT"
-    },
-    {
-      "id": "llama3.3-70b-instruct",
-      "label": "Llama 3.3-70b-instruct",
-      "provider": "Meta",
-      "family": "Llama"
-    }
-  ]
-}
-```
+如果数据库里保存的当前模型不再出现在可选列表内，后端会自动回退到默认或首个可用模型，并写回 `app_settings.chat_model`。
 
 ### 7.2 PUT `/api/settings/model`
-
-切换当前聊天模型。
-
-#### 请求体
 
 ```json
 {
@@ -471,40 +309,16 @@ data: {
 }
 ```
 
-#### 成功响应
+约束：
 
-返回结构与 `GET /api/settings/model` 相同。
+- 只允许非 Claude 聊天模型
+- 更新前会做一次轻量可用性校验
+- 如果账号当前不能调用该模型，会返回 `400`
 
-#### 失败场景
+## 8. 错误格式
 
-- `400`：模型不在允许列表内
-- `400`：模型当前账号不可用或响应不稳定
-- `503`：未能获取可用模型列表
-
-#### 说明
-
-当前系统只允许选择非 Claude 模型。可选模型族以实时拉取结果为准，例如：
-
-- GPT
-- Gemini
-- Qwen
-- Llama
-- GLM
-- Kimi
-- DeepSeek
-
-## 8. 推荐联调顺序
-
-1. 先调用 `GET /health`
-2. 再调用 `GET /api/subjects`
-3. 确认 `GET /api/settings/model` 返回可用模型
-4. 上传资料：`POST /api/upload` 或 `POST /api/upload/urls`
-5. 发起问答：`POST /api/chat/sync` 或 `POST /api/chat`
-6. 查看学习结果：`GET /api/users/{user_id}/memory`
-7. 查看最新题包：`GET /api/users/{user_id}/quiz/latest`
-
-## 9. 当前接口限制
-
-1. 目前没有用户鉴权，接口默认信任调用方传入的 `user_id`。
-2. 目前没有会话详情单独查询接口，前端主要通过会话列表恢复历史。
-3. 模型切换的可选项依赖外部平台账号权限，接口返回结果是动态的。
+```json
+{
+  "detail": "错误说明"
+}
+```

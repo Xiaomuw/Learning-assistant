@@ -1,0 +1,12 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "dependencies": ["."],
+  "graphs": {
+    "learning_assistant": "./app/orchestration/platform/graph.py:graph"
+  },
+  "env": "./.env",
+  "http": {
+    "app": "./app/orchestration/platform/webapp.py:app"
+  },
+  "image_distro": "debian"
+}

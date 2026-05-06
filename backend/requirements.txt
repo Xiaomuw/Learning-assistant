@@ -13,19 +13,22 @@ langchain==0.3.25
 langchain-openai==0.3.14
 langchain-community==0.3.24
 langgraph==0.4.1
+langsmith==0.3.45
+langgraph-checkpoint-postgres
+langchain-postgres
 
 # ---------- 向量数据库 ----------
-chromadb==0.6.3
+psycopg[binary,pool]>=3.2.9
 
 # ---------- 文档解析 ----------
 pypdf==5.4.0                   # PDF 解析
 langchain-text-splitters==0.3.8
 beautifulsoup4==4.13.3         # Web scraping / URL doc ingestion
 requests==2.32.3               # Web requests
-SQLAlchemy>=2.0.36             # ORM / MySQL persistence
-PyMySQL>=1.1.1                 # MySQL driver
-cryptography>=44.0.0           # MySQL 8/9 caching_sha2_password support
+SQLAlchemy>=2.0.36             # ORM / PostgreSQL persistence
+alembic>=1.13.3                # Graph-era facts schema migrations
 pydo                           # DigitalOcean 官方 SDK
+openpyxl>=3.1.5                # Excel 题库导入
 
 # ---------- Embedding ----------
 tiktoken==0.9.0                # OpenAI tokenizer
@@ -34,6 +37,12 @@ tiktoken==0.9.0                # OpenAI tokenizer
 python-dotenv==1.1.0
 pydantic==2.11.1
 pydantic-settings==2.9.1
+email-validator>=2.2.0        # EmailStr validation
+passlib[bcrypt]>=1.7.4        # Password hashing
+PyJWT>=2.10.1                 # JWT auth tokens
 
 # ---------- 日志 ----------
 loguru==0.7.3
+
+# ---------- Web Search ----------
+tavily-python>=0.5.0            # 知识库不足时的网络搜索回退

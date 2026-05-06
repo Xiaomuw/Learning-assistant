@@ -5,7 +5,13 @@ import { useEffect, useState } from "react";
 import { ArrowRight, BarChart3, BrainCircuit, Sparkles } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import KnowledgePanel from "@/components/KnowledgePanel";
-import { DEFAULT_USER_ID, fetchUserMemory, type Memory } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
+import {
+  fetchKnowledgeMastery,
+  fetchUserMemory,
+  type KnowledgeMastery,
+  type Memory,
+} from "@/lib/api";
 import { loadStoredMemory, persistMemory } from "@/lib/learning-store";
 
 const EMPTY_MEMORY: Memory = {
@@ -16,21 +22,72 @@ const EMPTY_MEMORY: Memory = {
 };
 
 export default function DashboardPage() {
+  const { user, isLoading } = useAuth();
+  const userId = user?.id ?? "";
   const [memory, setMemory] = useState<Memory>(EMPTY_MEMORY);
+  const [mastery, setMastery] = useState<KnowledgeMastery[]>([]);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    if (isLoading || !userId) {
+      return;
+    }
+
+    let isMounted = true;
     const cached = loadStoredMemory();
     setMemory(cached);
+    setMastery([]);
+    setLoadError("");
 
-    void fetchUserMemory(DEFAULT_USER_ID)
+    void fetchUserMemory(userId)
       .then((remoteMemory) => {
+        if (!isMounted) {
+          return;
+        }
         setMemory(remoteMemory);
         persistMemory(remoteMemory);
       })
       .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
         console.error("加载学习记忆失败:", error);
+        setLoadError(
+          error instanceof Error
+            ? error.message
+          : "学习记忆暂时加载失败，稍后可以重试。"
+        );
       });
-  }, []);
+
+    void fetchKnowledgeMastery(userId)
+      .then((items) => {
+        if (isMounted) {
+          setMastery(items);
+        }
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
+        console.error("加载知识点掌握度失败:", error);
+        setMastery([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLoading, userId]);
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex h-full items-center justify-center bg-neo-bg px-4">
+        <div className="neo-card-secondary w-full p-5 text-center">
+          <p className="neo-label">Dashboard</p>
+          <p className="mt-3 text-lg font-black">正在恢复你的学习中心…</p>
+        </div>
+      </div>
+    );
+  }
 
   const totalErrors = Object.values(memory.error_count).reduce(
     (total, count) => total + count,
@@ -55,6 +112,18 @@ export default function DashboardPage() {
 
       <main className="flex-1 overflow-y-auto px-4 py-4 pb-24">
         <div className="space-y-4">
+          {loadError ? (
+            <section className="neo-card-accent p-4">
+              <p className="neo-label">Memory</p>
+              <p className="mt-2 text-sm font-black leading-relaxed">
+                学习记忆暂时没有加载成功：{loadError}
+              </p>
+              <p className="mt-2 text-xs font-bold leading-relaxed">
+                已先展示本地缓存，聊天和练习仍可继续使用。
+              </p>
+            </section>
+          ) : null}
+
           <section className="grid grid-cols-2 gap-3">
             <div className="neo-card-secondary p-4">
               <p className="neo-label">Recent</p>
@@ -81,7 +150,7 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          <KnowledgePanel memory={memory} showReportLink={false} />
+          <KnowledgePanel memory={memory} mastery={mastery} showReportLink={false} />
 
           <section className="neo-card-secondary p-4">
             <div className="flex items-center gap-2">

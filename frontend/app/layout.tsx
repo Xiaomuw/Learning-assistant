@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AuthProvider from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "学习问答助手 — 多 Agent 智能辅导",
@@ -15,9 +16,11 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className="font-sans bg-neo-bg">
-        <div className="mx-auto w-full max-w-md h-[100dvh] bg-neo-bg relative overflow-hidden flex flex-col md:border-x-4 md:border-black md:shadow-[16px_16px_0px_0px_#1e293b]">
-          {children}
-        </div>
+        <AuthProvider>
+          <div className="mx-auto w-full max-w-md h-[100dvh] bg-neo-bg relative overflow-hidden flex flex-col md:border-x-4 md:border-black md:shadow-[16px_16px_0px_0px_#1e293b]">
+            {children}
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -8,22 +8,142 @@
 // 类型定义
 // ============================================================
 
+export const DEFAULT_NOTEBOOK_ID = "data-structure";
+
 /** 结构化讲解 */
 export interface Explanation {
   topic: string;
   thinking: string;
-  steps: string[] | string;
-  mistakes: string[] | string;
-  similar: string[] | string;
+  steps: string[];
+  mistakes: string;
+  similar: string[];
 }
 
 /** 练习题 */
+export interface QuizOption {
+  key: "A" | "B" | "C" | "D";
+  text: string;
+}
+
 export interface QuizItem {
   difficulty: "基础" | "变式" | "易错";
   question: string;
-  hint: string;
-  answer: string;
+  options: QuizOption[];
+  correct_option: "A" | "B" | "C" | "D";
+  explanation: string;
+  option_rationales: Record<string, string>;
   knowledge_point: string;
+  source_type: "question_bank" | "ai_generated";
+  source_name: string;
+  source_year?: number | null;
+  question_id: string;
+  hint?: string;
+}
+
+export interface PracticeRecommendationPayload {
+  notebookId: string;
+  items: QuizItem[];
+}
+
+interface PracticeRecommendationWirePayload {
+  subject_id: string;
+  items: QuizItem[];
+}
+
+export interface MasteryScoreBreakdown {
+  accuracy: number;
+  completeness: number;
+  understanding_depth: number;
+  confidence: number;
+  rag_doc_count: number;
+  low_confidence: boolean;
+  issues: string[];
+}
+
+export interface MasteryEvaluationResult {
+  subject_id: string;
+  knowledge_point: string;
+  answer_type: "mcq" | "blank" | "short_answer";
+  normalized_answer: string;
+  is_correct: boolean;
+  score: number;
+  mastery_score: number;
+  mastery_level: "mastered" | "learning" | "weak";
+  weak_points: string[];
+  feedback: string;
+  score_breakdown: MasteryScoreBreakdown;
+  retrieval_diagnosis: string;
+  reference_doc_count: number;
+}
+
+export interface PracticeAttemptResult {
+  is_correct: boolean;
+  correct_option: "A" | "B" | "C" | "D";
+  explanation: string;
+  option_rationales: Record<string, string>;
+  memory: Memory;
+  session_memory?: SessionPayload["session_memory"];
+  mastery_evaluation?: MasteryEvaluationResult | null;
+  personalized_feedback?: string;
+}
+
+export interface QuizRecommendedOption {
+  label: string;
+  value: string;
+  source: "recent_topic" | "weak_point" | "default" | "current_context";
+}
+
+export interface QuizRequestResolution {
+  is_quiz_request: boolean;
+  action:
+    | "generate_practice_pack"
+    | "clarify_quiz_request"
+    | "continue_practice"
+    | "normal_qa";
+  intent:
+    | "quiz_generation"
+    | "continue_quiz_generation"
+    | "quiz_answer_check"
+    | "normal_qa";
+  topic: string | null;
+  subject_id?: string | null;
+  requested_topic?: string | null;
+  previous_topic?: string | null;
+  active_topic?: string | null;
+  should_switch_topic?: boolean;
+  topic_resolution_reason?: string;
+  source:
+    | "explicit_user_input"
+    | "current_question"
+    | "last_topic"
+    | "recent_topic"
+    | "weak_point"
+    | "unknown";
+  question_type:
+    | "single_choice"
+    | "multiple_choice"
+    | "true_false"
+    | "short_answer"
+    | "mixed"
+    | "unknown";
+  difficulty: "easy" | "medium" | "hard" | "adaptive" | "unknown";
+  count: number | null;
+  target_module: "practice" | "qa";
+  need_clarification: boolean;
+  clarification_reason: string | null;
+  recommended_options: QuizRecommendedOption[];
+  custom_input_placeholder: string | null;
+  reason: string;
+}
+
+export interface QuizClarificationPanel {
+  title: string;
+  description: string;
+  recommended_options: QuizRecommendedOption[];
+  question_type_options: QuizRecommendedOption[];
+  difficulty_options: QuizRecommendedOption[];
+  count_options: QuizRecommendedOption[];
+  custom_input_placeholder: string;
 }
 
 /** 学习记忆 */
@@ -34,6 +154,113 @@ export interface Memory {
   last_session?: string;
 }
 
+export interface KnowledgeMastery {
+  user_id: string;
+  subject_id: string;
+  knowledge_point: string;
+  exposure_count: number;
+  attempt_count: number;
+  correct_count: number;
+  wrong_count: number;
+  mastery_score: number;
+  mastery_level: "mastered" | "learning" | "weak";
+  last_seen_at: string;
+  last_practiced_at: string;
+  updated_at: string;
+}
+
+interface KnowledgeMasteryPayload {
+  user_id: string;
+  subject_id?: string | null;
+  items: KnowledgeMastery[];
+}
+
+export function normalizeMemoryPayload(value: unknown): Memory {
+  const payload =
+    value && typeof value === "object"
+      ? (value as Partial<Memory>)
+      : {};
+
+  const errorCount =
+    payload.error_count && typeof payload.error_count === "object"
+      ? Object.fromEntries(
+          Object.entries(payload.error_count).map(([key, count]) => [
+            key,
+            typeof count === "number" && Number.isFinite(count) ? count : 0,
+          ])
+        )
+      : {};
+
+  return {
+    weak_points: Array.isArray(payload.weak_points)
+      ? payload.weak_points.filter((item): item is string => typeof item === "string")
+      : [],
+    error_count: errorCount,
+    recent_topics: Array.isArray(payload.recent_topics)
+      ? payload.recent_topics.filter((item): item is string => typeof item === "string")
+      : [],
+    last_session:
+      typeof payload.last_session === "string" ? payload.last_session : "",
+  };
+}
+
+/** 会话摘要（中期记忆） */
+export interface SessionMemory {
+  summaryText: string;
+  activeTopic: string;
+  currentGoal: string;
+  openLoops: string[];
+  resolvedPoints: string[];
+  lastQuestionType: string;
+  lastUpdatedAt: string;
+}
+
+export interface MessageProcessStage {
+  key: string;
+  label: string;
+  status: "running" | "completed" | "failed";
+  detail: string;
+  elapsed?: number;
+}
+
+export interface MessageProcessExecution {
+  mode?: string;
+  degraded?: boolean;
+  modelId?: string;
+  modelFamily?: string;
+  modelProvider?: string;
+  primaryModelId?: string;
+  fallbackModelId?: string;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
+  modelAttempts?: Array<{
+    model_id?: string;
+    modelId?: string;
+    role?: "primary" | "fallback" | string;
+    status?: "ok" | "failed" | string;
+    reason?: string;
+  }>;
+  streamingMode?: "node" | "token" | "none" | string;
+  modelLatencyMs?: number;
+}
+
+export interface MessageProcessToolCall {
+  name: string;
+  label: string;
+  success: boolean;
+  argsSummary: string;
+  error?: string;
+  docCount?: number;
+}
+
+export interface MessageProcess {
+  currentStage: string;
+  stages: MessageProcessStage[];
+  reasoningSummary?: string;
+  execution?: MessageProcessExecution;
+  toolCalls?: MessageProcessToolCall[];
+}
+
 /** 聊天消息 */
 export interface Message {
   role: "user" | "assistant";
@@ -41,15 +268,21 @@ export interface Message {
   timestamp: number;
   explanation?: Explanation;
   quiz?: QuizItem[];
+  quizRequest?: QuizRequestResolution;
+  quizClarification?: QuizClarificationPanel;
+  process?: MessageProcess;
+  questionType?: string;  // 路由分类结果，用于 ExplanationCard 差异化渲染
+  route?: string;         // 执行路线 fast / explain / rag / agent
 }
 
 /** 聊天会话 */
 export interface ChatSession {
   id: string;
   title: string;
-  subjectId: string;
+  notebookId: string;
   updatedAt: number;
   messages: Message[];
+  sessionMemory?: SessionMemory;
   latestQuiz?: QuizItem[];
 }
 
@@ -60,19 +293,92 @@ export interface SSEEvent {
 }
 
 export interface SendChatOptions {
-  subjectId?: string;
+  notebookId?: string;
   sessionId?: string;
   idleTimeoutMs?: number;
 }
 
-/** 学科 */
-export interface Subject {
+/** 笔记本 */
+export interface Notebook {
   id: string;
   name: string;
   icon: string;
   description: string;
   doc_count: number;
   created_at: string;
+}
+
+export interface NotebookKnowledgeStatus {
+  notebookId: string;
+  collection_name: string;
+  doc_count: number;
+  shared_doc_count: number;
+  personal_doc_count: number;
+  chapter_count: number;
+  exam_pattern_count: number;
+  question_count: number;
+  url_count: number;
+  pdf_count: number;
+  personal_pdf_count: number;
+  personal_url_count: number;
+  personal_ready: boolean;
+  embedding_ready: boolean;
+  coverage_score: number;
+  coverage_level: "empty" | "sparse" | "partial" | "ready";
+  missing_doc_types: string[];
+  suggested_actions: string[];
+  retrieval_ready: boolean;
+}
+
+interface NotebookKnowledgeStatusWire {
+  subject_id: string;
+  collection_name: string;
+  doc_count: number;
+  shared_doc_count?: number;
+  personal_doc_count?: number;
+  chapter_count: number;
+  exam_pattern_count?: number;
+  question_count: number;
+  url_count: number;
+  pdf_count: number;
+  personal_pdf_count?: number;
+  personal_url_count?: number;
+  personal_ready?: boolean;
+  embedding_ready: boolean;
+  coverage_score?: number;
+  coverage_level?: "empty" | "sparse" | "partial" | "ready";
+  missing_doc_types?: string[];
+  suggested_actions?: string[];
+  retrieval_ready?: boolean;
+}
+
+/**
+ * @deprecated 保留一轮兼容，前端页面和组件应统一使用 Notebook 语义。
+ */
+export type Subject = Notebook;
+
+export interface NotebookUploadResult extends UploadResult {
+  notebookId: string;
+}
+
+export interface NotebookUrlIngestResult {
+  total_urls: number;
+  successful_urls: number;
+  total_chunks: number;
+  notebookId: string;
+  message: string;
+}
+
+interface NotebookUploadWireResult extends UploadResult {
+  subject_id?: string;
+}
+
+interface NotebookUrlIngestWireResult {
+  total_urls: number;
+  successful_urls: number;
+  total_chunks: number;
+  subject_id?: string;
+  message: string;
 }
 
 /** 可选聊天模型 */
@@ -88,6 +394,19 @@ export interface ModelConfig {
   current_model: string;
   embedding_model: string;
   available_models: SelectableModel[];
+  model_switching_enabled?: boolean;
+  model_switching_status?: string;
+  locked_model?: string;
+}
+
+export interface ModelHealth {
+  chat_model: string;
+  chat_model_ok: boolean;
+  chat_model_error?: string | null;
+  model_switching_enabled?: boolean;
+  model_switching_status?: string;
+  supports_tool_calling?: boolean;
+  supports_structured_output?: boolean;
 }
 
 /** 用户级 Agent 风格设置 */
@@ -99,13 +418,114 @@ export interface UserProfile {
   onboarding_completed: boolean;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+interface AuthEnvelope {
+  user: AuthUser;
+}
+
+export interface RegisterCodeResponse {
+  message: string;
+  expires_in_seconds: number;
+  resend_after_seconds: number;
+}
+
 // ============================================================
 // 配置
 // ============================================================
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
-export const DEFAULT_USER_ID =
-  process.env.NEXT_PUBLIC_DEFAULT_USER_ID ?? "default_user";
+
+// ============================================================
+// Auth — 登录 / 注册 / 当前用户
+// ============================================================
+
+export function fetchCurrentUser(): Promise<AuthEnvelope> {
+  return request<AuthEnvelope>("/auth/me");
+}
+
+export function loginWithPassword(email: string, password: string): Promise<AuthEnvelope> {
+  return request<AuthEnvelope>(
+    "/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    },
+    false
+  );
+}
+
+export function sendRegisterCode(email: string): Promise<RegisterCodeResponse> {
+  return request<RegisterCodeResponse>(
+    "/auth/register/send-code",
+    {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    },
+    false
+  );
+}
+
+export function completeRegisterWithPassword(
+  email: string,
+  code: string,
+  password: string,
+  displayName?: string
+): Promise<AuthEnvelope> {
+  return request<AuthEnvelope>(
+    "/auth/register/complete",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        code,
+        password,
+        display_name: displayName?.trim() || undefined,
+      }),
+    },
+    false
+  );
+}
+
+export function registerWithPassword(
+  email: string,
+  code: string,
+  password: string,
+  displayName?: string
+): Promise<AuthEnvelope> {
+  return completeRegisterWithPassword(email, code, password, displayName);
+}
+
+export function logoutSession(): Promise<{ message: string }> {
+  return request<{ message: string }>(
+    "/auth/logout",
+    {
+      method: "POST",
+    },
+    false
+  );
+}
+
+export function changePasswordWithCurrentSession(
+  currentPassword: string,
+  newPassword: string
+): Promise<AuthEnvelope> {
+  return request<AuthEnvelope>(
+    "/auth/change-password",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    },
+    false
+  );
+}
 
 // ============================================================
 // 通用请求
@@ -113,17 +533,105 @@ export const DEFAULT_USER_ID =
 
 async function request<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
+  allowRefreshRetry = true,
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...options,
   });
+
+  if (
+    res.status === 401 &&
+    allowRefreshRetry &&
+    !path.startsWith("/auth/login") &&
+    !path.startsWith("/auth/register") &&
+    !path.startsWith("/auth/refresh") &&
+    !path.startsWith("/auth/logout")
+  ) {
+    const refreshed = await refreshAuthSession();
+    if (refreshed) {
+      return request<T>(path, options, false);
+    }
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "请求失败");
+    throw new Error(formatApiErrorDetail(err.detail ?? err.error ?? res.statusText));
   }
   return res.json() as Promise<T>;
+}
+
+let refreshPromise: Promise<boolean> | null = null;
+
+function formatApiErrorDetail(detail: unknown): string {
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg?: unknown }).msg ?? "");
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (messages.length > 0) {
+      return messages.join("；");
+    }
+  }
+
+  if (detail && typeof detail === "object") {
+    return JSON.stringify(detail);
+  }
+
+  return "请求失败，请稍后重试。";
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    const payload = await response.json().catch(() => null);
+    if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
+      return payload.detail;
+    }
+    if (payload && typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error;
+    }
+    if (payload) {
+      return JSON.stringify(payload);
+    }
+  }
+
+  const text = await response.text().catch(() => "");
+  if (text.trim()) {
+    return text.trim();
+  }
+
+  return response.statusText || `请求失败（${response.status}）`;
+}
+
+async function refreshAuthSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
 }
 
 // ============================================================
@@ -186,19 +694,35 @@ export function sendChatSSE(
 
   scheduleIdleTimeout();
 
-  fetch(`${API_BASE}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user_id: userId,
-      session_id: options.sessionId,
-      question,
-      subject_id: options.subjectId ?? "general",
-    }),
-    signal: controller.signal,
-  })
+  const openStream = async (hasRetried = false) => {
+    const res = await fetch(`${API_BASE}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        user_id: userId,
+        session_id: options.sessionId,
+        question,
+        subject_id: options.notebookId ?? DEFAULT_NOTEBOOK_ID,
+      }),
+      signal: controller.signal,
+    });
+
+    if (res.status === 401 && !hasRetried) {
+      const refreshed = await refreshAuthSession();
+      if (refreshed) {
+        return openStream(true);
+      }
+    }
+
+    return res;
+  };
+
+  openStream()
     .then(async (res) => {
-      if (!res.ok) throw new Error("SSE 请求失败");
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+      }
       const reader = res.body?.getReader();
       if (!reader) throw new Error("无法读取响应流");
 
@@ -225,6 +749,17 @@ export function sendChatSSE(
               onEvent({ event: currentEvent || "message", data });
             } catch {
               onEvent({ event: currentEvent || "message", data: raw });
+            }
+
+            if (currentEvent === "done") {
+              cleanup();
+              onDone?.();
+              return;
+            }
+
+            if (currentEvent === "error") {
+              cleanup();
+              return;
             }
           }
         }
@@ -264,7 +799,12 @@ export async function uploadPDF(file: File): Promise<UploadResult> {
   const res = await fetch(`${API_BASE}/upload`, {
     method: "POST",
     body: formData,
+    credentials: "include",
   });
+
+  if (res.status === 401 && (await refreshAuthSession())) {
+    return uploadPDF(file);
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "上传失败" }));
@@ -275,83 +815,187 @@ export async function uploadPDF(file: File): Promise<UploadResult> {
 }
 
 // ============================================================
-// Subjects — 学科管理
+// Notebooks — 笔记本管理
+// Wire 兼容说明：后端公开路径仍是 /subjects，payload 仍使用 subject_id。
+// 页面和组件层只应消费 notebook-first 类型与函数。
 // ============================================================
 
-/** 获取所有学科 */
-export function fetchSubjects(): Promise<Subject[]> {
-  return request<Subject[]>("/subjects");
+/** 获取所有笔记本 */
+export function fetchNotebooks(): Promise<Notebook[]> {
+  return request<Notebook[]>("/subjects");
 }
 
-/** 创建新学科 */
-export function createSubject(
+/**
+ * @deprecated 普通用户已不能维护系统默认知识库；保留一轮仅用于 wire 兼容。
+ */
+export function createNotebook(
   name: string,
   icon?: string,
   description?: string
-): Promise<Subject> {
-  return request<Subject>("/subjects", {
+): Promise<Notebook> {
+  return request<Notebook>("/subjects", {
     method: "POST",
     body: JSON.stringify({ name, icon, description }),
   });
 }
 
-/** 删除指定学科 / 笔记本 */
-export function deleteSubject(subjectId: string): Promise<{ message: string }> {
-  return request<{ message: string }>(`/subjects/${subjectId}`, {
+/**
+ * @deprecated 普通用户已不能维护系统默认知识库；保留一轮仅用于 wire 兼容。
+ */
+export function deleteNotebook(notebookId: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/subjects/${notebookId}`, {
     method: "DELETE",
   });
 }
 
-/** 更新指定学科 / 笔记本 */
-export function updateSubject(
-  subjectId: string,
-  payload: Pick<Subject, "name" | "icon" | "description">
-): Promise<Subject> {
-  return request<Subject>(`/subjects/${subjectId}`, {
+/**
+ * @deprecated 普通用户已不能维护系统默认知识库；保留一轮仅用于 wire 兼容。
+ */
+export function updateNotebook(
+  notebookId: string,
+  payload: Pick<Notebook, "name" | "icon" | "description">
+): Promise<Notebook> {
+  return request<Notebook>(`/subjects/${notebookId}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 }
 
-/** 自动生成学科知识框架 */
-export function generateKnowledgeBase(
-  subjectId: string
+/**
+ * @deprecated 默认知识库由系统 seed/admin 维护；普通用户入口已禁用。
+ */
+export function generateNotebookKnowledgeBase(
+  notebookId: string
 ): Promise<{ chapters: number; total_chunks: number; message: string }> {
-  return request(`/subjects/${subjectId}/generate`, { method: "POST" });
+  return request(`/subjects/${notebookId}/generate`, { method: "POST" });
 }
 
-/** 上传 PDF 到指定学科 */
-export async function uploadPDFWithSubject(
+export async function fetchNotebookKnowledgeStatus(
+  notebookId: string
+): Promise<NotebookKnowledgeStatus> {
+  const payload = await request<NotebookKnowledgeStatusWire>(
+    `/notebooks/${notebookId}/knowledge/status`
+  );
+  return {
+    notebookId: payload.subject_id || notebookId,
+    collection_name: payload.collection_name,
+    doc_count: payload.doc_count,
+    shared_doc_count:
+      typeof payload.shared_doc_count === "number"
+        ? payload.shared_doc_count
+        : payload.doc_count,
+    personal_doc_count:
+      typeof payload.personal_doc_count === "number" ? payload.personal_doc_count : 0,
+    chapter_count: payload.chapter_count,
+    exam_pattern_count:
+      typeof payload.exam_pattern_count === "number" ? payload.exam_pattern_count : 0,
+    question_count: payload.question_count,
+    url_count: payload.url_count,
+    pdf_count: payload.pdf_count,
+    personal_pdf_count:
+      typeof payload.personal_pdf_count === "number" ? payload.personal_pdf_count : 0,
+    personal_url_count:
+      typeof payload.personal_url_count === "number" ? payload.personal_url_count : 0,
+    personal_ready:
+      typeof payload.personal_ready === "boolean" ? payload.personal_ready : false,
+    embedding_ready: payload.embedding_ready,
+    coverage_score:
+      typeof payload.coverage_score === "number" ? payload.coverage_score : 0,
+    coverage_level: payload.coverage_level ?? (payload.doc_count > 0 ? "sparse" : "empty"),
+    missing_doc_types: Array.isArray(payload.missing_doc_types)
+      ? payload.missing_doc_types.filter((item): item is string => typeof item === "string")
+      : [],
+    suggested_actions: Array.isArray(payload.suggested_actions)
+      ? payload.suggested_actions.filter((item): item is string => typeof item === "string")
+      : [],
+    retrieval_ready:
+      typeof payload.retrieval_ready === "boolean"
+        ? payload.retrieval_ready
+        : Boolean(payload.embedding_ready && payload.doc_count > 0),
+  };
+}
+
+/** 上传 PDF 到指定笔记本 */
+export async function uploadPDFToNotebook(
   file: File,
-  subjectId: string
-): Promise<UploadResult & { subject_id: string }> {
+  notebookId: string
+): Promise<NotebookUploadResult> {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("subject_id", subjectId);
+  formData.append("subject_id", notebookId);
 
   const res = await fetch(`${API_BASE}/upload`, {
     method: "POST",
     body: formData,
+    credentials: "include",
   });
+
+  if (res.status === 401 && (await refreshAuthSession())) {
+    return uploadPDFToNotebook(file, notebookId);
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "上传失败" }));
     throw new Error(err.detail);
   }
 
-  return res.json();
+  const payload = (await res.json()) as NotebookUploadWireResult;
+  return {
+    filename: payload.filename,
+    total_pages: payload.total_pages,
+    total_chunks: payload.total_chunks,
+    message: payload.message,
+    notebookId: payload.subject_id ?? notebookId,
+  };
 }
 
-/** 上传网址集合到指定学科 */
-export async function ingestUrls(
-  subjectId: string,
+/** 上传网址集合到指定笔记本 */
+export async function ingestNotebookUrls(
+  notebookId: string,
   urls: string[]
-): Promise<{ total_urls: number; successful_urls: number; total_chunks: number; subject_id: string; message: string }> {
-  return request(`/upload/urls`, {
+): Promise<NotebookUrlIngestResult> {
+  const payload = await request<NotebookUrlIngestWireResult>(`/upload/urls`, {
     method: "POST",
-    body: JSON.stringify({ subject_id: subjectId, urls }),
+    body: JSON.stringify({ subject_id: notebookId, urls }),
   });
+
+  return {
+    total_urls: payload.total_urls,
+    successful_urls: payload.successful_urls,
+    total_chunks: payload.total_chunks,
+    notebookId: payload.subject_id ?? notebookId,
+    message: payload.message,
+  };
 }
+
+/**
+ * @deprecated 兼容一轮迁移，新的前端代码应统一使用 notebook-first API。
+ */
+export const fetchSubjects = fetchNotebooks;
+/**
+ * @deprecated 兼容一轮迁移，新的前端代码应统一使用 notebook-first API。
+ */
+export const createSubject = createNotebook;
+/**
+ * @deprecated 兼容一轮迁移，新的前端代码应统一使用 notebook-first API。
+ */
+export const deleteSubject = deleteNotebook;
+/**
+ * @deprecated 兼容一轮迁移，新的前端代码应统一使用 notebook-first API。
+ */
+export const updateSubject = updateNotebook;
+/**
+ * @deprecated 兼容一轮迁移，新的前端代码应统一使用 notebook-first API。
+ */
+export const generateKnowledgeBase = generateNotebookKnowledgeBase;
+/**
+ * @deprecated 兼容一轮迁移，新的前端代码应统一使用 notebook-first API。
+ */
+export const uploadPDFWithSubject = uploadPDFToNotebook;
+/**
+ * @deprecated 兼容一轮迁移，新的前端代码应统一使用 notebook-first API。
+ */
+export const ingestUrls = ingestNotebookUrls;
 
 // ============================================================
 // User Data — 学习记忆 / 历史记录 / 最新题包
@@ -363,11 +1007,184 @@ interface SessionPayload {
   title: string;
   messages: Message[];
   latest_quiz?: QuizItem[];
+  session_memory?: {
+    summary_text?: string;
+    active_topic?: string;
+    current_goal?: string;
+    open_loops?: string[];
+    resolved_points?: string[];
+    last_question_type?: string;
+    last_updated_at?: string;
+  };
   updated_at: string;
 }
 
+interface LatestQuizPayload {
+  session_id?: string;
+  subject_id?: string;
+  quiz_items: QuizItem[];
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0
+    );
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+}
+
+export function normalizeExplanationPayload(
+  payload?: Partial<Explanation> | null
+): Explanation | undefined {
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+
+  const normalized: Explanation = {
+    topic: typeof payload.topic === "string" ? payload.topic : "",
+    thinking: typeof payload.thinking === "string" ? payload.thinking : "",
+    steps: normalizeStringList(payload.steps),
+    mistakes: typeof payload.mistakes === "string" ? payload.mistakes : "",
+    similar: normalizeStringList(payload.similar),
+  };
+
+  if (
+    !normalized.topic &&
+    !normalized.thinking &&
+    normalized.steps.length === 0 &&
+    !normalized.mistakes &&
+    normalized.similar.length === 0
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeMessagePayload(payload: unknown): Message | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const message = payload as Partial<Message> & {
+    question_type?: unknown;
+    quiz_request?: unknown;
+    quiz_clarification?: unknown;
+  };
+  const role = message.role === "assistant" ? "assistant" : "user";
+  const content = typeof message.content === "string" ? message.content : "";
+  const timestamp =
+    typeof message.timestamp === "number" ? message.timestamp : Date.now();
+  const questionType =
+    typeof message.questionType === "string"
+      ? message.questionType
+      : typeof message.question_type === "string"
+        ? message.question_type
+        : undefined;
+  const route = typeof message.route === "string" ? message.route : undefined;
+
+  return {
+    role,
+    content,
+    timestamp,
+    explanation: normalizeExplanationPayload(message.explanation),
+    quiz: Array.isArray(message.quiz) ? message.quiz : undefined,
+    quizRequest:
+      message.quizRequest && typeof message.quizRequest === "object"
+        ? (message.quizRequest as QuizRequestResolution)
+        : message.quiz_request && typeof message.quiz_request === "object"
+          ? (message.quiz_request as QuizRequestResolution)
+        : undefined,
+    quizClarification:
+      message.quizClarification && typeof message.quizClarification === "object"
+        ? (message.quizClarification as QuizClarificationPanel)
+        : message.quiz_clarification && typeof message.quiz_clarification === "object"
+          ? (message.quiz_clarification as QuizClarificationPanel)
+        : undefined,
+    process:
+      message.process && typeof message.process === "object"
+        ? (message.process as MessageProcess)
+        : undefined,
+    questionType,
+    route,
+  };
+}
+
+function normalizeSessionMemory(
+  sessionMemory?: SessionPayload["session_memory"] | null
+): SessionMemory | undefined {
+  if (!sessionMemory || typeof sessionMemory !== "object") {
+    return undefined;
+  }
+
+  const normalized: SessionMemory = {
+    summaryText:
+      typeof sessionMemory.summary_text === "string"
+        ? sessionMemory.summary_text
+        : "",
+    activeTopic:
+      typeof sessionMemory.active_topic === "string"
+        ? sessionMemory.active_topic
+        : "",
+    currentGoal:
+      typeof sessionMemory.current_goal === "string"
+        ? sessionMemory.current_goal
+        : "",
+    openLoops: Array.isArray(sessionMemory.open_loops)
+      ? sessionMemory.open_loops.filter(
+          (item): item is string => typeof item === "string" && item.trim().length > 0
+        )
+      : [],
+    resolvedPoints: Array.isArray(sessionMemory.resolved_points)
+      ? sessionMemory.resolved_points.filter(
+          (item): item is string => typeof item === "string" && item.trim().length > 0
+        )
+      : [],
+    lastQuestionType:
+      typeof sessionMemory.last_question_type === "string"
+        ? sessionMemory.last_question_type
+        : "",
+    lastUpdatedAt:
+      typeof sessionMemory.last_updated_at === "string"
+        ? sessionMemory.last_updated_at
+        : "",
+  };
+
+  if (
+    !normalized.summaryText &&
+    !normalized.activeTopic &&
+    !normalized.currentGoal &&
+    normalized.openLoops.length === 0 &&
+    normalized.resolvedPoints.length === 0
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 export function fetchUserMemory(userId: string): Promise<Memory> {
-  return request<Memory>(`/users/${userId}/memory`);
+  return request<unknown>(`/users/${userId}/memory`).then(normalizeMemoryPayload);
+}
+
+export function fetchKnowledgeMastery(
+  userId: string,
+  notebookId?: string
+): Promise<KnowledgeMastery[]> {
+  const params = new URLSearchParams();
+  if (notebookId) {
+    params.set("subject_id", notebookId);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<KnowledgeMasteryPayload>(
+    `/users/${userId}/knowledge/mastery${suffix}`
+  ).then((payload) => (Array.isArray(payload.items) ? payload.items : []));
 }
 
 export function fetchUserProfile(userId: string): Promise<UserProfile> {
@@ -394,9 +1211,14 @@ export async function fetchSessions(userId: string): Promise<ChatSession[]> {
   return sessions.map((session) => ({
     id: session.id,
     title: session.title,
-    subjectId: session.subject_id,
+    notebookId: session.subject_id,
     updatedAt: Date.parse(session.updated_at) || Date.now(),
-    messages: Array.isArray(session.messages) ? session.messages : [],
+    messages: Array.isArray(session.messages)
+      ? session.messages
+          .map((message) => normalizeMessagePayload(message))
+          .filter((message): message is Message => Boolean(message))
+      : [],
+    sessionMemory: normalizeSessionMemory(session.session_memory),
     latestQuiz: Array.isArray(session.latest_quiz) ? session.latest_quiz : [],
   }));
 }
@@ -408,23 +1230,132 @@ export function deleteSession(userId: string, sessionId: string) {
 }
 
 export async function fetchLatestQuiz(userId: string): Promise<QuizItem[]> {
-  const payload = await request<{ quiz_items: QuizItem[] }>(
-    `/users/${userId}/quiz/latest`
-  );
+  const payload = await request<LatestQuizPayload>(`/users/${userId}/quiz/latest`);
   return Array.isArray(payload.quiz_items) ? payload.quiz_items : [];
+}
+
+export async function fetchLatestQuizBundle(
+  userId: string
+): Promise<{ sessionId: string; notebookId: string; quizItems: QuizItem[] }> {
+  const payload = await request<LatestQuizPayload>(`/users/${userId}/quiz/latest`);
+  return {
+    sessionId: typeof payload.session_id === "string" ? payload.session_id : "",
+    notebookId:
+      typeof payload.subject_id === "string" ? payload.subject_id : DEFAULT_NOTEBOOK_ID,
+    quizItems: Array.isArray(payload.quiz_items) ? payload.quiz_items : [],
+  };
+}
+
+export function fetchPracticeRecommendations(
+  userId: string,
+  notebookId?: string
+): Promise<PracticeRecommendationPayload> {
+  const search = new URLSearchParams();
+  if (notebookId) {
+    search.set("subject_id", notebookId);
+  }
+
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return request<PracticeRecommendationWirePayload>(
+    `/users/${userId}/practice/recommendations${suffix}`
+  ).then((payload) => ({
+    notebookId: payload.subject_id,
+    items: Array.isArray(payload.items) ? payload.items : [],
+  }));
+}
+
+export function submitPracticeAttempt(payload: {
+  user_id: string;
+  session_id?: string;
+  notebookId?: string;
+  quiz_item: QuizItem;
+  selected_option: "A" | "B" | "C" | "D";
+}): Promise<PracticeAttemptResult> {
+  return request<PracticeAttemptResult>("/practice/attempts", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: payload.user_id,
+      session_id: payload.session_id,
+      subject_id: payload.notebookId,
+      quiz_item: payload.quiz_item,
+      selected_option: payload.selected_option,
+    }),
+  });
+}
+
+export function createPracticePack(payload: {
+  user_id: string;
+  session_id?: string;
+  subject_id?: string;
+  request_text: string;
+  current_practice_question?: QuizItem | null;
+  last_practice_pack?: QuizItem[];
+  context?: Record<string, unknown>;
+}): Promise<{
+  subject_id: string;
+  quiz_request: QuizRequestResolution;
+  quiz_clarification?: QuizClarificationPanel | null;
+  items: QuizItem[];
+}> {
+  return request<{
+    subject_id: string;
+    quiz_request: QuizRequestResolution;
+    quiz_clarification?: QuizClarificationPanel | null;
+    items: QuizItem[];
+  }>("/practice/packs", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: payload.user_id,
+      session_id: payload.session_id,
+      subject_id: payload.subject_id ?? DEFAULT_NOTEBOOK_ID,
+      request_text: payload.request_text,
+      current_practice_question: payload.current_practice_question,
+      last_practice_pack: payload.last_practice_pack ?? [],
+      context: payload.context ?? {},
+    }),
+  });
 }
 
 // ============================================================
 // Model Config — 模型切换
 // ============================================================
 
+export function normalizeModelConfig(config: ModelConfig): ModelConfig {
+  if (config.model_switching_enabled === true) {
+    return config;
+  }
+
+  const lockedModelId = config.locked_model || config.current_model;
+  const lockedModel =
+    config.available_models.find((item) => item.id === lockedModelId) ??
+    config.available_models.find((item) => item.id === config.current_model) ?? {
+      id: lockedModelId,
+      label: lockedModelId,
+      provider: "OpenAI",
+      family: "GPT",
+    };
+
+  return {
+    ...config,
+    current_model: lockedModel.id,
+    available_models: [lockedModel],
+    model_switching_enabled: false,
+    model_switching_status: config.model_switching_status ?? "development",
+    locked_model: lockedModel.id,
+  };
+}
+
 export function fetchModelConfig(): Promise<ModelConfig> {
-  return request<ModelConfig>("/settings/model");
+  return request<ModelConfig>("/settings/model").then(normalizeModelConfig);
 }
 
 export function updateModelConfig(chatModel: string): Promise<ModelConfig> {
   return request<ModelConfig>("/settings/model", {
     method: "PUT",
     body: JSON.stringify({ chat_model: chatModel }),
-  });
+  }).then(normalizeModelConfig);
+}
+
+export function fetchModelHealth(): Promise<ModelHealth> {
+  return request<ModelHealth>("/settings/model/health");
 }

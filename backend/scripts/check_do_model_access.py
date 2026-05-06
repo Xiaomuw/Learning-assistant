@@ -9,12 +9,19 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 from pydo import Client
 
-from tools.model_provider import ensure_model_env_aliases, get_active_chat_model
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+load_dotenv(dotenv_path=BACKEND_ROOT / ".env")
+
+from app.infrastructure.llm.provider import build_model_health_snapshot, ensure_model_env_aliases
+from app.services.runtime_models import resolve_active_chat_model
 
 
 def _get_token() -> str:
@@ -25,11 +32,10 @@ def _get_token() -> str:
 
 
 def main() -> None:
-    load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
     ensure_model_env_aliases()
 
     client = Client(token=_get_token())
-    model = get_active_chat_model("openai-gpt-4o")
+    model = resolve_active_chat_model("openai-gpt-4o")
     prompt = os.getenv("DO_SMOKE_PROMPT", "请用一句中文介绍章鱼的一个有趣事实。")
 
     models = client.inference.list_models()
@@ -39,6 +45,18 @@ def main() -> None:
         print(f"sample_models={', '.join(model_ids[:5])}")
 
     print(f"stream_model={model}")
+    health = build_model_health_snapshot(chat_model=model)
+    print(
+        "health="
+        f"chat_ok={health['chat_model_ok']} "
+        f"embedding_ok={health['embedding_model_ok']} "
+        f"tool_calling={health['supports_tool_calling']} "
+        f"structured={health['supports_structured_output']}"
+    )
+    if health.get("chat_model_error"):
+        print(f"chat_error={health['chat_model_error']}")
+    if health.get("embedding_model_error"):
+        print(f"embedding_error={health['embedding_model_error']}")
     print("stream_output=", end="", flush=True)
 
     stream = client.inference.create_chat_completion(

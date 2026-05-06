@@ -2,13 +2,15 @@
 
 import { X, Trash2, Clock, MessageSquare, Plus } from "lucide-react";
 import type { ChatSession } from "@/lib/learning-store";
-import type { Subject } from "@/lib/api";
+import type { Notebook } from "@/lib/api";
+import { hasSessionSummary } from "@/components/SessionSummaryCard";
 
 interface HistoryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   sessions: ChatSession[];
-  subjects: Subject[];
+  notebooks: Notebook[];
+  currentSessionId?: string;
   onSelectSession: (session: ChatSession) => void;
   onDeleteSession: (sessionId: string) => void;
   onNewSession: () => void;
@@ -18,7 +20,8 @@ export default function HistoryDrawer({
   isOpen,
   onClose,
   sessions,
-  subjects,
+  notebooks,
+  currentSessionId,
   onSelectSession,
   onDeleteSession,
   onNewSession,
@@ -66,30 +69,77 @@ export default function HistoryDrawer({
             </div>
           ) : (
             sessions.map((session) => {
-              const subject = subjects.find(s => s.id === session.subjectId);
+              const notebook = notebooks.find((item) => item.id === session.notebookId);
               const date = new Date(session.updatedAt);
-              const dateString = `${date.getMonth() + 1}-${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+              const dateString = `${date.getMonth() + 1}-${date.getDate()} ${date
+                .getHours()
+                .toString()
+                .padStart(2, "0")}:${date
+                .getMinutes()
+                .toString()
+                .padStart(2, "0")}`;
+              const isActive = currentSessionId === session.id;
+              const summary = session.sessionMemory;
+              const openLoop = summary?.openLoops?.[0];
 
               return (
-                <div 
+                <div
                   key={session.id} 
-                  className="group relative flex items-start gap-3 rounded-[1rem] border-[3px] border-neo-ink bg-white p-3 shadow-neo-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all cursor-pointer"
+                  className={`group relative flex items-start gap-3 rounded-[1rem] border-[3px] border-neo-ink p-3 shadow-neo-sm transition-all cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${
+                    isActive ? "bg-neo-secondary" : "bg-white"
+                  }`}
                   onClick={() => onSelectSession(session)}
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[3px] border-neo-ink bg-neo-accent text-lg">
-                    {subject ? subject.icon : "📚"}
+                    {notebook ? notebook.icon : "📚"}
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-black text-[15px]">{session.title}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs font-bold text-neo-ink/70">
-                        {subject ? subject.name : "未知 Agent"}
+                        {notebook ? notebook.name : "未知笔记本"}
                       </span>
                       <span className="text-[10px] font-bold text-neo-ink/50 bg-neo-bg px-2 py-0.5 rounded-full border-[2px] border-neo-ink/20">
                         {dateString}
                       </span>
+                      {isActive && (
+                        <span className="neo-badge bg-white text-[10px]">
+                          当前会话
+                        </span>
+                      )}
                     </div>
+
+                    {hasSessionSummary(summary) ? (
+                      <div className="mt-3 space-y-2">
+                        {summary?.activeTopic && (
+                          <p className="text-xs font-black leading-relaxed text-neo-ink">
+                            主题：{summary.activeTopic}
+                          </p>
+                        )}
+                        {summary?.currentGoal && (
+                          <p className="text-xs font-bold leading-relaxed text-neo-ink/75">
+                            目标：{summary.currentGoal}
+                          </p>
+                        )}
+                        {openLoop ? (
+                          <div className="inline-flex max-w-full items-center gap-2 rounded-full border-[2px] border-neo-ink bg-neo-bg px-3 py-1">
+                            <span className="neo-label shrink-0 text-[10px]">待继续</span>
+                            <span className="truncate text-[11px] font-bold text-neo-ink/75">
+                              {openLoop}
+                            </span>
+                          </div>
+                        ) : summary?.summaryText ? (
+                          <p className="line-clamp-2 text-xs font-bold leading-relaxed text-neo-ink/70">
+                            {summary.summaryText}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-3 line-clamp-2 text-xs font-bold leading-relaxed text-neo-ink/60">
+                        {session.messages.at(-1)?.content || "这条记录还没有可用摘要。"}
+                      </p>
+                    )}
                   </div>
 
                   <button

@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制源码
 COPY . .
 
-# 创建数据目录
-RUN mkdir -p data/memory
+# 创建存储目录
+RUN mkdir -p storage/data/memory
 
 # 启动脚本权限
 RUN chmod +x startup.sh

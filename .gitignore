@@ -36,3 +36,10 @@ coverage/
 backend/chroma_data/
 backend/data/*.db
 backend/data/memory/*.json
+
+tmp/
+target/
+*.pem
+*.key
+backend/storage/
+.codex-pet-runs/

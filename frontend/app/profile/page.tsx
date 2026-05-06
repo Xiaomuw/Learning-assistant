@@ -2,100 +2,96 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BookOpen,
   BrainCircuit,
+  CheckCircle2,
   ChevronRight,
   Clock3,
   Filter,
   Info,
+  KeyRound,
   LogOut,
   MessageSquareQuote,
   MessageSquareText,
   NotebookPen,
   PencilLine,
   Settings,
-  Sparkles,
+  ShieldCheck,
   Trash2,
-  Upload,
   UserCircle,
   X,
 } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
 import BottomNav from "@/components/BottomNav";
 import ModelSelectorCard from "@/components/ModelSelectorCard";
-import CreateAgentModal from "@/components/CreateAgentModal";
 import AgentStyleEditor from "@/components/AgentStyleEditor";
-import EditNotebookModal from "@/components/EditNotebookModal";
+import SessionSummaryCard, {
+  hasSessionSummary,
+} from "@/components/SessionSummaryCard";
 import {
-  DEFAULT_USER_ID,
-  deleteSubject,
+  changePasswordWithCurrentSession,
   deleteSession,
+  fetchNotebookKnowledgeStatus,
   fetchModelConfig,
+  fetchModelHealth,
+  fetchNotebooks,
+  fetchPracticeRecommendations,
   fetchSessions,
-  fetchSubjects,
   fetchUserProfile,
-  generateKnowledgeBase,
   updateModelConfig,
   updateUserProfile,
-  uploadPDFWithSubject,
   type ChatSession,
   type ModelConfig,
-  type Subject,
+  type Notebook,
+  type NotebookKnowledgeStatus,
+  type QuizItem,
   type UserProfile,
 } from "@/lib/api";
 import {
-  clearLearningStore,
   loadStoredModelConfig,
+  persistQuiz,
   persistStoredModelConfig,
 } from "@/lib/learning-store";
-
-const BUILTIN_NOTEBOOK_IDS = new Set([
-  "operating-system",
-  "database",
-  "data-structure",
-  "probability",
-  "linear-algebra",
-  "computer-network",
-  "general",
-  "math",
-]);
 
 type NoticeTone = "success" | "error" | "info";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const { user, isLoading, logout } = useAuth();
+  const userId = user?.id ?? "";
 
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
   const [isLoadingModelConfig, setIsLoadingModelConfig] = useState(false);
   const [modelConfigError, setModelConfigError] = useState<string | null>(null);
   const [isSwitchingModel, setIsSwitchingModel] = useState(false);
   const [showModelSettings, setShowModelSettings] = useState(false);
+  const [modelHealthStatus, setModelHealthStatus] = useState<
+    "idle" | "checking" | "ok" | "error"
+  >("idle");
+  const [modelHealthMessage, setModelHealthMessage] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [showAgentStyleSettings, setShowAgentStyleSettings] = useState(false);
+  const [showSecuritySettings, setShowSecuritySettings] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [showKnowledgeBase, setShowKnowledgeBase] = useState(true);
-  const [notebookQuery, setNotebookQuery] = useState("");
-  const [notebookSort, setNotebookSort] = useState("default");
-  const [notebookSourceFilter, setNotebookSourceFilter] = useState("all");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
-  const [generatingSubjectId, setGeneratingSubjectId] = useState<string | null>(null);
-  const [deletingSubjectId, setDeletingSubjectId] = useState<string | null>(null);
-  const [uploadingSubjectId, setUploadingSubjectId] = useState<string | null>(null);
-  const [pendingUploadSubjectId, setPendingUploadSubjectId] = useState<string | null>(
-    null
-  );
+  const [notebooks, setNotebooks] = useState<Notebook[]>([]);
+  const [knowledgeStatusByNotebookId, setKnowledgeStatusByNotebookId] = useState<
+    Record<string, NotebookKnowledgeStatus>
+  >({});
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [showHistoryManager, setShowHistoryManager] = useState(false);
-  const [historyFilterSubjectId, setHistoryFilterSubjectId] = useState("all");
+  const [historyFilterNotebookId, setHistoryFilterNotebookId] = useState("all");
   const [historyQuery, setHistoryQuery] = useState("");
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [recommendedPractice, setRecommendedPractice] = useState<QuizItem[]>([]);
 
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [draftDisplayName, setDraftDisplayName] = useState("");
@@ -105,8 +101,28 @@ export default function ProfilePage() {
     tone: NoticeTone;
     text: string;
   } | null>(null);
+  const [showAuthRecoveryHint, setShowAuthRecoveryHint] = useState(false);
 
   useEffect(() => {
+    if (!isLoading) {
+      setShowAuthRecoveryHint(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowAuthRecoveryHint(true);
+    }, 6000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (isLoading || !userId) {
+      return;
+    }
+
     let isMounted = true;
 
     const cachedModelConfig = loadStoredModelConfig();
@@ -114,94 +130,93 @@ export default function ProfilePage() {
       setModelConfig(cachedModelConfig);
     }
 
-    Promise.all([
-      fetchSubjects().catch((error) => {
-        console.error(error);
-        return [];
-      }),
-      fetchUserProfile(DEFAULT_USER_ID).catch((error) => {
-        console.error(error);
-        return null;
-      }),
-      fetchSessions(DEFAULT_USER_ID).catch((error) => {
-        console.error(error);
-        return [];
-      }),
-    ]).then(([notebooks, userProfile, remoteSessions]) => {
-      if (!isMounted) {
-        return;
-      }
+    void fetchNotebooks()
+      .then((remoteNotebooks) => {
+        if (!isMounted) {
+          return;
+        }
 
-      if (notebooks) {
-        setSubjects(notebooks);
-      }
+        setNotebooks(remoteNotebooks);
+        setKnowledgeStatusByNotebookId({});
+        void Promise.allSettled(
+          remoteNotebooks.map((notebook) => fetchNotebookKnowledgeStatus(notebook.id))
+        ).then((results) => {
+          if (!isMounted) {
+            return;
+          }
+          const nextStatus: Record<string, NotebookKnowledgeStatus> = {};
+          results.forEach((result) => {
+            if (result.status === "fulfilled") {
+              nextStatus[result.value.notebookId] = result.value;
+            }
+          });
+          setKnowledgeStatusByNotebookId(nextStatus);
+        });
+      })
+      .catch((error) => {
+        console.error(error);
+        if (isMounted) {
+          setNotebooks([]);
+          setKnowledgeStatusByNotebookId({});
+        }
+      });
 
-      if (userProfile) {
-        setProfile(userProfile);
-      }
+    void fetchUserProfile(userId)
+      .then((userProfile) => {
+        if (isMounted) {
+          setProfile(userProfile);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+      });
 
-      if (remoteSessions) {
-        setSessions(remoteSessions);
-      }
-    });
+    void fetchSessions(userId)
+      .then((remoteSessions) => {
+        if (isMounted) {
+          setSessions(remoteSessions);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (isMounted) {
+          setSessions([]);
+        }
+      });
+
+    void fetchPracticeRecommendations(userId)
+      .then((practiceRecommendations) => {
+        if (isMounted) {
+          setRecommendedPractice(practiceRecommendations.items);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (isMounted) {
+          setRecommendedPractice([]);
+        }
+      });
 
     void loadModelConfig();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isLoading, userId]);
 
   const displayName = profile?.display_name?.trim() || "学习者_7492";
-  const notebookCount = subjects.filter((subject) => subject.id !== "general").length;
-  const totalSources = subjects.reduce(
-    (total, subject) => total + (subject.doc_count ?? 0),
+  const notebookCount = notebooks.length;
+  const getNotebookDocCount = (notebook: Notebook) =>
+    knowledgeStatusByNotebookId[notebook.id]?.doc_count ?? notebook.doc_count ?? 0;
+  const totalSources = notebooks.reduce(
+    (total, notebook) => total + getNotebookDocCount(notebook),
     0
   );
-  const filteredSubjects = subjects
-    .filter((subject) => {
-      const keyword = notebookQuery.trim().toLowerCase();
-      const matchesSourceFilter =
-        notebookSourceFilter === "all"
-          ? true
-          : notebookSourceFilter === "with-sources"
-            ? (subject.doc_count ?? 0) > 0
-            : (subject.doc_count ?? 0) === 0;
-
-      if (!matchesSourceFilter) {
-        return false;
-      }
-
-      if (!keyword) {
-        return true;
-      }
-
-      return (
-        subject.name.toLowerCase().includes(keyword) ||
-        subject.description.toLowerCase().includes(keyword) ||
-        subject.id.toLowerCase().includes(keyword)
-      );
-    })
-    .sort((left, right) => {
-      if (notebookSort === "sources-desc") {
-        return (right.doc_count ?? 0) - (left.doc_count ?? 0);
-      }
-
-      if (notebookSort === "name-asc") {
-        return left.name.localeCompare(right.name, "zh-Hans-CN");
-      }
-
-      if (notebookSort === "custom-first") {
-        return Number(BUILTIN_NOTEBOOK_IDS.has(left.id)) - Number(BUILTIN_NOTEBOOK_IDS.has(right.id));
-      }
-
-      return 0;
-    });
   const filteredSessions = sessions.filter((session) => {
-    const matchesSubject =
-      historyFilterSubjectId === "all" || session.subjectId === historyFilterSubjectId;
+    const matchesNotebook =
+      historyFilterNotebookId === "all" || session.notebookId === historyFilterNotebookId;
 
-    if (!matchesSubject) {
+    if (!matchesNotebook) {
       return false;
     }
 
@@ -210,17 +225,27 @@ export default function ProfilePage() {
       return true;
     }
 
-    const subject = subjects.find((item) => item.id === session.subjectId);
+    const notebook = notebooks.find((item) => item.id === session.notebookId);
     const haystack = [
       session.title,
-      subject?.name ?? "",
+      notebook?.name ?? "",
       session.messages.at(-1)?.content ?? "",
+      session.sessionMemory?.summaryText ?? "",
+      session.sessionMemory?.activeTopic ?? "",
+      session.sessionMemory?.currentGoal ?? "",
+      ...(session.sessionMemory?.openLoops ?? []),
     ]
       .join(" ")
       .toLowerCase();
 
     return haystack.includes(keyword);
   });
+  const highlightedSession =
+    filteredSessions.find((session) => hasSessionSummary(session.sessionMemory)) ??
+    sessions.find((session) => hasSessionSummary(session.sessionMemory));
+  const highlightedSessionNotebook = highlightedSession
+    ? notebooks.find((item) => item.id === highlightedSession.notebookId) ?? null
+    : null;
 
   function showFeedback(tone: NoticeTone, text: string) {
     setNotice({ tone, text });
@@ -244,19 +269,12 @@ export default function ProfilePage() {
     }
   }
 
-  async function refreshSubjects() {
-    try {
-      const data = await fetchSubjects();
-      setSubjects(data);
-    } catch (error) {
-      console.error("Failed to refresh notebooks:", error);
-      showFeedback("error", "刷新笔记本列表失败，请稍后重试。");
-    }
-  }
-
   async function refreshSessions() {
+    if (!user) {
+      return;
+    }
     try {
-      const data = await fetchSessions(DEFAULT_USER_ID);
+      const data = await fetchSessions(user.id);
       setSessions(data);
     } catch (error) {
       console.error("Failed to refresh sessions:", error);
@@ -287,14 +305,48 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleModelHealthCheck() {
+    setModelHealthStatus("checking");
+    setModelHealthMessage(null);
+
+    try {
+      const result = await fetchModelHealth();
+      const modelLabel =
+        modelConfig?.available_models.find((item) => item.id === result.chat_model)?.label ??
+        result.chat_model;
+      if (result.chat_model_ok) {
+        setModelHealthStatus("ok");
+        setModelHealthMessage(`${modelLabel} 可用，聊天请求会优先使用当前主模型。`);
+        showFeedback("success", `${modelLabel} 连接测试通过。`);
+        return;
+      }
+
+      setModelHealthStatus("error");
+      setModelHealthMessage(
+        result.chat_model_error
+          ? `${modelLabel} 当前不可用：${result.chat_model_error}`
+          : `${modelLabel} 当前不可用，请检查本地模型密钥或账号权限。`
+      );
+    } catch (error) {
+      console.error("模型连接测试失败", error);
+      setModelHealthStatus("error");
+      setModelHealthMessage(
+        error instanceof Error ? error.message : "模型连接测试失败。"
+      );
+    }
+  }
+
   async function handleSaveProfile(payload: {
     agent_style_name: string;
     agent_style_prompt: string;
     onboarding_completed: boolean;
   }) {
+    if (!user) {
+      return;
+    }
     setIsSavingProfile(true);
     try {
-      const nextProfile = await updateUserProfile(DEFAULT_USER_ID, payload);
+      const nextProfile = await updateUserProfile(user.id, payload);
       setProfile(nextProfile);
       showFeedback(
         "success",
@@ -314,6 +366,10 @@ export default function ProfilePage() {
   }
 
   async function handleSaveDisplayName() {
+    if (!user) {
+      return;
+    }
+
     const nextName = draftDisplayName.trim();
     if (!nextName) {
       showFeedback("error", "昵称不能为空。");
@@ -322,7 +378,7 @@ export default function ProfilePage() {
 
     setIsSavingDisplayName(true);
     try {
-      const nextProfile = await updateUserProfile(DEFAULT_USER_ID, {
+      const nextProfile = await updateUserProfile(user.id, {
         display_name: nextName,
       });
       setProfile(nextProfile);
@@ -339,92 +395,10 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleGenerateNotebook(subject: Subject) {
-    setGeneratingSubjectId(subject.id);
-    try {
-      const result = await generateKnowledgeBase(subject.id);
-      await refreshSubjects();
-      showFeedback(
-        "success",
-        `已为「${subject.name}」生成 ${result.chapters} 个基础章节。`
-      );
-    } catch (error) {
-      console.error("生成基础内容失败", error);
-      showFeedback(
-        "error",
-        error instanceof Error ? error.message : "生成基础内容失败，请稍后重试。"
-      );
-    } finally {
-      setGeneratingSubjectId(null);
-    }
-  }
-
-  function handleOpenUpload(subjectId: string) {
-    setPendingUploadSubjectId(subjectId);
-    uploadInputRef.current?.click();
-  }
-
-  async function handleUploadSelectedFile(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const file = event.target.files?.[0];
-    const subjectId = pendingUploadSubjectId;
-    event.target.value = "";
-
-    if (!file || !subjectId) {
-      return;
-    }
-
-    setUploadingSubjectId(subjectId);
-    try {
-      const result = await uploadPDFWithSubject(file, subjectId);
-      await refreshSubjects();
-      showFeedback(
-        "success",
-        `已把 ${result.filename} 加入笔记本，共切分 ${result.total_chunks} 个知识块。`
-      );
-    } catch (error) {
-      console.error("上传资料失败", error);
-      showFeedback(
-        "error",
-        error instanceof Error ? error.message : "上传资料失败，请稍后重试。"
-      );
-    } finally {
-      setUploadingSubjectId(null);
-      setPendingUploadSubjectId(null);
-    }
-  }
-
-  async function handleDeleteNotebook(subject: Subject) {
-    if (BUILTIN_NOTEBOOK_IDS.has(subject.id)) {
-      showFeedback("info", "系统内置笔记本暂不支持删除。");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `确定删除笔记本「${subject.name}」吗？这会同时删除它关联的知识内容。`
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingSubjectId(subject.id);
-    try {
-      await deleteSubject(subject.id);
-      await refreshSubjects();
-      showFeedback("success", `已删除笔记本「${subject.name}」`);
-    } catch (error) {
-      console.error("删除笔记本失败", error);
-      showFeedback(
-        "error",
-        error instanceof Error ? error.message : "删除笔记本失败，请稍后重试。"
-      );
-    } finally {
-      setDeletingSubjectId(null);
-    }
-  }
-
   async function handleDeleteSession(sessionId: string) {
+    if (!user) {
+      return;
+    }
     const confirmed = window.confirm("确定删除这条聊天记录吗？删除后无法恢复。");
     if (!confirmed) {
       return;
@@ -432,7 +406,7 @@ export default function ProfilePage() {
 
     setDeletingSessionId(sessionId);
     try {
-      await deleteSession(DEFAULT_USER_ID, sessionId);
+      await deleteSession(user.id, sessionId);
       await refreshSessions();
       showFeedback("success", "聊天记录已删除。");
     } catch (error) {
@@ -446,16 +420,82 @@ export default function ProfilePage() {
     }
   }
 
-  function handleExit() {
-    const confirmed = window.confirm(
-      "当前版本还没有真正的账号体系。点击确定后会清空这台设备上的学习缓存，并返回问答页。"
-    );
+  async function handleExit() {
+    const confirmed = window.confirm("确定退出当前账号吗？退出后会返回登录页。");
     if (!confirmed) {
       return;
     }
 
-    clearLearningStore();
-    router.replace("/chat");
+    await logout();
+  }
+
+  async function handleChangePassword() {
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      showFeedback("error", "请把当前密码、新密码和确认密码都填完整。");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      showFeedback("error", "新密码至少需要 8 位。");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      showFeedback("error", "两次输入的新密码不一致。");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await changePasswordWithCurrentSession(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      showFeedback("success", "密码已更新，当前设备的登录态也已经同步刷新。");
+    } catch (error) {
+      console.error("修改密码失败", error);
+      showFeedback(
+        "error",
+        error instanceof Error ? error.message : "修改密码失败，请稍后重试。"
+      );
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex h-full items-center justify-center bg-neo-bg px-4">
+        <div className="neo-card-secondary w-full p-5 text-center">
+          <p className="neo-label">Profile</p>
+          <p className="mt-3 text-lg font-black">
+            {isLoading ? "正在恢复你的个人中心…" : "登录状态已失效"}
+          </p>
+          <p className="mt-3 text-sm font-bold leading-relaxed text-neo-ink/70">
+            {isLoading
+              ? "如果你刚刚更新过本地服务，当前标签页可能还停留在旧状态。"
+              : "重新登录后就可以继续查看模型设置、资料库和聊天历史。"}
+          </p>
+          {(showAuthRecoveryHint || !isLoading) && (
+            <div className="mt-5 space-y-3">
+              <button
+                type="button"
+                onClick={() => router.refresh()}
+                className="neo-button w-full justify-center"
+              >
+                重新加载
+              </button>
+              <Link
+                href="/login?next=%2Fprofile"
+                className="neo-button-secondary flex w-full items-center justify-center"
+              >
+                重新登录
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -500,7 +540,10 @@ export default function ProfilePage() {
               {displayName}
             </h2>
             <p className="mt-1 truncate text-sm font-bold tracking-widest text-neo-ink/60">
-              ID: {DEFAULT_USER_ID}
+              ID: {user.id}
+            </p>
+            <p className="mt-1 truncate text-xs font-bold text-neo-ink/60">
+              {user.email}
             </p>
             <p className="mt-2 text-xs font-bold text-neo-ink/70">
               {profile?.agent_style_name
@@ -524,7 +567,7 @@ export default function ProfilePage() {
         <div className="grid grid-cols-2 gap-4">
           <div className="neo-card-muted neo-card-lift flex flex-col items-center justify-center gap-1 p-4">
             <span className="text-3xl font-black">{notebookCount}</span>
-            <span className="neo-label">我的笔记本</span>
+            <span className="neo-label">默认知识库</span>
           </div>
           <div className="neo-card-secondary neo-card-lift flex flex-col items-center justify-center gap-1 p-4">
             <span className="text-3xl font-black">{totalSources}</span>
@@ -532,11 +575,90 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        <section className="neo-card bg-white p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="neo-label">Recommended Practice</p>
+              <h2 className="mt-2 text-2xl font-black">基于薄弱点的推荐题</h2>
+              <p className="mt-2 text-sm font-bold leading-relaxed text-neo-ink/70">
+                优先推送历年真题，不够时会自动补 AI 单选题，适合直接拿来热身。
+              </p>
+            </div>
+            <span className="neo-badge bg-neo-secondary">
+              {recommendedPractice.length} 题
+            </span>
+          </div>
+
+          {recommendedPractice.length === 0 ? (
+            <div className="neo-card-secondary mt-4 p-4">
+              <p className="text-sm font-bold leading-relaxed">
+                目前还没有可推荐的题目。你可以先去问答页生成题包，或者导入历年真题题库。
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 space-y-3">
+                {recommendedPractice.slice(0, 2).map((item) => (
+                  <div
+                    key={item.question_id}
+                    className="border-[3px] border-neo-ink bg-neo-bg p-4 shadow-neo-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="neo-badge bg-neo-accent">{item.difficulty}</span>
+                      <span className="neo-badge bg-white">{item.knowledge_point}</span>
+                      <span className="neo-badge bg-neo-secondary">
+                        {item.source_type === "question_bank"
+                          ? item.source_year
+                            ? `${item.source_name} · ${item.source_year}`
+                            : item.source_name || "题库真题"
+                          : "AI 补题"}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm font-black leading-relaxed">
+                      {item.question}
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {item.options?.slice(0, 4).map((option) => (
+                        <div
+                          key={`${item.question_id}-${option.key}`}
+                          className="border-[3px] border-neo-ink bg-white p-3"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="neo-badge bg-neo-bg">{option.key}</span>
+                            <p className="text-xs font-bold leading-relaxed">
+                              {option.text}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  persistQuiz(recommendedPractice);
+                  router.push("/practice");
+                }}
+                className="neo-button mt-4 w-full justify-center"
+              >
+                <CheckCircle2 size={16} strokeWidth={2.8} />
+                开始做这组推荐题
+              </button>
+            </>
+          )}
+        </section>
+
         <div className="neo-card flex flex-col divide-y-4 divide-neo-ink">
           <div className="group my-[-4px] flex flex-col">
             <button
-              onClick={() => setShowKnowledgeBase(!showKnowledgeBase)}
-              className="flex items-center justify-between bg-neo-secondary p-4 text-left transition-colors hover:bg-[#ffe399]/80"
+              type="button"
+              onClick={() =>
+                showFeedback("info", "我的笔记本功能待开发，暂时请在问答页选择知识库。")
+              }
+              className="flex items-center justify-between bg-neo-secondary p-4 text-left transition-colors hover:bg-neo-accent"
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center border-[3px] border-neo-ink bg-white shadow-[2px_2px_0px_0px_#1e293b]">
@@ -547,171 +669,9 @@ export default function ProfilePage() {
               <ChevronRight
                 size={24}
                 strokeWidth={2.5}
-                className={`transition-transform duration-200 ${
-                  showKnowledgeBase ? "rotate-90" : "group-hover:translate-x-1"
-                }`}
+                className="transition-transform duration-200 group-hover:translate-x-1"
               />
             </button>
-            {showKnowledgeBase && (
-              <div className="animate-in slide-in-from-top-2 border-t-4 border-dashed border-neo-ink bg-neo-secondary p-4 duration-200">
-                <div className="mb-4 grid grid-cols-1 gap-3">
-                  <label className="block">
-                    <span className="neo-label mb-2 block">搜索笔记本</span>
-                    <input
-                      value={notebookQuery}
-                      onChange={(event) => setNotebookQuery(event.target.value)}
-                      className="neo-input w-full"
-                      placeholder="按名称、简介或 ID 搜索"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="neo-label mb-2 block">排序方式</span>
-                    <div className="relative">
-                      <select
-                        value={notebookSort}
-                        onChange={(event) => setNotebookSort(event.target.value)}
-                        className="neo-input w-full appearance-none pr-12"
-                      >
-                        <option value="default">默认顺序</option>
-                        <option value="sources-desc">来源最多优先</option>
-                        <option value="name-asc">按名称排序</option>
-                        <option value="custom-first">优先显示自建笔记本</option>
-                      </select>
-                      <Filter
-                        size={16}
-                        strokeWidth={2.8}
-                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2"
-                      />
-                    </div>
-                  </label>
-
-                  <label className="block">
-                    <span className="neo-label mb-2 block">来源筛选</span>
-                    <div className="relative">
-                      <select
-                        value={notebookSourceFilter}
-                        onChange={(event) => setNotebookSourceFilter(event.target.value)}
-                        className="neo-input w-full appearance-none pr-12"
-                      >
-                        <option value="all">全部笔记本</option>
-                        <option value="with-sources">只看有资料</option>
-                        <option value="empty">只看空笔记本</option>
-                      </select>
-                      <Filter
-                        size={16}
-                        strokeWidth={2.8}
-                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2"
-                      />
-                    </div>
-                  </label>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  {filteredSubjects.length === 0 && (
-                    <div className="neo-card p-4 text-center">
-                      <p className="text-sm font-bold">
-                        没找到匹配的笔记本，换个关键词试试。
-                      </p>
-                    </div>
-                  )}
-
-                  {filteredSubjects.map((subject) => {
-                    const isBuiltIn = BUILTIN_NOTEBOOK_IDS.has(subject.id);
-                    const isGenerating = generatingSubjectId === subject.id;
-                    const isUploading = uploadingSubjectId === subject.id;
-                    const isDeleting = deletingSubjectId === subject.id;
-
-                    return (
-                      <div
-                        key={subject.id}
-                        className="border-[3px] border-neo-ink bg-white p-3 shadow-neo-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl">{subject.icon}</span>
-                              <span className="truncate font-black text-neo-ink">
-                                {subject.name}
-                              </span>
-                              {isBuiltIn && (
-                                <span className="neo-badge bg-neo-muted">
-                                  内置
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-2 text-sm font-bold leading-relaxed text-neo-ink/70">
-                              {subject.description || "这个笔记本还没有写简介。"}
-                            </p>
-                          </div>
-                          <span className="neo-badge whitespace-nowrap bg-neo-secondary">
-                            {subject.doc_count ?? 0} 条来源
-                          </span>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => router.push(`/chat?subject=${subject.id}`)}
-                            className="neo-button w-full justify-center px-3 py-2 text-xs"
-                          >
-                            去学习
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenUpload(subject.id)}
-                            disabled={isUploading}
-                            className="neo-button-ghost w-full justify-center px-3 py-2 text-xs"
-                          >
-                            <Upload size={14} strokeWidth={2.8} />
-                            {isUploading ? "上传中" : "上传资料"}
-                          </button>
-
-                          {(subject.doc_count ?? 0) === 0 && (
-                            <button
-                              type="button"
-                              onClick={() => handleGenerateNotebook(subject)}
-                              disabled={isGenerating}
-                              className="neo-button-secondary w-full justify-center px-3 py-2 text-xs"
-                            >
-                              <Sparkles size={14} strokeWidth={2.8} />
-                              {isGenerating ? "生成中" : "生成基础内容"}
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => setEditingSubject(subject)}
-                            className="neo-button-ghost w-full justify-center px-3 py-2 text-xs"
-                          >
-                            <PencilLine size={14} strokeWidth={2.8} />
-                            编辑信息
-                          </button>
-
-                          {!isBuiltIn && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteNotebook(subject)}
-                              disabled={isDeleting}
-                              className="neo-button-ghost w-full justify-center border-neo-ink bg-white px-3 py-2 text-xs hover:bg-neo-accent"
-                            >
-                              <Trash2 size={14} strokeWidth={2.8} />
-                              {isDeleting ? "删除中" : "删除笔记本"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="neo-button mt-2 w-full py-3"
-                  >
-                    + 新建笔记本
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="group my-[-4px] flex flex-col border-y-4 border-dashed border-neo-ink">
@@ -741,6 +701,20 @@ export default function ProfilePage() {
             {showHistoryManager && (
               <div className="animate-in slide-in-from-top-2 bg-neo-bg p-4 pt-0 duration-200">
                 <div className="space-y-3">
+                  {highlightedSession && (
+                    <SessionSummaryCard
+                      session={highlightedSession}
+                      notebook={highlightedSessionNotebook}
+                      title="继续学习摘要"
+                      continueLabel="回到会话"
+                      onContinue={() =>
+                        router.push(
+                          `/chat?notebook=${highlightedSession.notebookId}&session=${highlightedSession.id}`
+                        )
+                      }
+                    />
+                  )}
+
                   <label className="block">
                     <span className="neo-label mb-2 block">搜索聊天记录</span>
                     <input
@@ -755,14 +729,14 @@ export default function ProfilePage() {
                     <span className="neo-label mb-2 block">按笔记本筛选</span>
                     <div className="relative">
                       <select
-                        value={historyFilterSubjectId}
-                        onChange={(event) => setHistoryFilterSubjectId(event.target.value)}
+                        value={historyFilterNotebookId}
+                        onChange={(event) => setHistoryFilterNotebookId(event.target.value)}
                         className="neo-input w-full appearance-none pr-12"
                       >
                         <option value="all">全部笔记本</option>
-                        {subjects.map((subject) => (
-                          <option key={subject.id} value={subject.id}>
-                            {subject.name}
+                        {notebooks.map((notebook) => (
+                          <option key={notebook.id} value={notebook.id}>
+                            {notebook.name}
                           </option>
                         ))}
                       </select>
@@ -793,7 +767,7 @@ export default function ProfilePage() {
                     </div>
                   ) : (
                     filteredSessions.slice(0, 8).map((session) => {
-                      const subject = subjects.find((item) => item.id === session.subjectId);
+                      const notebook = notebooks.find((item) => item.id === session.notebookId);
                       const date = new Date(session.updatedAt);
                       const dateString = `${date.getMonth() + 1}/${date.getDate()} ${date
                         .getHours()
@@ -808,14 +782,28 @@ export default function ProfilePage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-lg">{subject?.icon ?? "📚"}</span>
+                                <span className="text-lg">{notebook?.icon ?? "📚"}</span>
                                 <p className="truncate text-sm font-black">
                                   {session.title}
                                 </p>
                               </div>
                               <p className="mt-2 text-xs font-bold text-neo-ink/60">
-                                {subject?.name ?? "未知笔记本"} · {dateString}
+                                {notebook?.name ?? "未知笔记本"} · {dateString}
                               </p>
+                              {hasSessionSummary(session.sessionMemory) && (
+                                <div className="mt-2 space-y-1">
+                                  {session.sessionMemory?.activeTopic && (
+                                    <p className="text-xs font-black text-neo-ink">
+                                      主题：{session.sessionMemory.activeTopic}
+                                    </p>
+                                  )}
+                                  {session.sessionMemory?.currentGoal && (
+                                    <p className="text-xs font-bold text-neo-ink/70">
+                                      目标：{session.sessionMemory.currentGoal}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <span className="neo-badge bg-white">
                               {session.messages.length} 条
@@ -827,7 +815,7 @@ export default function ProfilePage() {
                               type="button"
                               onClick={() =>
                                 router.push(
-                                  `/chat?subject=${session.subjectId}&session=${session.id}`
+                                  `/chat?notebook=${session.notebookId}&session=${session.id}`
                                 )
                               }
                               className="neo-button w-full justify-center px-3 py-2 text-xs"
@@ -901,6 +889,104 @@ export default function ProfilePage() {
 
           <div className="group my-[-4px] flex flex-col border-y-4 border-dashed border-neo-ink">
             <button
+              onClick={() => setShowSecuritySettings(!showSecuritySettings)}
+              className="flex items-center justify-between bg-white p-4 text-left transition-colors hover:bg-neo-muted"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center border-[3px] border-neo-ink bg-white shadow-[2px_2px_0px_0px_#1e293b]">
+                  <ShieldCheck size={20} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <span className="block font-bold text-base">账号安全</span>
+                  <span className="mt-1 block text-xs font-bold text-neo-ink/60">
+                    修改密码与基础安全设置
+                  </span>
+                </div>
+              </div>
+              <ChevronRight
+                size={24}
+                strokeWidth={2.5}
+                className={`transition-transform duration-200 ${
+                  showSecuritySettings
+                    ? "rotate-90"
+                    : "group-hover:translate-x-1"
+                }`}
+              />
+            </button>
+            {showSecuritySettings && (
+              <div className="animate-in slide-in-from-top-2 bg-white p-4 pt-0 duration-200">
+                <div className="neo-card-secondary p-4">
+                  <p className="neo-label">Password</p>
+                  <h3 className="mt-2 text-xl font-black">修改登录密码</h3>
+                  <p className="mt-2 text-sm font-bold leading-relaxed text-neo-ink/70">
+                    修改后会轮换当前登录会话，旧的 refresh token 会被作废。
+                  </p>
+
+                  <div className="mt-4 space-y-3">
+                    <label className="block">
+                      <span className="neo-label mb-2 block">当前密码</span>
+                      <div className="flex items-center gap-3 border-[3px] border-neo-ink bg-white px-4 py-3 shadow-neo-sm">
+                        <KeyRound size={16} strokeWidth={2.8} />
+                        <input
+                          type="password"
+                          value={currentPassword}
+                          onChange={(event) => setCurrentPassword(event.target.value)}
+                          placeholder="输入当前密码"
+                          className="w-full bg-transparent text-sm font-bold outline-none"
+                          autoComplete="current-password"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="block">
+                      <span className="neo-label mb-2 block">新密码</span>
+                      <div className="flex items-center gap-3 border-[3px] border-neo-ink bg-white px-4 py-3 shadow-neo-sm">
+                        <KeyRound size={16} strokeWidth={2.8} />
+                        <input
+                          type="password"
+                          value={newPassword}
+                          onChange={(event) => setNewPassword(event.target.value)}
+                          placeholder="至少 8 位"
+                          className="w-full bg-transparent text-sm font-bold outline-none"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="block">
+                      <span className="neo-label mb-2 block">确认新密码</span>
+                      <div className="flex items-center gap-3 border-[3px] border-neo-ink bg-white px-4 py-3 shadow-neo-sm">
+                        <KeyRound size={16} strokeWidth={2.8} />
+                        <input
+                          type="password"
+                          value={confirmNewPassword}
+                          onChange={(event) => setConfirmNewPassword(event.target.value)}
+                          placeholder="再输入一次新密码"
+                          className="w-full bg-transparent text-sm font-bold outline-none"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleChangePassword();
+                    }}
+                    disabled={isChangingPassword}
+                    className="neo-button mt-4 w-full justify-center"
+                  >
+                    <ShieldCheck size={16} strokeWidth={2.8} />
+                    {isChangingPassword ? "更新中…" : "更新密码"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="group my-[-4px] flex flex-col border-y-4 border-dashed border-neo-ink">
+            <button
               onClick={() => setShowModelSettings(!showModelSettings)}
               className="flex items-center justify-between bg-neo-accent p-4 text-left transition-colors hover:bg-[#eadeff]/80"
             >
@@ -925,9 +1011,14 @@ export default function ProfilePage() {
                   isLoading={isLoadingModelConfig}
                   error={modelConfigError}
                   isUpdating={isSwitchingModel}
+                  healthStatus={modelHealthStatus}
+                  healthMessage={modelHealthMessage}
                   onChange={handleModelChange}
                   onRetry={() => {
                     void loadModelConfig();
+                  }}
+                  onTestHealth={() => {
+                    void handleModelHealthCheck();
                   }}
                 />
               </div>
@@ -966,41 +1057,6 @@ export default function ProfilePage() {
       </main>
 
       <BottomNav />
-
-      <input
-        ref={uploadInputRef}
-        type="file"
-        accept=".pdf"
-        className="hidden"
-        onChange={handleUploadSelectedFile}
-      />
-
-      {showCreateModal && (
-        <CreateAgentModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            setShowCreateModal(false);
-            void refreshSubjects();
-            showFeedback("success", "新笔记本已经创建好了。");
-          }}
-        />
-      )}
-
-      {editingSubject && (
-        <EditNotebookModal
-          subject={editingSubject}
-          onClose={() => setEditingSubject(null)}
-          onSuccess={(updatedSubject) => {
-            setEditingSubject(null);
-            setSubjects((previous) =>
-              previous.map((item) =>
-                item.id === updatedSubject.id ? updatedSubject : item
-              )
-            );
-            showFeedback("success", `已更新笔记本「${updatedSubject.name}」`);
-          }}
-        />
-      )}
 
       {showEditProfile && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">

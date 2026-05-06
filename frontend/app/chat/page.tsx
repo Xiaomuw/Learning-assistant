@@ -4,39 +4,49 @@ import { useEffect, useRef, useState } from "react";
 import { Clock, Sparkles } from "lucide-react";
 import ChatWindow from "@/components/ChatWindow";
 import InputBar from "@/components/InputBar";
-import SubjectSelector from "@/components/SubjectSelector";
+import NotebookSelector from "@/components/NotebookSelector";
 import BottomNav from "@/components/BottomNav";
-import AgentStyleOnboardingModal from "@/components/AgentStyleOnboardingModal";
+import { useAuth } from "@/components/AuthProvider";
 import HistoryDrawer from "@/components/HistoryDrawer";
+import SessionSummaryCard, {
+  hasSessionSummary,
+} from "@/components/SessionSummaryCard";
 import {
-  DEFAULT_USER_ID,
   deleteSession as deleteSessionRemote,
+  fetchNotebookKnowledgeStatus,
   fetchModelConfig,
-  fetchSubjects,
+  fetchNotebooks,
   fetchSessions,
   fetchUserMemory,
-  fetchUserProfile,
-  generateKnowledgeBase,
+  normalizeExplanationPayload,
+  normalizeMemoryPayload,
   sendChatSSE,
-  updateUserProfile,
-  uploadPDFWithSubject,
+  uploadPDFToNotebook,
   type Memory,
   type Message,
+  type MessageProcess,
+  type MessageProcessExecution,
+  type MessageProcessStage,
+  type MessageProcessToolCall,
   type ModelConfig,
+  type Notebook,
+  type NotebookKnowledgeStatus,
+  type QuizClarificationPanel,
   type QuizItem,
-  type Subject,
-  type UserProfile,
+  type QuizRequestResolution,
 } from "@/lib/api";
 import {
+  DEFAULT_NOTEBOOK_ID,
+  clearStoredPracticeState,
   loadStoredMemory,
   loadStoredModelConfig,
-  loadStoredSubjectId,
+  loadStoredNotebookId,
   loadStoredSessions,
   persistMemory,
   persistQuiz,
   persistStoredModelConfig,
   persistStoredSessions,
-  persistStoredSubjectId,
+  persistStoredNotebookId,
   type ChatSession,
 } from "@/lib/learning-store";
 
@@ -50,24 +60,612 @@ const EMPTY_MEMORY: Memory = {
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   concept: "概念理解",
   problem: "解题辅导",
+  compare: "概念比较",
+  application: "应用场景",
   practice: "练习出题",
   review: "复习巩固",
   meta: "助手信息",
   smalltalk: "寒暄对话",
+  mcq_problem: "选择题判题",
 };
 
+const EXECUTION_MODE_LABELS: Record<string, string> = {
+  direct_answer: "直接回答",
+  tool_calling: "工具调用",
+  structured_output: "结构化回答",
+  deterministic_context: "确定性检索讲解",
+};
+
+const ROUTE_LABELS: Record<string, string> = {
+  fast: "快速回答",
+  explain: "教学讲解",
+  rag: "资料优先",
+  agent: "工具增强",
+};
+
+const NOTEBOOK_POLICY_LABELS: Record<string, string> = {
+  skip: "不查 notebook",
+  optional: "资料可选",
+  required: "优先参考资料",
+  strict: "只按资料",
+};
+
+const SEARCH_POLICY_LABELS: Record<string, string> = {
+  forbidden: "不搜索",
+  allowed: "可搜索",
+  required: "必须搜索",
+};
+
+const TOOL_LABELS: Record<string, string> = {
+  search_notebook_context: "搜索笔记本",
+  get_session_summary: "读取会话摘要",
+  get_user_learning_profile: "读取学习画像",
+  recommend_questions: "推荐练习题",
+  mcp_web_search: "网页搜索(MCP)",
+  mcp_web_read: "网页读取(MCP)",
+  tavily_web_search: "网络搜索(Tavily)",
+};
+
+const PROCESS_STAGE_ORDER: Record<string, number> = {
+  status: 0,
+  routing: 1,
+  guard: 2,
+  retrieval: 3,
+  context_audit: 4,
+  web_search: 5,
+  teaching: 6,
+  tool_decision: 7,
+  execution: 8,
+  answer: 9,
+  error: 10,
+};
+
+const COVERAGE_LABELS: Record<NotebookKnowledgeStatus["coverage_level"], string> = {
+  empty: "知识库为空",
+  sparse: "资料较少",
+  partial: "资料部分可用",
+  ready: "知识库可用",
+};
+
+function createInitialProcess(message = "已连接学习引擎，正在准备处理。"): MessageProcess {
+  return {
+    currentStage: "准备中",
+    stages: [
+      {
+        key: "status",
+        label: "准备中",
+        status: "running",
+        detail: message,
+      },
+    ],
+    reasoningSummary: "",
+    toolCalls: [],
+  };
+}
+
+function cloneProcess(process?: MessageProcess): MessageProcess {
+  if (!process) {
+    return createInitialProcess();
+  }
+
+  return {
+    currentStage: process.currentStage,
+    stages: process.stages.map((stage) => ({ ...stage })),
+    reasoningSummary: process.reasoningSummary ?? "",
+    execution: process.execution ? { ...process.execution } : undefined,
+    toolCalls: (process.toolCalls ?? []).map((toolCall) => ({ ...toolCall })),
+  };
+}
+
+function finalizeRunningStages(
+  stages: MessageProcessStage[]
+): MessageProcessStage[] {
+  return stages.map((stage) =>
+    stage.status === "running"
+      ? ({ ...stage, status: "completed" } as MessageProcessStage)
+      : stage
+  );
+}
+
+function upsertProcessStage(
+  process: MessageProcess | undefined,
+  stage: MessageProcessStage,
+  currentStage: string,
+  options: { completeRunning?: boolean } = {}
+): MessageProcess {
+  const nextProcess = cloneProcess(process);
+  const completeRunning = options.completeRunning ?? true;
+  const stages: MessageProcessStage[] = completeRunning
+    ? finalizeRunningStages(nextProcess.stages)
+    : nextProcess.stages.map((item): MessageProcessStage => ({ ...item }));
+  const nextStage: MessageProcessStage = { ...stage };
+  const existingIndex = stages.findIndex((item) => item.key === nextStage.key);
+
+  if (existingIndex >= 0) {
+    stages[existingIndex] = nextStage;
+  } else {
+    stages.push(nextStage);
+  }
+
+  stages.sort(
+    (left, right) =>
+      (PROCESS_STAGE_ORDER[left.key] ?? 99) - (PROCESS_STAGE_ORDER[right.key] ?? 99)
+  );
+
+  nextProcess.currentStage = currentStage;
+  nextProcess.stages = stages;
+  return nextProcess;
+}
+
+function stringifyProcessArg(value: unknown) {
+  if (typeof value === "boolean") {
+    return value ? "是" : "否";
+  }
+  if (value == null) {
+    return "";
+  }
+  return String(value).trim();
+}
+
+function summarizeToolArgs(name: string, args: unknown): string {
+  if (!args || typeof args !== "object" || Array.isArray(args)) {
+    return "无额外参数";
+  }
+
+  const payload = args as Record<string, unknown>;
+  const parts: string[] = [];
+
+  if (name === "search_notebook_context") {
+    const query = stringifyProcessArg(payload.query);
+    const topK = stringifyProcessArg(payload.top_k);
+    if (query) {
+      parts.push(`query=${query}`);
+    }
+    if (topK) {
+      parts.push(`top_k=${topK}`);
+    }
+  } else if (name === "get_session_summary") {
+    const includeOpenLoops = stringifyProcessArg(payload.include_open_loops);
+    if (includeOpenLoops) {
+      parts.push(`包含未解决点=${includeOpenLoops}`);
+    }
+  } else if (name === "get_user_learning_profile") {
+    const focus = stringifyProcessArg(payload.focus);
+    if (focus) {
+      parts.push(`focus=${focus}`);
+    }
+  } else if (name === "recommend_questions") {
+    const topic = stringifyProcessArg(payload.topic);
+    const limit = stringifyProcessArg(payload.limit);
+    if (topic) {
+      parts.push(`topic=${topic}`);
+    }
+    if (limit) {
+      parts.push(`limit=${limit}`);
+    }
+  } else if (name === "mcp_web_search") {
+    const query = stringifyProcessArg(payload.query);
+    const maxResults = stringifyProcessArg(payload.max_results);
+    if (query) {
+      parts.push(`query=${query}`);
+    }
+    if (maxResults) {
+      parts.push(`max_results=${maxResults}`);
+    }
+  } else if (name === "mcp_web_read") {
+    const url = stringifyProcessArg(payload.url);
+    if (url) {
+      parts.push(`url=${url}`);
+    }
+  } else if (name === "tavily_web_search") {
+    const query = stringifyProcessArg(payload.query);
+    const maxResults = stringifyProcessArg(payload.max_results);
+    if (query) {
+      parts.push(`query=${query}`);
+    }
+    if (maxResults) {
+      parts.push(`max_results=${maxResults}`);
+    }
+  } else {
+    Object.entries(payload)
+      .slice(0, 3)
+      .forEach(([key, value]) => {
+        const normalized = stringifyProcessArg(value);
+        if (normalized) {
+          parts.push(`${key}=${normalized}`);
+        }
+      });
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : "无额外参数";
+}
+
+function normalizeToolCalls(rawToolCalls: unknown): MessageProcessToolCall[] {
+  if (!Array.isArray(rawToolCalls)) {
+    return [];
+  }
+
+  return rawToolCalls.reduce<MessageProcessToolCall[]>((accumulator, item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return accumulator;
+      }
+
+      const payload = item as Record<string, unknown>;
+      const name = String(payload.name ?? "").trim();
+      const error =
+        typeof payload.error === "string" && payload.error.trim()
+          ? payload.error.trim()
+          : undefined;
+      const docCount =
+        typeof payload.doc_count === "number" && Number.isFinite(payload.doc_count)
+          ? payload.doc_count
+          : undefined;
+
+      accumulator.push({
+        name,
+        label: TOOL_LABELS[name] ?? (name || "未知工具"),
+        success: Boolean(payload.success),
+        argsSummary: summarizeToolArgs(name, payload.args),
+        error,
+        docCount,
+      });
+
+      return accumulator;
+    }, []);
+}
+
+function mergeToolCalls(
+  primary: unknown,
+  external: unknown
+): MessageProcessToolCall[] {
+  const merged = [...normalizeToolCalls(primary), ...normalizeToolCalls(external)];
+  const seen = new Set<string>();
+  return merged.filter((toolCall, index) => {
+    const key = `${toolCall.name}:${toolCall.argsSummary}:${toolCall.success}:${toolCall.error ?? ""}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return index >= 0;
+  });
+}
+
+function mergeProcessToolCalls(
+  existing: MessageProcessToolCall[] | undefined,
+  incoming: MessageProcessToolCall[]
+): MessageProcessToolCall[] {
+  const seen = new Set<string>();
+  const merged = [...(existing ?? []), ...incoming];
+  return merged.filter((toolCall) => {
+    const key = `${toolCall.name}:${toolCall.argsSummary}:${toolCall.success}:${toolCall.error ?? ""}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function hasRetrievalStatusPayload(data: Record<string, unknown>) {
+  return (
+    "retrieval_diagnosis" in data ||
+    "rag_ready" in data ||
+    "doc_count" in data ||
+    "web_search_required" in data ||
+    "rag_warning" in data
+  );
+}
+
+function hasContextAuditStatusPayload(data: Record<string, unknown>) {
+  return (
+    "context_audit" in data ||
+    "verified_context" in data ||
+    "verified_count" in data
+  );
+}
+
+function hasWebSearchStatusPayload(data: Record<string, unknown>) {
+  return (
+    "web_search_diagnosis" in data ||
+    "web_search_attempted" in data ||
+    "web_search_used" in data ||
+    "web_search_error" in data ||
+    "external_tool_calls" in data
+  );
+}
+
+function hasTeachingStatusPayload(data: Record<string, unknown>) {
+  return (
+    "teaching_input_type" in data ||
+    "teaching_user_state" in data ||
+    "teaching_knowledge_point" in data ||
+    "pending_check" in data
+  );
+}
+
+function hasGuardStatusPayload(data: Record<string, unknown>) {
+  return (
+    "guard" in data ||
+    "allow_tools" in data ||
+    "allow_search" in data
+  );
+}
+
+function buildGuardStageDetail(data: Record<string, unknown>) {
+  const guard =
+    data.guard && typeof data.guard === "object" && !Array.isArray(data.guard)
+      ? (data.guard as Record<string, unknown>)
+      : {};
+  const allowTools = Boolean(data.allow_tools ?? guard.allow_tools);
+  const allowSearch = Boolean(data.allow_search ?? guard.allow_search);
+  const reason = typeof guard.reason === "string" ? guard.reason : "";
+  const route = typeof data.route === "string" ? data.route : "";
+  const routeLabel = ROUTE_LABELS[route] ?? route;
+  const notebookPolicy =
+    typeof data.notebook_policy === "string"
+      ? data.notebook_policy
+      : typeof guard.notebook_policy === "string"
+        ? guard.notebook_policy
+        : "";
+  const searchPolicy =
+    typeof data.search_policy === "string"
+      ? data.search_policy
+      : typeof guard.search_policy === "string"
+        ? guard.search_policy
+        : "";
+  return [
+    routeLabel ? `路线：${routeLabel}` : "",
+    notebookPolicy ? `资料：${NOTEBOOK_POLICY_LABELS[notebookPolicy] ?? notebookPolicy}` : "",
+    searchPolicy ? `搜索策略：${SEARCH_POLICY_LABELS[searchPolicy] ?? searchPolicy}` : "",
+    `工具：${allowTools ? "允许" : "禁用"}`,
+    `搜索：${allowSearch ? "允许" : "禁用"}`,
+    reason,
+  ].filter(Boolean).join(" · ");
+}
+
+function buildTeachingStageDetail(data: Record<string, unknown>) {
+  const inputType =
+    typeof data.teaching_input_type === "string" ? data.teaching_input_type : "";
+  const userState =
+    typeof data.teaching_user_state === "string" ? data.teaching_user_state : "";
+  const knowledgePoint =
+    typeof data.teaching_knowledge_point === "string"
+      ? data.teaching_knowledge_point
+      : "";
+  const parts = [
+    QUESTION_TYPE_LABELS[inputType] ?? inputType,
+    knowledgePoint,
+    userState,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" · ") : "已选择适合本轮问题的教学策略。";
+}
+
+function buildRetrievalStageDetail(data: Record<string, unknown>) {
+  const docCount = Number(data.raw_doc_count ?? data.doc_count ?? 0);
+  const isRewritten = Boolean(data.is_rewritten);
+  const webSearchUsed = Boolean(data.web_search_used);
+  const webSearchAttempted = Boolean(data.web_search_attempted);
+  const webSearchError =
+    typeof data.web_search_error === "string" ? data.web_search_error : "";
+  const diagnosis =
+    data.retrieval_diagnosis &&
+    typeof data.retrieval_diagnosis === "object" &&
+    !Array.isArray(data.retrieval_diagnosis)
+      ? String((data.retrieval_diagnosis as Record<string, unknown>).diagnosis ?? "")
+      : "";
+
+  let detail = `知识检索命中了 ${docCount} 条内容。`;
+  if (docCount === 0) {
+    detail = "知识检索没有命中可用内容。";
+  }
+  if (diagnosis === "empty_knowledge_base") {
+    detail = "当前 notebook 暂无可检索资料。";
+  } else if (diagnosis === "no_matching_docs") {
+    detail = "当前 notebook 没有命中相关资料。";
+  } else if (diagnosis === "low_score") {
+    detail = `${detail.slice(0, -1)}，但相关度偏低。`;
+  }
+  if (webSearchUsed) {
+    detail = `当前 notebook 未命中足够内容，已使用 Tavily 网络搜索补充 ${docCount} 条上下文。`;
+  } else if (webSearchAttempted && webSearchError) {
+    detail = `${detail} Tavily 网络搜索失败：${webSearchError}。`;
+  } else if (webSearchAttempted) {
+    detail = `${detail} 已尝试 Tavily 网络搜索但未获得可用结果。`;
+  }
+  if (isRewritten) {
+    detail = `${detail.slice(0, -1)}，并自动改写了查询。`;
+  }
+  return detail;
+}
+
+function buildContextAuditStageDetail(data: Record<string, unknown>) {
+  const audit =
+    data.context_audit &&
+    typeof data.context_audit === "object" &&
+    !Array.isArray(data.context_audit)
+      ? (data.context_audit as Record<string, unknown>)
+      : {};
+  const rawCount = Number(data.raw_doc_count ?? audit.raw_count ?? 0);
+  const verifiedCount = Number(data.verified_count ?? audit.verified_count ?? 0);
+  const discardedCount = Number(audit.discarded_count ?? Math.max(0, rawCount - verifiedCount));
+  const reason = typeof audit.reason === "string" ? audit.reason : "";
+
+  if (verifiedCount > 0) {
+    return `上下文审查通过 ${verifiedCount} 条，丢弃 ${discardedCount} 条。`;
+  }
+  if (rawCount > 0) {
+    return `上下文审查未发现可用资料，已丢弃 ${discardedCount || rawCount} 条${reason ? ` · ${reason}` : ""}。`;
+  }
+  return "上下文审查未发现可用资料。";
+}
+
+function buildWebSearchStageDetail(data: Record<string, unknown>) {
+  const docCount = Number(data.doc_count ?? 0);
+  const webSearchUsed = Boolean(data.web_search_used);
+  const webSearchAttempted = Boolean(data.web_search_attempted);
+  const webSearchError =
+    typeof data.web_search_error === "string" ? data.web_search_error : "";
+
+  if (webSearchUsed) {
+    return `Tavily 网络搜索成功，补充 ${docCount} 条上下文。`;
+  }
+  if (webSearchAttempted && webSearchError) {
+    return `Tavily 网络搜索失败：${webSearchError}，已继续使用通用问答兜底。`;
+  }
+  if (webSearchAttempted) {
+    return "已尝试 Tavily 网络搜索，但没有获得可用结果。";
+  }
+  return "本轮未触发网络搜索。";
+}
+
+function buildExecutionInfo(data: Record<string, unknown>): MessageProcessExecution | undefined {
+  const executionMode =
+    typeof data.execution_mode === "string" ? data.execution_mode : "";
+  const profile =
+    data.selected_model_profile &&
+    typeof data.selected_model_profile === "object" &&
+    !Array.isArray(data.selected_model_profile)
+      ? (data.selected_model_profile as Record<string, unknown>)
+      : null;
+
+  if (!executionMode && !profile && !("degraded" in data)) {
+    return undefined;
+  }
+
+  return {
+    mode: EXECUTION_MODE_LABELS[executionMode] ?? (executionMode || "未知模式"),
+    degraded: Boolean(data.degraded),
+    modelId: profile && typeof profile.model_id === "string" ? profile.model_id : "",
+    modelFamily: profile && typeof profile.family === "string" ? profile.family : "",
+    modelProvider: profile && typeof profile.provider === "string" ? profile.provider : "",
+    primaryModelId:
+      typeof data.primary_model_id === "string" ? data.primary_model_id : undefined,
+    fallbackModelId:
+      typeof data.fallback_model_id === "string" ? data.fallback_model_id : undefined,
+    fallbackUsed: Boolean(data.fallback_used),
+    fallbackReason:
+      typeof data.fallback_reason === "string" ? data.fallback_reason : undefined,
+    modelAttempts: Array.isArray(data.model_attempts)
+      ? (data.model_attempts as MessageProcessExecution["modelAttempts"])
+      : undefined,
+    streamingMode:
+      typeof data.streaming_mode === "string" ? data.streaming_mode : undefined,
+    modelLatencyMs:
+      typeof data.model_latency_ms === "number" ? data.model_latency_ms : undefined,
+  };
+}
+
+function currentModelOption(config: ModelConfig | null) {
+  if (!config) {
+    return null;
+  }
+  return (
+    config.available_models.find((item) => item.id === config.current_model) ??
+    config.available_models.find((item) => item.id === config.locked_model) ??
+    null
+  );
+}
+
+function currentModelDisplay(config: ModelConfig | null) {
+  const option = currentModelOption(config);
+  const modelId = config?.locked_model || config?.current_model || "";
+  return {
+    label: option?.label || modelId || "模型加载中",
+    id: option?.id || modelId,
+    provider: option?.provider || "",
+    family: option?.family || "",
+  };
+}
+
+function extractQuestionType(
+  data: Record<string, unknown>,
+  fallback?: string
+) {
+  if (typeof data.question_type === "string" && data.question_type.trim()) {
+    return data.question_type.trim();
+  }
+
+  if (
+    typeof data.teaching_input_type === "string" &&
+    data.teaching_input_type.trim() &&
+    data.teaching_input_type !== "check_answer"
+  ) {
+    return data.teaching_input_type.trim();
+  }
+
+  return fallback;
+}
+
+function extractRoute(data: Record<string, unknown>, fallback?: string) {
+  if (typeof data.route === "string" && data.route.trim()) {
+    return data.route.trim();
+  }
+  return fallback;
+}
+
+function buildAnswerContent(
+  finalAnswer: string,
+  explanation?: Message["explanation"]
+) {
+  if (finalAnswer.trim()) {
+    return finalAnswer.trim();
+  }
+  const stepContent = (explanation?.steps ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  if (stepContent) {
+    return stepContent;
+  }
+  if (explanation?.topic?.trim()) {
+    return `我已经围绕「${explanation.topic.trim()}」整理好讲解了。`;
+  }
+  return "讲解已经准备好了。";
+}
+
+function getCurrentProcessLabel(message: Message) {
+  const stages = message.process?.stages ?? [];
+  const failedStage = stages.find((stage) => stage.status === "failed");
+  if (failedStage?.label) {
+    return failedStage.label;
+  }
+  if (message.quiz && message.quiz.length > 0) {
+    return "练习题已准备";
+  }
+  const answerStage = stages.find(
+    (stage) => stage.key === "answer" && stage.status === "completed"
+  );
+  if (answerStage?.label) {
+    return answerStage.label;
+  }
+  if (message.explanation || message.content.trim()) {
+    return "已生成回答";
+  }
+  const runningStage = stages.find((stage) => stage.status === "running");
+  if (runningStage?.label) {
+    return runningStage.label;
+  }
+  const completedStage = [...stages]
+    .reverse()
+    .find((stage) => stage.status === "completed");
+  if (completedStage?.label) {
+    return completedStage.label;
+  }
+  return "已生成回答";
+}
+
 export default function ChatPage() {
+  const { user, isLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [, setMemory] = useState<Memory>(EMPTY_MEMORY);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [selectedSubjectId, setSelectedSubjectId] = useState("general");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [notebooks, setNotebooks] = useState<Notebook[]>([]);
+  const [selectedNotebookId, setSelectedNotebookId] = useState(DEFAULT_NOTEBOOK_ID);
+  const [selectedKnowledgeStatus, setSelectedKnowledgeStatus] =
+    useState<NotebookKnowledgeStatus | null>(null);
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [showStyleOnboarding, setShowStyleOnboarding] = useState(false);
-  const [isSavingStyle, setIsSavingStyle] = useState(false);
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>("");
@@ -75,15 +673,19 @@ export default function ChatPage() {
   const activeStreamRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    if (isLoading || !user) {
+      return;
+    }
+
+    const userId = user.id;
     let isMounted = true;
-    const requestedSubjectId =
+    const searchParams =
       typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("subject")
+        ? new URLSearchParams(window.location.search)
         : null;
-    const requestedSessionId =
-      typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("session")
-        : null;
+    const requestedNotebookId =
+      searchParams?.get("notebook") ?? searchParams?.get("subject") ?? null;
+    const requestedSessionId = searchParams?.get("session") ?? null;
 
     async function initializePage() {
       setMemory(loadStoredMemory());
@@ -92,33 +694,32 @@ export default function ChatPage() {
 
       try {
         const [
-          notebooks,
+          remoteNotebooks,
           remoteMemory,
           remoteSessions,
           remoteModelConfig,
-          remoteProfile,
         ] = await Promise.all([
-          fetchSubjects(),
-          fetchUserMemory(DEFAULT_USER_ID).catch(() => null),
-          fetchSessions(DEFAULT_USER_ID).catch(() => null),
+          fetchNotebooks(),
+          fetchUserMemory(userId).catch(() => null),
+          fetchSessions(userId).catch(() => null),
           fetchModelConfig().catch(() => null),
-          fetchUserProfile(DEFAULT_USER_ID).catch(() => null),
         ]);
 
         if (!isMounted) {
           return;
         }
 
-        const storedSubjectId = loadStoredSubjectId();
-        const fallbackId = notebooks.some((item) => item.id === requestedSubjectId)
-          ? String(requestedSubjectId)
-          : notebooks.some((item) => item.id === storedSubjectId)
-            ? storedSubjectId
-            : "general";
+        const storedNotebookId = loadStoredNotebookId();
+        const defaultNotebookId = remoteNotebooks[0]?.id ?? DEFAULT_NOTEBOOK_ID;
+        const fallbackId = remoteNotebooks.some((item) => item.id === requestedNotebookId)
+          ? String(requestedNotebookId)
+          : remoteNotebooks.some((item) => item.id === storedNotebookId)
+            ? storedNotebookId
+            : defaultNotebookId;
 
-        setSubjects(notebooks);
-        setSelectedSubjectId(fallbackId);
-        persistStoredSubjectId(fallbackId);
+        setNotebooks(remoteNotebooks);
+        setSelectedNotebookId(fallbackId);
+        persistStoredNotebookId(fallbackId);
 
         if (remoteMemory) {
           setMemory(remoteMemory);
@@ -135,10 +736,15 @@ export default function ChatPage() {
             );
 
             if (requestedSession) {
+              const sessionNotebookId = remoteNotebooks.some(
+                (item) => item.id === requestedSession.notebookId
+              )
+                ? requestedSession.notebookId
+                : fallbackId;
               setCurrentSessionId(requestedSession.id);
               setMessages(requestedSession.messages);
-              setSelectedSubjectId(requestedSession.subjectId);
-              persistStoredSubjectId(requestedSession.subjectId);
+              setSelectedNotebookId(sessionNotebookId);
+              persistStoredNotebookId(sessionNotebookId);
             }
           }
         }
@@ -148,12 +754,6 @@ export default function ChatPage() {
           persistStoredModelConfig(remoteModelConfig);
         }
 
-        if (remoteProfile) {
-          setUserProfile(remoteProfile);
-          if (!remoteProfile.onboarding_completed) {
-            setShowStyleOnboarding(true);
-          }
-        }
       } catch (error) {
         console.error("加载笔记本列表失败:", error);
       }
@@ -166,7 +766,30 @@ export default function ChatPage() {
       activeStreamRef.current?.abort();
       activeStreamRef.current = null;
     };
-  }, []);
+  }, [isLoading, user]);
+
+  useEffect(() => {
+    if (isLoading || !user || !selectedNotebookId) {
+      return;
+    }
+
+    let isMounted = true;
+    fetchNotebookKnowledgeStatus(selectedNotebookId)
+      .then((status) => {
+        if (isMounted) {
+          setSelectedKnowledgeStatus(status);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSelectedKnowledgeStatus(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLoading, selectedNotebookId, user]);
 
   function updateLastAssistant(updater: (message: Message) => Message) {
     setMessages((previous) => {
@@ -183,14 +806,17 @@ export default function ChatPage() {
     });
   }
 
-  async function refreshSubjects() {
-    const data = await fetchSubjects();
-    setSubjects(data);
+  async function refreshNotebooks() {
+    const data = await fetchNotebooks();
+    setNotebooks(data);
   }
 
   async function refreshSessions() {
+    if (!user) {
+      return;
+    }
     try {
-      const remoteSessions = await fetchSessions(DEFAULT_USER_ID);
+      const remoteSessions = await fetchSessions(user.id);
       setSessions(remoteSessions);
       persistStoredSessions(remoteSessions);
     } catch (error) {
@@ -198,47 +824,12 @@ export default function ChatPage() {
     }
   }
 
-  async function handleSaveStyle(payload: {
-    agent_style_name: string;
-    agent_style_prompt: string;
-    onboarding_completed: boolean;
-  }) {
-    setIsSavingStyle(true);
-    try {
-      const nextProfile = await updateUserProfile(DEFAULT_USER_ID, payload);
-      setUserProfile(nextProfile);
-      setShowStyleOnboarding(false);
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: nextProfile.agent_style_name
-            ? `已为你切到「${nextProfile.agent_style_name}」风格，后面的回答都会按这个口吻来。`
-            : "已保存默认风格设置。",
-          timestamp: Date.now(),
-        },
-      ]);
-    } catch (error) {
-      console.error("保存 Agent 风格失败:", error);
-    } finally {
-      setIsSavingStyle(false);
-    }
-  }
-
-  async function handleSkipStyleSetup() {
-    await handleSaveStyle({
-      agent_style_name: "",
-      agent_style_prompt: "",
-      onboarding_completed: true,
-    });
-  }
-
-  function handleSubjectSelect(subjectId: string) {
+  function handleNotebookSelect(notebookId: string) {
     activeStreamRef.current?.abort();
     activeStreamRef.current = null;
     setIsStreaming(false);
-    setSelectedSubjectId(subjectId);
-    persistStoredSubjectId(subjectId);
+    setSelectedNotebookId(notebookId);
+    persistStoredNotebookId(notebookId);
     setMessages([]);
     setCurrentSessionId("");
   }
@@ -252,54 +843,25 @@ export default function ChatPage() {
     setShowHistory(false);
   }
 
-  async function handleGenerate(subjectId: string) {
-    setIsGenerating(true);
-
-    try {
-      const result = await generateKnowledgeBase(subjectId);
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: `这个笔记本的基础内容已经生成完毕：${result.message}`,
-          timestamp: Date.now(),
-        },
-      ]);
-
-      await refreshSubjects();
-    } catch (error) {
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: `基础内容生成失败：${
-            error instanceof Error ? error.message : "未知错误"
-          }`,
-          timestamp: Date.now(),
-        },
-      ]);
-    } finally {
-      setIsGenerating(false);
-    }
-  }
-
   async function handleUpload(file: File) {
     setIsUploading(true);
 
     try {
-      const result = await uploadPDFWithSubject(file, selectedSubjectId);
+      const result = await uploadPDFToNotebook(file, selectedNotebookId);
 
       setMessages((previous) => [
         ...previous,
         {
           role: "assistant",
-          content: `资料已加入笔记本：${result.filename}，共 ${result.total_pages} 页，切成 ${result.total_chunks} 个知识分块。`,
+          content: `资料已加入“我的补充资料”：${result.filename}，共 ${result.total_pages} 页，切成 ${result.total_chunks} 个个人知识块。`,
           timestamp: Date.now(),
         },
       ]);
 
-      await refreshSubjects();
+      await refreshNotebooks();
+      fetchNotebookKnowledgeStatus(selectedNotebookId)
+        .then(setSelectedKnowledgeStatus)
+        .catch(() => undefined);
     } catch (error) {
       setMessages((previous) => [
         ...previous,
@@ -317,6 +879,10 @@ export default function ChatPage() {
   }
 
   function handleSend(question: string) {
+    if (!user) {
+      return;
+    }
+
     activeStreamRef.current?.abort();
     activeStreamRef.current = null;
 
@@ -331,6 +897,7 @@ export default function ChatPage() {
       role: "assistant",
       content: "",
       timestamp: Date.now() + 1,
+      process: createInitialProcess(),
     };
 
     if (!currentSessionId) {
@@ -341,50 +908,413 @@ export default function ChatPage() {
     setIsStreaming(true);
 
     activeStreamRef.current = sendChatSSE(
-      DEFAULT_USER_ID,
+      user.id,
       question,
       (event) => {
         const data = event.data as Record<string, unknown>;
 
         switch (event.event) {
-          case "status":
-            updateLastAssistant((message) => ({
-              ...message,
-              content:
-                typeof data.message === "string"
-                  ? data.message
-                  : "已连接学习引擎，正在处理你的问题。",
-            }));
-            break;
+          case "status": {
+            if (data.finalized === true) {
+              updateLastAssistant((message) => {
+                const nextProcess = cloneProcess(message.process);
+                nextProcess.stages = finalizeRunningStages(nextProcess.stages);
+                nextProcess.currentStage = getCurrentProcessLabel({
+                  ...message,
+                  process: nextProcess,
+                });
 
-          case "routing":
-            updateLastAssistant((message) => ({
-              ...message,
-              content: `已识别问题类型：${
-                QUESTION_TYPE_LABELS[String(data.question_type ?? "concept")] ??
-                String(data.question_type ?? "concept")
-              }`,
-            }));
-            break;
+                return {
+                  ...message,
+                  process: nextProcess,
+                };
+              });
+              break;
+            }
 
-          case "retrieval":
+            if (hasGuardStatusPayload(data)) {
+              updateLastAssistant((message) => {
+                const route = extractRoute(data, message.route);
+                return {
+                  ...message,
+                  route,
+                  process: upsertProcessStage(
+                    message.process,
+                    {
+                      key: "guard",
+                      label: "工具守卫",
+                      status: "completed",
+                      detail: buildGuardStageDetail(data),
+                      elapsed:
+                        typeof data.elapsed === "number" ? data.elapsed : undefined,
+                    },
+                    "工具守卫已完成"
+                  ),
+                };
+              });
+              break;
+            }
+
+            if (hasWebSearchStatusPayload(data)) {
+              const toolCalls = normalizeToolCalls(data.external_tool_calls);
+              updateLastAssistant((message) => {
+                const questionType = extractQuestionType(data, message.questionType);
+                const route = extractRoute(data, message.route);
+                const nextProcess = upsertProcessStage(
+                  message.process,
+                  {
+                    key: "web_search",
+                    label: "网络搜索",
+                    status: Boolean(data.web_search_used) ? "completed" : "completed",
+                    detail: buildWebSearchStageDetail(data),
+                    elapsed:
+                      typeof data.elapsed === "number" ? data.elapsed : undefined,
+                  },
+                  "网络搜索完成"
+                );
+
+                if (toolCalls.length > 0) {
+                  nextProcess.toolCalls = mergeProcessToolCalls(
+                    nextProcess.toolCalls,
+                    toolCalls
+                  );
+                }
+
+                return {
+                  ...message,
+                  questionType,
+                  route,
+                  process: nextProcess,
+                };
+              });
+              break;
+            }
+
+            if (hasContextAuditStatusPayload(data)) {
+              updateLastAssistant((message) => {
+                const questionType = extractQuestionType(data, message.questionType);
+                const route = extractRoute(data, message.route);
+                return {
+                  ...message,
+                  questionType,
+                  route,
+                  process: upsertProcessStage(
+                    message.process,
+                    {
+                      key: "context_audit",
+                      label: "上下文审查",
+                      status: "completed",
+                      detail: buildContextAuditStageDetail(data),
+                      elapsed:
+                        typeof data.elapsed === "number" ? data.elapsed : undefined,
+                    },
+                    "上下文审查完成"
+                  ),
+                };
+              });
+              break;
+            }
+
+            if (hasRetrievalStatusPayload(data)) {
+              const toolCalls = normalizeToolCalls(data.external_tool_calls);
+              updateLastAssistant((message) => {
+                const questionType = extractQuestionType(data, message.questionType);
+                const route = extractRoute(data, message.route);
+                const nextProcess = upsertProcessStage(
+                  message.process,
+                  {
+                    key: "retrieval",
+                    label: "知识检索",
+                    status: "completed",
+                    detail: buildRetrievalStageDetail(data),
+                    elapsed:
+                      typeof data.elapsed === "number" ? data.elapsed : undefined,
+                  },
+                  "知识检索完成"
+                );
+
+                if (toolCalls.length > 0) {
+                  nextProcess.toolCalls = mergeProcessToolCalls(
+                    nextProcess.toolCalls,
+                    toolCalls
+                  );
+                }
+
+                return {
+                  ...message,
+                  questionType,
+                  route,
+                  process: nextProcess,
+                };
+              });
+              break;
+            }
+
+            if (hasTeachingStatusPayload(data)) {
+              updateLastAssistant((message) => {
+                const questionType = extractQuestionType(data, message.questionType);
+                const route = extractRoute(data, message.route);
+                return {
+                  ...message,
+                  questionType,
+                  route,
+                  process: upsertProcessStage(
+                    message.process,
+                    {
+                      key: "teaching",
+                      label: "教学策略",
+                      status: "completed",
+                      detail: buildTeachingStageDetail(data),
+                      elapsed:
+                        typeof data.elapsed === "number" ? data.elapsed : undefined,
+                    },
+                    "教学策略已确定"
+                  ),
+                };
+              });
+              break;
+            }
+
             updateLastAssistant((message) => ({
               ...message,
-              content: `笔记本命中了 ${String(data.doc_count ?? 0)} 条内容，开始整理讲解。`,
+              process: upsertProcessStage(
+                message.process,
+                {
+                  key: "status",
+                  label: "准备中",
+                  status: "running",
+                  detail:
+                    typeof data.message === "string"
+                      ? data.message
+                      : "已连接学习引擎，正在准备处理。",
+                },
+                "准备中",
+                { completeRunning: false }
+              ),
             }));
             break;
+          }
+
+          case "routing": {
+            const rawQuestionType = String(data.question_type ?? "concept");
+            const questionType =
+              QUESTION_TYPE_LABELS[rawQuestionType] ?? rawQuestionType;
+            const rawRoute = typeof data.route === "string" ? data.route : "";
+            const route = ROUTE_LABELS[rawRoute] ?? rawRoute;
+            const notebookPolicy =
+              typeof data.notebook_policy === "string" ? data.notebook_policy : "";
+            const searchPolicy =
+              typeof data.search_policy === "string" ? data.search_policy : "";
+            const policyDetail = [
+              notebookPolicy ? NOTEBOOK_POLICY_LABELS[notebookPolicy] ?? notebookPolicy : "",
+              searchPolicy ? SEARCH_POLICY_LABELS[searchPolicy] ?? searchPolicy : "",
+            ].filter(Boolean).join(" · ");
+
+            updateLastAssistant((message) => ({
+              ...message,
+              questionType: rawQuestionType,
+              route: rawRoute || message.route,
+              process: upsertProcessStage(
+                message.process,
+                {
+                  key: "routing",
+                  label: "问题识别",
+                  status: "completed",
+                  detail: `已识别为${questionType}${route ? ` · 路线：${route}` : ""}${policyDetail ? ` · ${policyDetail}` : ""}。`,
+                  elapsed:
+                    typeof data.elapsed === "number" ? data.elapsed : undefined,
+                },
+                "问题识别完成"
+              ),
+            }));
+            break;
+          }
+
+          case "retrieval": {
+            const toolCalls = normalizeToolCalls(data.external_tool_calls);
+            updateLastAssistant((message) => {
+              const nextProcess = upsertProcessStage(
+                message.process,
+                {
+                  key: "retrieval",
+                  label: "知识检索",
+                  status: "completed",
+                  detail: buildRetrievalStageDetail(data),
+                  elapsed:
+                    typeof data.elapsed === "number" ? data.elapsed : undefined,
+                },
+                "知识检索完成"
+              );
+
+              if (toolCalls.length > 0) {
+                nextProcess.toolCalls = mergeProcessToolCalls(
+                  nextProcess.toolCalls,
+                  toolCalls
+                );
+              }
+
+              return {
+                ...message,
+                process: nextProcess,
+              };
+            });
+            break;
+          }
 
           case "explanation": {
-            const explanation =
-              data.explanation as Message["explanation"] | undefined;
+            const explanation = normalizeExplanationPayload(
+              data.explanation as Message["explanation"] | undefined
+            );
             const finalAnswer =
               typeof data.final_answer === "string" ? data.final_answer : "";
+            const execution = buildExecutionInfo(data);
+            const toolCalls = mergeToolCalls(
+              data.tool_calls,
+              data.external_tool_calls
+            );
+            const reasoningSummary =
+              typeof data.reasoning_summary === "string"
+                ? data.reasoning_summary.trim()
+                : "";
+            const toolDecisionRounds = Array.isArray(data.tool_decision_rounds)
+              ? data.tool_decision_rounds
+              : [];
+            const eventQuestionType = extractQuestionType(data);
+            const eventRoute = extractRoute(data);
 
-            updateLastAssistant((message) => ({
-              ...message,
-              content: explanation?.thinking || finalAnswer || "讲解已经准备好了。",
-              explanation,
-            }));
+            if (
+              !explanation &&
+              !finalAnswer &&
+              !execution &&
+              toolCalls.length === 0 &&
+              !reasoningSummary &&
+              toolDecisionRounds.length === 0
+            ) {
+              break;
+            }
+
+            updateLastAssistant((message) => {
+              let nextProcess = upsertProcessStage(
+                message.process,
+                {
+                  key: "answer",
+                  label: "已生成回答",
+                  status: "completed",
+                  detail: finalAnswer
+                    ? "已生成最终回答。"
+                    : "已生成结构化讲解。",
+                  elapsed:
+                    typeof data.elapsed === "number" ? data.elapsed : undefined,
+                },
+                "已生成回答"
+              );
+
+              nextProcess.reasoningSummary =
+                reasoningSummary ||
+                explanation?.thinking ||
+                finalAnswer ||
+                nextProcess.reasoningSummary ||
+                "";
+
+              if (toolDecisionRounds.length > 0) {
+                const usedToolCount = toolDecisionRounds.filter((item) => {
+                  if (!item || typeof item !== "object") {
+                    return false;
+                  }
+                  const tool = String((item as Record<string, unknown>).tool ?? "");
+                  return tool.length > 0 && tool !== "none";
+                }).length;
+                nextProcess = upsertProcessStage(
+                  nextProcess,
+                  {
+                    key: "tool_decision",
+                    label: "工具决策",
+                    status: "completed",
+                    detail:
+                      usedToolCount > 0
+                        ? `模型完成 ${toolDecisionRounds.length} 轮工具判断，调用了 ${usedToolCount} 次工具。`
+                        : `模型完成 ${toolDecisionRounds.length} 轮工具判断，决定直接回答。`,
+                  },
+                  "已生成回答"
+                );
+              }
+
+              if (execution) {
+                nextProcess.execution = execution;
+                nextProcess = upsertProcessStage(
+                  nextProcess,
+                  {
+                    key: "execution",
+                    label: "模型执行",
+                    status: "completed",
+                    detail: [
+                      execution.mode,
+                      execution.modelFamily,
+                      execution.modelId,
+                      execution.degraded ? "已降级回退" : "",
+                      execution.fallbackUsed && execution.primaryModelId && execution.fallbackModelId
+                        ? `已从 ${execution.primaryModelId} 回滚到 ${execution.fallbackModelId}`
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                    elapsed:
+                      typeof data.elapsed === "number" ? data.elapsed : undefined,
+                  },
+                  "已生成回答"
+                );
+              }
+
+              if (toolCalls.length > 0) {
+                nextProcess.toolCalls = mergeProcessToolCalls(
+                  nextProcess.toolCalls,
+                  toolCalls
+                );
+              }
+
+              return {
+                ...message,
+                content: buildAnswerContent(finalAnswer, explanation),
+                explanation,
+                questionType: eventQuestionType ?? message.questionType,
+                route: eventRoute ?? message.route,
+                process: nextProcess,
+              };
+            });
+            break;
+          }
+
+          case "answer_delta": {
+            const delta = typeof data.delta === "string" ? data.delta : "";
+            if (!delta) {
+              break;
+            }
+            updateLastAssistant((message) => {
+              const nextProcess = upsertProcessStage(
+                message.process,
+                {
+                  key: "answer_stream",
+                  label: "正在生成回答",
+                  status: "running",
+                  detail:
+                    data.streaming_mode === "token"
+                      ? "正在接收模型流式片段。"
+                      : "正在展示节点级回答片段。",
+                  elapsed:
+                    typeof data.elapsed === "number" ? data.elapsed : undefined,
+                },
+                "正在生成回答",
+                { completeRunning: false }
+              );
+              nextProcess.reasoningSummary =
+                nextProcess.reasoningSummary ||
+                "当前为节点级流式：模型/工具节点完成后立即展示结果，不展示原始思维链。";
+              return {
+                ...message,
+                content: `${message.content || ""}${delta}`,
+                process: nextProcess,
+              };
+            });
             break;
           }
 
@@ -392,21 +1322,67 @@ export default function ChatPage() {
             const quizItems: QuizItem[] = Array.isArray(data.quiz_items)
               ? (data.quiz_items as QuizItem[])
               : [];
+            const quizRequest =
+              data.quiz_request && typeof data.quiz_request === "object"
+                ? (data.quiz_request as QuizRequestResolution)
+                : undefined;
+            const quizClarification =
+              data.quiz_clarification && typeof data.quiz_clarification === "object"
+                ? (data.quiz_clarification as QuizClarificationPanel)
+                : undefined;
             const finalAnswer =
               typeof data.final_answer === "string" ? data.final_answer : "";
+            const eventQuestionType = extractQuestionType(data);
+            const eventRoute = extractRoute(data);
 
             if (quizItems.length > 0) {
-              persistQuiz(quizItems);
+              if (quizRequest?.should_switch_topic) {
+                clearStoredPracticeState();
+              }
+              persistQuiz(quizItems, {
+                topic: quizRequest?.active_topic || quizRequest?.topic || quizItems[0]?.knowledge_point,
+                subjectId: quizRequest?.subject_id || selectedNotebookId,
+                sessionId,
+                shouldSwitchTopic: Boolean(quizRequest?.should_switch_topic),
+              });
             }
 
-            updateLastAssistant((message) => ({
-              ...message,
-              content:
-                finalAnswer ||
-                message.content ||
-                "我顺手帮你准备了一组练习题，去刷题页就能接着做。",
-              quiz: quizItems.length > 0 ? quizItems : undefined,
-            }));
+            updateLastAssistant((message) => {
+              const nextProcess = upsertProcessStage(
+                message.process,
+                {
+                  key: "answer",
+                  label: "练习题已准备",
+                  status: "completed",
+                  detail:
+                    quizItems.length > 0
+                      ? `已准备 ${quizItems.length} 道练习题，并同步生成了最终回答。`
+                      : quizClarification
+                        ? "需要先确认练习方向。"
+                        : "练习题结果已经准备好了。",
+                  elapsed:
+                    typeof data.elapsed === "number" ? data.elapsed : undefined,
+                },
+                "练习题已准备"
+              );
+
+              return {
+                ...message,
+                content:
+                  finalAnswer ||
+                  (quizClarification
+                    ? "我可以帮你出题，但需要先确定练习方向。"
+                    : "") ||
+                  message.content ||
+                  "我顺手帮你准备了一组练习题，去刷题页就能接着做。",
+                questionType: eventQuestionType ?? message.questionType ?? "practice",
+                route: eventRoute ?? message.route,
+                quiz: quizItems.length > 0 ? quizItems : undefined,
+                quizRequest: quizRequest ?? message.quizRequest,
+                quizClarification: quizClarification ?? message.quizClarification,
+                process: nextProcess,
+              };
+            });
             break;
           }
 
@@ -415,19 +1391,34 @@ export default function ChatPage() {
               break;
             }
 
-            const nextMemory = data.memory as Memory;
+            const nextMemory = normalizeMemoryPayload(data.memory);
             setMemory(nextMemory);
             persistMemory(nextMemory);
             break;
           }
 
           case "error":
-            updateLastAssistant((message) => ({
-              ...message,
-              content: `出错了：${String(
+            updateLastAssistant((message) => {
+              const errorMessage = `出错了：${String(
                 data.error ?? "未知错误"
-              )}。你可以直接再发一次问题。`,
-            }));
+              )}。你可以直接再发一次问题。`;
+
+              return {
+                ...message,
+                content: errorMessage,
+                process: upsertProcessStage(
+                  message.process,
+                  {
+                    key: "error",
+                    label: "处理失败",
+                    status: "failed",
+                    detail: errorMessage,
+                  },
+                  "处理失败",
+                  { completeRunning: false }
+                ),
+              };
+            });
             activeStreamRef.current = null;
             setIsStreaming(false);
             break;
@@ -437,33 +1428,76 @@ export default function ChatPage() {
         }
       },
       () => {
-        updateLastAssistant((message) => ({
-          ...message,
-          content: message.content || "这轮学习已经处理完成。",
-        }));
+        updateLastAssistant((message) => {
+          const nextProcess = cloneProcess(message.process);
+          nextProcess.stages = finalizeRunningStages(nextProcess.stages);
+          nextProcess.currentStage = getCurrentProcessLabel(message);
+
+          return {
+            ...message,
+            content: message.content || nextProcess.reasoningSummary || "这轮学习已经处理完成。",
+            process: nextProcess,
+          };
+        });
         activeStreamRef.current = null;
         setIsStreaming(false);
         void refreshSessions();
       },
       (error) => {
-        updateLastAssistant((message) => ({
-          ...message,
-          content: `连接失败：${error.message}`,
-        }));
+        updateLastAssistant((message) => {
+          const errorMessage = `连接失败：${error.message}`;
+          return {
+            ...message,
+            content: errorMessage,
+            process: upsertProcessStage(
+              message.process,
+              {
+                key: "error",
+                label: "处理失败",
+                status: "failed",
+                detail: errorMessage,
+              },
+              "处理失败",
+              { completeRunning: false }
+            ),
+          };
+        });
         activeStreamRef.current = null;
         setIsStreaming(false);
       },
       {
-        subjectId: selectedSubjectId,
+        notebookId: selectedNotebookId,
         sessionId,
         idleTimeoutMs: 45000,
       }
     );
   }
 
-  const selectedSubject = subjects.find(
-    (subject) => subject.id === selectedSubjectId
+  const selectedNotebook = notebooks.find(
+    (notebook) => notebook.id === selectedNotebookId
   );
+  const currentSession = sessions.find((session) => session.id === currentSessionId);
+  const currentSessionNotebook = currentSession
+    ? notebooks.find((notebook) => notebook.id === currentSession.notebookId) ?? null
+    : selectedNotebook ?? null;
+  const modelDisplay = currentModelDisplay(modelConfig);
+  const shouldShowKnowledgeHint =
+    selectedKnowledgeStatus &&
+    selectedKnowledgeStatus.coverage_level !== "ready";
+  const knowledgeHintAction =
+    selectedKnowledgeStatus?.suggested_actions[0] ??
+    "可以上传 PDF 作为我的补充资料，让回答更贴近你的学习材料。";
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex h-full items-center justify-center bg-neo-bg px-4">
+        <div className="neo-card-secondary w-full p-5 text-center">
+          <p className="neo-label">Notebook Tutor</p>
+          <p className="mt-3 text-lg font-black">正在恢复你的学习空间…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col bg-neo-bg">
@@ -496,35 +1530,60 @@ export default function ChatPage() {
         <div className="space-y-6">
           <div className="flex items-center gap-2">
             <div className="flex-1">
-              <SubjectSelector
-                subjects={subjects}
-                selectedId={selectedSubjectId}
-                onSelect={handleSubjectSelect}
-                onGenerate={handleGenerate}
-                isGenerating={isGenerating}
+              <NotebookSelector
+                notebooks={notebooks}
+                selectedId={selectedNotebookId}
+                onSelect={handleNotebookSelect}
               />
             </div>
           </div>
-
-          {userProfile?.agent_style_name && (
-            <div className="-rotate-1 inline-flex max-w-full items-center gap-2 border-[3px] border-neo-ink bg-white px-4 py-2 shadow-neo-sm">
-              <span className="neo-label">当前风格</span>
-              <span className="truncate text-sm font-black">
-                {userProfile.agent_style_name}
-              </span>
-            </div>
-          )}
 
           {modelConfig && (
             <div className="flex items-center justify-between rounded-[1rem] border-[3px] border-neo-ink bg-neo-muted px-4 py-2 shadow-neo-sm">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full border-2 border-neo-ink bg-green-500 animate-pulse" />
-                <span className="text-xs font-black uppercase tracking-widest text-neo-ink">
-                  {modelConfig.current_model}
+                <div className="min-w-0">
+                  <span className="block truncate text-xs font-black uppercase tracking-widest text-neo-ink">
+                    {modelDisplay.label}
+                  </span>
+                  <span className="block truncate text-[10px] font-bold text-neo-ink/60">
+                    {[modelDisplay.provider, modelDisplay.family, modelDisplay.id]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-neo-ink/70">当前启用</span>
+            </div>
+          )}
+
+          {shouldShowKnowledgeHint && (
+            <div className="border-[3px] border-neo-ink bg-white p-3 shadow-neo-sm">
+              <div className="flex items-center justify-between gap-3">
+                <p className="neo-label">{COVERAGE_LABELS[selectedKnowledgeStatus.coverage_level]}</p>
+                <span className="neo-badge bg-neo-muted">
+                  完整度 {selectedKnowledgeStatus.coverage_score}
                 </span>
               </div>
-              <span className="text-xs font-bold text-neo-ink/70">服务在线</span>
+              <p className="mt-2 text-sm font-bold leading-relaxed text-neo-ink/70">
+                当前 notebook 资料还不够完整，RAG 会优先使用已命中的内容，但可能需要补资料才能回答得更准。
+                {selectedKnowledgeStatus.personal_doc_count > 0
+                  ? ` 已加载 ${selectedKnowledgeStatus.personal_doc_count} 条我的补充资料。`
+                  : " 你也可以上传 PDF，补充内容仅自己可见。"}
+              </p>
+              <p className="mt-2 border-l-[4px] border-neo-ink bg-neo-bg px-3 py-2 text-xs font-black text-neo-ink">
+                建议：{knowledgeHintAction}
+              </p>
             </div>
+          )}
+
+          {currentSession && hasSessionSummary(currentSession.sessionMemory) && (
+            <SessionSummaryCard
+              session={currentSession}
+              notebook={currentSessionNotebook}
+              title="当前会话进度"
+              compact
+            />
           )}
 
           <section className="space-y-4">
@@ -546,9 +1605,9 @@ export default function ChatPage() {
         <InputBar
           onSend={handleSend}
           onUpload={handleUpload}
-          disabled={isStreaming || isGenerating}
+          disabled={isStreaming}
           isUploading={isUploading}
-          placeholder={`围绕「${selectedSubject?.name ?? "通用笔记本"}」开始提问...`}
+          placeholder={`围绕「${selectedNotebook?.name ?? "选择知识库辅助参考"}」开始提问...`}
         />
       </div>
 
@@ -558,19 +1617,23 @@ export default function ChatPage() {
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
         sessions={sessions}
-        subjects={subjects}
+        notebooks={notebooks}
+        currentSessionId={currentSessionId}
         onSelectSession={(session) => {
           activeStreamRef.current?.abort();
           activeStreamRef.current = null;
           setIsStreaming(false);
-          setSelectedSubjectId(session.subjectId);
-          persistStoredSubjectId(session.subjectId);
+          const sessionNotebookId = notebooks.some((item) => item.id === session.notebookId)
+            ? session.notebookId
+            : notebooks[0]?.id ?? DEFAULT_NOTEBOOK_ID;
+          setSelectedNotebookId(sessionNotebookId);
+          persistStoredNotebookId(sessionNotebookId);
           setCurrentSessionId(session.id);
           setMessages(session.messages);
           setShowHistory(false);
         }}
         onDeleteSession={(id) => {
-          void deleteSessionRemote(DEFAULT_USER_ID, id)
+          void deleteSessionRemote(user.id, id)
             .then(() => refreshSessions())
             .catch((error) => {
               console.error("删除聊天记录失败:", error);
@@ -582,15 +1645,6 @@ export default function ChatPage() {
         onNewSession={handleNewSession}
       />
 
-      {showStyleOnboarding && (
-        <AgentStyleOnboardingModal
-          profile={userProfile}
-          isSaving={isSavingStyle}
-          onClose={() => setShowStyleOnboarding(false)}
-          onSave={handleSaveStyle}
-          onSkip={handleSkipStyleSetup}
-        />
-      )}
     </div>
   );
 }

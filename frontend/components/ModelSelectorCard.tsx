@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, ChevronDown, Cpu, Sparkles } from "lucide-react";
+import { Bot, ChevronDown, Cpu, PlugZap, Sparkles } from "lucide-react";
 import type { ModelConfig } from "@/lib/api";
 
 interface ModelSelectorCardProps {
@@ -8,8 +8,11 @@ interface ModelSelectorCardProps {
   isLoading?: boolean;
   error?: string | null;
   isUpdating?: boolean;
+  healthStatus?: "idle" | "checking" | "ok" | "error";
+  healthMessage?: string | null;
   onChange: (modelId: string) => void;
   onRetry?: () => void;
+  onTestHealth?: () => void;
 }
 
 export default function ModelSelectorCard({
@@ -17,12 +20,25 @@ export default function ModelSelectorCard({
   isLoading = false,
   error = null,
   isUpdating = false,
+  healthStatus = "idle",
+  healthMessage = null,
   onChange,
   onRetry,
+  onTestHealth,
 }: ModelSelectorCardProps) {
   const selectedModel = config?.available_models.find(
     (item) => item.id === config.current_model
   );
+  const isSwitchingEnabled = config?.model_switching_enabled === true;
+  const isModelLocked = !!config && !isSwitchingEnabled;
+  const currentModelLabel = selectedModel?.label ?? config?.current_model ?? "加载中";
+  const currentModelBadge = isSwitchingEnabled ? "可切换" : `${currentModelLabel} 主模型`;
+  const healthTone =
+    healthStatus === "ok"
+      ? "bg-green-100"
+      : healthStatus === "error"
+        ? "bg-red-100"
+        : "bg-white";
 
   return (
     <section className="neo-card overflow-hidden">
@@ -32,12 +48,10 @@ export default function ModelSelectorCard({
             <Bot size={16} strokeWidth={2.8} />
             <p className="neo-label">AI Engine</p>
           </div>
-          <span className="neo-badge bg-white">
-            Claude 已隐藏
-          </span>
+          <span className="neo-badge bg-white">{currentModelBadge}</span>
         </div>
         <p className="mt-2 text-lg font-black leading-tight">
-          后台模型可切换
+          {currentModelLabel} 当前启用
         </p>
       </div>
 
@@ -49,8 +63,8 @@ export default function ModelSelectorCard({
               <select
                 value={config?.current_model ?? ""}
                 onChange={(event) => onChange(event.target.value)}
-                disabled={!config || isUpdating}
-                className="neo-input appearance-none pr-12"
+                disabled={!config || isUpdating || isModelLocked}
+                className="neo-input appearance-none pr-12 disabled:cursor-not-allowed disabled:bg-white/70"
               >
                 {!config && (
                   <option value="">
@@ -118,8 +132,31 @@ export default function ModelSelectorCard({
           </div>
         ) : (
           <p className="text-sm font-bold leading-relaxed text-neo-ink/80">
-            当前只展示非 Claude 模型，并按你的账号实际可用列表过滤；如果后续数据海洋开放 Gemini，这里会自动出现。
+            {isSwitchingEnabled
+              ? "当前可在后端开放的模型之间切换；切换前会由后端验证模型是否可用。"
+              : `模型选择待开放，当前以后端选定的 ${currentModelLabel} 为主；备用模型只在后端自动兜底。`}
           </p>
+        )}
+
+        {onTestHealth && (
+          <div className={`space-y-3 border-[3px] border-neo-ink p-4 shadow-neo-sm ${healthTone}`}>
+            <button
+              type="button"
+              onClick={onTestHealth}
+              disabled={healthStatus === "checking"}
+              className="neo-button-ghost w-full justify-center bg-white disabled:cursor-wait disabled:opacity-70"
+            >
+              <PlugZap size={16} strokeWidth={2.8} />
+              {healthStatus === "checking"
+                ? `正在测试 ${currentModelLabel}...`
+                : `测试 ${currentModelLabel} 连接`}
+            </button>
+            {healthMessage && (
+              <p className="text-sm font-bold leading-relaxed text-neo-ink/80">
+                {healthMessage}
+              </p>
+            )}
+          </div>
         )}
 
         {isUpdating && (
