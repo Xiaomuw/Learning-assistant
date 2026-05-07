@@ -232,6 +232,55 @@ class PracticeApiTest(unittest.TestCase):
         self.assertEqual(payload["items"][0]["knowledge_point"], "HashMap")
         service.assert_called_once()
 
+    def test_create_practice_pack_returns_generation_failure_status_without_clarification(self) -> None:
+        quiz_request = QuizRequestResolution(
+            is_quiz_request=True,
+            action="generate_practice_pack",
+            intent="quiz_generation",
+            topic="HashMap",
+            source="current_question",
+            target_module="practice",
+            need_clarification=False,
+        )
+        with patch(
+            "app.interfaces.api.practice.create_pack_from_request",
+            return_value=PracticePackResult(
+                subject_id="general",
+                quiz_request=quiz_request,
+                quiz_clarification=None,
+                items=[],
+                generation_status={
+                    "empty_generation": True,
+                    "ai_generation_failed": True,
+                    "degraded_reason": "AI 选择题生成失败: TimeoutError",
+                },
+                errors=[
+                    {
+                        "code": "question_generation_empty",
+                        "message": "Question generation returned no candidates.",
+                    }
+                ],
+                message="已识别练习方向，但题目生成失败：AI 选择题生成失败: TimeoutError",
+            ),
+        ):
+            response = self.client.post(
+                "/api/practice/packs",
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-1",
+                    "subject_id": "general",
+                    "request_text": "AI补题",
+                    "context": {"topic": "HashMap"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload["quiz_clarification"])
+        self.assertEqual(payload["items"], [])
+        self.assertTrue(payload["generation_status"]["empty_generation"])
+        self.assertIn("题目生成失败", payload["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

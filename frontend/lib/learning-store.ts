@@ -35,12 +35,45 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function storageGetItem(key: string): string | null {
+  if (!isBrowser()) {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSetItem(key: string, value: string) {
+  if (!isBrowser()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Learning state is a convenience cache; pages should keep working without it.
+  }
+}
+
+function storageRemoveItem(key: string) {
+  if (!isBrowser()) {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore restricted-storage failures.
+  }
+}
+
 function getActiveUserId(): string | null {
   if (!isBrowser()) {
     return null;
   }
 
-  const value = window.localStorage.getItem(ACTIVE_USER_KEY)?.trim();
+  const value = storageGetItem(ACTIVE_USER_KEY)?.trim();
   return value ? value : null;
 }
 
@@ -55,10 +88,10 @@ function readStoreItem(baseKey: string): string | null {
 
   const userId = getActiveUserId();
   if (userId) {
-    return window.localStorage.getItem(scopedKey(baseKey, userId));
+    return storageGetItem(scopedKey(baseKey, userId));
   }
 
-  return window.localStorage.getItem(baseKey);
+  return storageGetItem(baseKey);
 }
 
 function writeStoreItem(baseKey: string, value: string) {
@@ -68,7 +101,7 @@ function writeStoreItem(baseKey: string, value: string) {
 
   const userId = getActiveUserId();
   const key = userId ? scopedKey(baseKey, userId) : baseKey;
-  window.localStorage.setItem(key, value);
+  storageSetItem(key, value);
 }
 
 function removeStoreItem(baseKey: string, userId?: string | null) {
@@ -78,10 +111,10 @@ function removeStoreItem(baseKey: string, userId?: string | null) {
 
   const activeUserId = userId ?? getActiveUserId();
   if (activeUserId) {
-    window.localStorage.removeItem(scopedKey(baseKey, activeUserId));
+    storageRemoveItem(scopedKey(baseKey, activeUserId));
   }
 
-  window.localStorage.removeItem(baseKey);
+  storageRemoveItem(baseKey);
 }
 
 function safeParse<T>(value: string | null, fallback: T): T {
@@ -341,7 +374,7 @@ export function persistStoredNotebookId(notebookId: string) {
   writeStoreItem(NOTEBOOK_KEY, normalizeStoredNotebookId(notebookId));
   const userId = getActiveUserId();
   const legacyKey = userId ? scopedKey(LEGACY_SUBJECT_KEY, userId) : LEGACY_SUBJECT_KEY;
-  window.localStorage.removeItem(legacyKey);
+  storageRemoveItem(legacyKey);
 }
 
 // ============================================================
@@ -439,11 +472,11 @@ export function setLearningStoreUser(userId: string | null) {
   }
 
   if (userId && userId.trim()) {
-    window.localStorage.setItem(ACTIVE_USER_KEY, userId.trim());
+    storageSetItem(ACTIVE_USER_KEY, userId.trim());
     return;
   }
 
-  window.localStorage.removeItem(ACTIVE_USER_KEY);
+  storageRemoveItem(ACTIVE_USER_KEY);
 }
 
 export function clearLearningStore() {
@@ -459,7 +492,7 @@ export function clearLearningStore() {
   removeStoreItem(LEGACY_SUBJECT_KEY, activeUserId);
   removeStoreItem(SESSIONS_KEY, activeUserId);
   removeStoreItem(MODEL_CONFIG_KEY, activeUserId);
-  window.localStorage.removeItem(ACTIVE_USER_KEY);
+  storageRemoveItem(ACTIVE_USER_KEY);
 }
 
 /**

@@ -61,6 +61,9 @@ class PracticePackResponse(BaseModel):
     quiz_request: dict[str, Any]
     quiz_clarification: dict[str, Any] | None = None
     items: list[dict[str, Any]] = Field(default_factory=list)
+    generation_status: dict[str, Any] = Field(default_factory=dict)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+    message: str = ""
 
 
 @router.get("/users/{user_id}/practice/recommendations", response_model=PracticeRecommendationsResponse)
@@ -142,4 +145,7 @@ async def create_practice_pack(
         "quiz_request": result.quiz_request.model_dump(mode="json"),
         "quiz_clarification": result.quiz_clarification.model_dump(mode="json") if result.quiz_clarification else None,
         "items": [item.model_dump() for item in result.items],
+        "generation_status": dict(result.generation_status or {}),
+        "errors": list(result.errors or []),
+        "message": result.message,
     }

@@ -90,6 +90,28 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.question_type, "single_choice")
         self.assertEqual(result.count, 5)
 
+    def test_english_practice_question_request_extracts_topic_and_count(self) -> None:
+        result = resolve_quiz_request("Generate two stack practice questions", {})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "stack")
+        self.assertEqual(result.count, 2)
+        self.assertEqual(result.question_type, "single_choice")
+        self.assertEqual(result.source, "explicit_user_input")
+
+    def test_english_quiz_me_request_extracts_topic(self) -> None:
+        result = resolve_quiz_request("quiz me on HashMap", {})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "HashMap")
+
+    def test_english_mcq_request_extracts_topic_and_count(self) -> None:
+        result = resolve_quiz_request("create 3 MCQs about TCP", {})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "TCP")
+        self.assertEqual(result.count, 3)
+
     def test_chinese_topic_generation_overrides_failed_http_topic(self) -> None:
         result = resolve_quiz_request(
             "给我出两道数据库索引练习题",
@@ -148,6 +170,19 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.action, "generate_practice_pack")
         self.assertEqual(result.topic, "HashMap")
         self.assertEqual(result.source, "current_question")
+
+    def test_ai_refill_uses_context_topic_when_current_question_has_no_topic(self) -> None:
+        result = resolve_quiz_request(
+            "AI补题",
+            {
+                "current_practice_question": {"question": "下面哪个说法正确？"},
+                "topic": "栈",
+            },
+        )
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "栈")
+        self.assertEqual(result.source, "last_topic")
 
     def test_normal_question_does_not_enter_quiz_flow(self) -> None:
         result = resolve_quiz_request("HashMap 为什么线程不安全", {})

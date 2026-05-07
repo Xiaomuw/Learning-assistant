@@ -41,6 +41,8 @@ class PracticePackService:
                 quiz_request=resolution,
                 quiz_clarification=build_quiz_clarification_panel(resolution),
                 items=[],
+                generation_status={"needs_clarification": True},
+                message="还需要先确认练习方向。",
             )
         if resolution.action != "generate_practice_pack" or not resolution.topic:
             fallback_resolution = resolve_quiz_request("帮我出题", {})
@@ -49,6 +51,8 @@ class PracticePackService:
                 quiz_request=fallback_resolution,
                 quiz_clarification=build_quiz_clarification_panel(fallback_resolution),
                 items=[],
+                generation_status={"needs_clarification": True},
+                message="还需要先确认练习方向。",
             )
 
         resolved_from_request = bool(resolution.subject_id)
@@ -86,10 +90,19 @@ class PracticePackService:
                 "difficulty": _difficulty_label(resolution.difficulty),
             }
         )
+        generation_status = dict(result.get("generation_status") or {})
+        errors = [dict(item) for item in list(result.get("errors") or []) if isinstance(item, dict)]
+        items = [
+            _practice_recommendation_from_question_item(item)
+            for item in list(result.get("question_items") or [])
+        ]
         return PracticePackResult(
             subject_id=subject_id,
             quiz_request=resolution,
-            items=[_practice_recommendation_from_question_item(item) for item in list(result.get("question_items") or [])],
+            items=items,
+            generation_status=generation_status,
+            errors=errors,
+            message=_pack_message(items=items, generation_status=generation_status, errors=errors),
         )
 
 
@@ -133,3 +146,21 @@ def _subject_name(subject_id: str) -> str:
         if subject["id"] == subject_id:
             return str(subject["name"])
     return str(DEFAULT_SUBJECTS[0]["name"])
+
+
+def _pack_message(
+    *,
+    items: list[PracticeRecommendation],
+    generation_status: dict[str, Any],
+    errors: list[dict[str, Any]],
+) -> str:
+    if items:
+        if generation_status.get("ai_generation_failed") or generation_status.get("fallback_count"):
+            return "已生成练习题；部分题目使用了备用生成策略。"
+        return "已生成新的练习题。"
+    if generation_status.get("empty_generation") or errors:
+        reason = str(generation_status.get("degraded_reason") or "").strip()
+        if reason:
+            return f"已识别练习方向，但题目生成失败：{reason}"
+        return "已识别练习方向，但题目生成失败，请稍后重试。"
+    return ""

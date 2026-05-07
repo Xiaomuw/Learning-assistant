@@ -46,13 +46,46 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function readStorageItem(key: string): string | null {
+  if (!isBrowser()) {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorageItem(key: string, value: string) {
+  if (!isBrowser()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Auth can still rely on httpOnly cookies when localStorage is unavailable.
+  }
+}
+
+function removeStorageItem(key: string) {
+  if (!isBrowser()) {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures so auth pages keep rendering in restricted browsers.
+  }
+}
+
 function loadStoredAuthUser(): AuthUser | null {
   if (!isBrowser()) {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(AUTH_USER_SNAPSHOT_KEY);
+    const raw = readStorageItem(AUTH_USER_SNAPSHOT_KEY);
     if (!raw) {
       return null;
     }
@@ -82,11 +115,11 @@ function persistStoredAuthUser(user: AuthUser | null) {
   }
 
   if (!user) {
-    window.localStorage.removeItem(AUTH_USER_SNAPSHOT_KEY);
+    removeStorageItem(AUTH_USER_SNAPSHOT_KEY);
     return;
   }
 
-  window.localStorage.setItem(AUTH_USER_SNAPSHOT_KEY, JSON.stringify(user));
+  writeStorageItem(AUTH_USER_SNAPSHOT_KEY, JSON.stringify(user));
 }
 
 function isProtectedPath(pathname: string) {

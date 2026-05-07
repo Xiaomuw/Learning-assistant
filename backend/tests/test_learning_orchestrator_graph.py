@@ -60,6 +60,17 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
             GraphType.QUESTION_GENERATION.value,
         )
 
+    def test_routes_english_question_generation_intent(self) -> None:
+        result = build_graph().compile().invoke(
+            {"user_id": "u1", "thread_id": "t1", "user_message": "Generate two stack practice questions"}
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
+        self.assertEqual(result["quiz_request"]["action"], "generate_practice_pack")
+        self.assertEqual(result["quiz_request"]["topic"], "stack")
+        self.assertEqual(result["quiz_request"]["count"], 2)
+        self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
+
     def test_explicit_subject_quiz_request_overrides_session_topic(self) -> None:
         result = build_graph().compile().invoke(
             {

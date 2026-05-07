@@ -8,6 +8,7 @@ from pydo import Client
 DEFAULT_DO_BASE_URL = "https://inference.do-ai.run/v1"
 DEFAULT_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_CHAT_MODEL = "openai-gpt-4.1"
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_FALLBACK_CHAT_MODEL = "anthropic-claude-3-haiku-20240306"
 DEFAULT_NVIDIA_GLM_MODEL = "z-ai/glm4.7"
 DEFAULT_LLM_TIMEOUT_SECONDS = 45.0
@@ -18,6 +19,14 @@ MODEL_SWITCHING_STATUS_AVAILABLE = "available"
 
 @dataclass(frozen=True)
 class ChatModelConnection:
+    model_id: str
+    api_key: str | None
+    base_url: str
+    provider: str
+
+
+@dataclass(frozen=True)
+class EmbeddingModelConnection:
     model_id: str
     api_key: str | None
     base_url: str
@@ -88,12 +97,24 @@ def get_model_access_key() -> str | None:
     return os.getenv("MODEL_ACCESS_KEY") or os.getenv("OPENAI_API_KEY")
 
 
+def get_embedding_api_key() -> str | None:
+    return os.getenv("OPENAI_EMBEDDING_API_KEY") or get_model_access_key()
+
+
 def get_nvidia_api_key() -> str | None:
     return os.getenv("NVIDIA_API_KEY")
 
 
 def get_openai_compatible_base_url() -> str:
     return os.getenv("OPENAI_BASE_URL", DEFAULT_DO_BASE_URL)
+
+
+def get_embedding_base_url() -> str:
+    return os.getenv("OPENAI_EMBEDDING_BASE_URL") or get_openai_compatible_base_url()
+
+
+def get_embedding_model() -> str:
+    return os.getenv("OPENAI_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL).strip() or DEFAULT_EMBEDDING_MODEL
 
 
 def get_nvidia_base_url() -> str:
@@ -127,12 +148,27 @@ def get_chat_model_connection(model_id: str | None) -> ChatModelConnection:
     )
 
 
+def get_embedding_model_connection(model_id: str | None = None) -> EmbeddingModelConnection:
+    base_url = get_embedding_base_url()
+    provider = "DigitalOcean" if "inference.do-ai.run" in base_url.lower() else "OpenAI-compatible"
+    return EmbeddingModelConnection(
+        model_id=(model_id or get_embedding_model()).strip() or DEFAULT_EMBEDDING_MODEL,
+        api_key=get_embedding_api_key(),
+        base_url=base_url,
+        provider=provider,
+    )
+
+
 def get_known_model_api_keys() -> list[str]:
-    return [key for key in {get_model_access_key(), get_nvidia_api_key()} if key]
+    return [key for key in {get_model_access_key(), get_embedding_api_key(), get_nvidia_api_key()} if key]
 
 
 def is_digitalocean_inference_endpoint() -> bool:
     return "inference.do-ai.run" in get_openai_compatible_base_url().lower()
+
+
+def is_digitalocean_embedding_endpoint() -> bool:
+    return "inference.do-ai.run" in get_embedding_base_url().lower()
 
 
 def get_embedding_check_ctx_length() -> bool:
@@ -142,7 +178,7 @@ def get_embedding_check_ctx_length() -> bool:
 
     # DigitalOcean's OpenAI-compatible embedding endpoint expects strings, while
     # LangChain's context-length checker may send token-id arrays.
-    return not is_digitalocean_inference_endpoint()
+    return not is_digitalocean_embedding_endpoint()
 
 
 def get_pydo_client() -> Client:

@@ -10,11 +10,10 @@ from app.infrastructure.llm.config import (
     ensure_model_env_aliases,
     get_chat_model_connection,
     get_embedding_check_ctx_length,
+    get_embedding_model_connection,
     get_locked_chat_model,
     get_llm_max_retries,
     get_llm_timeout_seconds,
-    get_model_access_key,
-    get_openai_compatible_base_url,
     is_model_switching_enabled,
 )
 from app.infrastructure.llm.profile import get_model_profile
@@ -37,8 +36,8 @@ def validate_chat_model_access(model_id: str) -> tuple[bool, str | None]:
         llm = ChatOpenAI(
             model=connection.model_id,
             temperature=0,
-            openai_api_key=connection.api_key,
-            openai_api_base=connection.base_url,
+            api_key=connection.api_key,
+            base_url=connection.base_url,
             timeout=get_llm_timeout_seconds(),
             max_retries=get_llm_max_retries(),
         )
@@ -53,12 +52,14 @@ def validate_chat_model_access(model_id: str) -> tuple[bool, str | None]:
 
 def validate_embedding_model_access(model_id: str | None = None) -> tuple[bool, str | None]:
     """发送一次轻量 embedding 请求，区分聊天模型和向量模型故障。"""
-    embedding_model = model_id or os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
     try:
+        connection = get_embedding_model_connection(model_id)
+        if not connection.api_key:
+            return False, f"{connection.provider} Embedding 模型密钥未配置"
         embeddings = OpenAIEmbeddings(
-            model=embedding_model,
-            openai_api_key=get_model_access_key(),
-            openai_api_base=get_openai_compatible_base_url(),
+            model=connection.model_id,
+            api_key=connection.api_key,
+            base_url=connection.base_url,
             check_embedding_ctx_length=get_embedding_check_ctx_length(),
         )
         vector = embeddings.embed_query("health check")
@@ -84,8 +85,8 @@ def get_chat_llm(
     llm = ChatOpenAI(
         model=connection.model_id,
         temperature=temperature,
-        openai_api_key=connection.api_key,
-        openai_api_base=connection.base_url,
+        api_key=connection.api_key,
+        base_url=connection.base_url,
         timeout=timeout_seconds if timeout_seconds is not None else get_llm_timeout_seconds(),
         max_retries=max_retries if max_retries is not None else get_llm_max_retries(),
     )
@@ -110,9 +111,11 @@ def get_embeddings(
     default_model: str,
 ) -> OpenAIEmbeddings:
     """创建统一配置的 Embedding 实例。"""
+    embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", default_model).strip() or default_model
+    connection = get_embedding_model_connection(embedding_model)
     return OpenAIEmbeddings(
-        model=os.getenv("OPENAI_EMBEDDING_MODEL", default_model),
-        openai_api_key=get_model_access_key(),
-        openai_api_base=get_openai_compatible_base_url(),
+        model=connection.model_id,
+        api_key=connection.api_key,
+        base_url=connection.base_url,
         check_embedding_ctx_length=get_embedding_check_ctx_length(),
     )

@@ -12,7 +12,6 @@ provider.validate_*，同时避免 provider 重新变回巨型模块。
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from app.infrastructure.llm.catalog import (
@@ -34,6 +33,7 @@ from app.infrastructure.llm.config import (
     DEFAULT_DO_BASE_URL,
     ensure_model_env_aliases,
     get_embedding_check_ctx_length as _get_embedding_check_ctx_length,
+    get_embedding_model_connection,
     get_model_access_key,
     get_openai_compatible_base_url,
     get_pydo_client,
@@ -63,14 +63,15 @@ def is_supported_chat_model(model_id: str) -> bool:
 def build_model_health_snapshot(*, chat_model: str | None = None) -> dict[str, Any]:
     """Return a non-sensitive health snapshot for local diagnostics."""
     selected_chat_model = chat_model or get_active_chat_model(DEFAULT_CHAT_MODEL)
-    embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    embedding_connection = get_embedding_model_connection()
     profile = get_model_profile(selected_chat_model)
     chat_ok, chat_error = validate_chat_model_access(selected_chat_model)
-    embedding_ok, embedding_error = validate_embedding_model_access(embedding_model)
+    embedding_ok, embedding_error = validate_embedding_model_access(embedding_connection.model_id)
     return {
         "base_url": get_openai_compatible_base_url(),
+        "embedding_base_url": embedding_connection.base_url,
         "chat_model": selected_chat_model,
-        "embedding_model": embedding_model,
+        "embedding_model": embedding_connection.model_id,
         "chat_model_ok": chat_ok,
         "chat_model_error": chat_error,
         "embedding_model_ok": embedding_ok,

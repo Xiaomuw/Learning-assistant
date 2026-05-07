@@ -20,6 +20,8 @@ _SMTP_PLACEHOLDER_MARKERS = (
     "example.com",
     "your-smtp-",
     "replace-with",
+    "placeholder",
+    "no-reply@example.com",
 )
 
 
@@ -76,6 +78,13 @@ def collect_environment_warnings() -> list[str]:
         warnings.append(
             "未配置 MODEL_ACCESS_KEY / OPENAI_API_KEY，主问答链路将无法调用模型。"
         )
+    embedding_base_url = (os.getenv("OPENAI_EMBEDDING_BASE_URL") or "").strip()
+    openai_base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
+    if not embedding_base_url and "inference.do-ai.run" in openai_base_url.lower():
+        warnings.append(
+            "当前 embedding 默认复用 DigitalOcean inference endpoint；若出现 model not found，"
+            "请配置 OPENAI_EMBEDDING_BASE_URL / OPENAI_EMBEDDING_API_KEY / OPENAI_EMBEDDING_MODEL。"
+        )
 
     smtp_keys = (
         "SMTP_HOST",
@@ -91,6 +100,12 @@ def collect_environment_warnings() -> list[str]:
         warnings.append(
             "SMTP 配置未完成，/api/auth/register/send-code 会返回“未配置 SMTP”。"
         )
+    else:
+        smtp_host = smtp_values["SMTP_HOST"].lower()
+        if any(marker in smtp_host for marker in ("smtp.qq.com", "foxmail", "gmail.com")):
+            warnings.append(
+                "当前使用个人邮箱 SMTP 发信，Gmail 可能将验证码放入垃圾邮件；生产建议配置 SPF/DKIM/DMARC 或专用邮件服务。"
+            )
 
     if (os.getenv("LANGSMITH_TRACING") or "").strip().lower() == "true" and _is_blank(
         os.getenv("LANGSMITH_API_KEY")

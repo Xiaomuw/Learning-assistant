@@ -28,7 +28,24 @@ QUIZ_INTENT_TERMS = (
     "AI补题",
     "补题",
 )
-CONTINUATION_TERMS = ("再", "继续", "还有吗", "换几道", "难一点", "简单一点", "再来")
+ENGLISH_QUIZ_INTENT_TERMS = (
+    "practice question",
+    "practice questions",
+    "quiz me",
+    "question pack",
+    "generate question",
+    "generate questions",
+    "create question",
+    "create questions",
+    "make question",
+    "make questions",
+    "multiple choice",
+    "mcq",
+    "mcqs",
+    "test me",
+    "drill me",
+)
+CONTINUATION_TERMS = ("再", "继续", "还有吗", "换几道", "难一点", "简单一点", "再来", "more", "again", "another", "continue")
 CURRENT_CONTEXT_TERMS = ("当前问题", "刚才这个", "这道题相关", "这道题", "当前题")
 WEAK_POINT_TERMS = ("错题", "薄弱点", "不会的地方", "薄弱", "错的")
 GENERIC_SUBJECT_SUFFIX_TERMS = {
@@ -212,11 +229,18 @@ def _has_quiz_intent(message: str, context: dict[str, Any]) -> bool:
     lowered = message.lower()
     if any(term in message or term.lower() in lowered for term in QUIZ_INTENT_TERMS):
         return True
+    if any(term in lowered for term in ENGLISH_QUIZ_INTENT_TERMS):
+        return True
+    if re.search(
+        r"\b(?:generate|create|make|write|build|give me)\b.{0,40}\b(?:questions?|quizzes|mcqs?)\b",
+        lowered,
+    ):
+        return True
     if re.search(r"(出|来|生成|做|练|考|测试).{0,12}(题|练习|测验)", message):
         return True
     if "做题" in message:
         return True
-    if any(term in message for term in CONTINUATION_TERMS):
+    if _has_continuation_signal(message):
         return bool(
             context.get("last_topic")
             or context.get("current_question")
@@ -238,7 +262,7 @@ def _generate_resolution(
     count: int,
     reason: str,
 ) -> QuizRequestResolution:
-    intent = "continue_quiz_generation" if any(term in message for term in CONTINUATION_TERMS) else "quiz_generation"
+    intent = "continue_quiz_generation" if _has_continuation_signal(message) else "quiz_generation"
     active_topic = topic.strip() if topic else None
     requested_topic = active_topic if source != "last_topic" else None
     should_switch_topic = bool(
@@ -291,12 +315,24 @@ def _normalize_topic_for_compare(topic: str) -> str:
     return re.sub(r"\s+", "", topic).strip().lower()
 
 
+def _has_continuation_signal(message: str) -> bool:
+    lowered = message.lower()
+    return any(term in message or term in lowered for term in CONTINUATION_TERMS)
+
+
 def _parse_question_type(message: str) -> str:
+    lowered = message.lower()
     if "多选" in message:
+        return "multiple_choice"
+    if "multi-select" in lowered or "multiple answer" in lowered:
         return "multiple_choice"
     if "判断" in message or "判断题" in message:
         return "true_false"
+    if "true false" in lowered or "true/false" in lowered:
+        return "true_false"
     if "简答" in message or "问答题" in message:
+        return "short_answer"
+    if "short answer" in lowered:
         return "short_answer"
     if "混合" in message or "综合题型" in message:
         return "mixed"
@@ -311,6 +347,38 @@ def _parse_count(message: str) -> int:
     match = re.search(r"([一两二三四五六七八九十])\s*道", message)
     if match:
         return zh_counts.get(match.group(1), 5)
+    lowered = message.lower()
+    english_counts = {
+        "one": 1,
+        "a": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+    match = re.search(r"\b(\d+)\s*(?:practice\s*)?(?:questions?|quizzes|mcqs?|items)\b", lowered)
+    if match:
+        return max(1, min(10, int(match.group(1))))
+    match = re.search(
+        r"\b(one|a|two|three|four|five|six|seven|eight|nine|ten)\s*(?:practice\s*)?(?:questions?|quizzes|mcqs?|items)\b",
+        lowered,
+    )
+    if match:
+        return english_counts.get(match.group(1), 5)
+    match = re.search(
+        r"\b(?:generate|create|make|write|build|give me)\s+(\d+|one|a|two|three|four|five|six|seven|eight|nine|ten)\b",
+        lowered,
+    )
+    if match:
+        raw_count = match.group(1)
+        if raw_count.isdigit():
+            return max(1, min(10, int(raw_count)))
+        return english_counts.get(raw_count, 5)
     return 5
 
 
@@ -334,6 +402,9 @@ def _extract_explicit_topic(message: str) -> tuple[str, str | None]:
     subject_topic, subject_id = _extract_explicit_subject_topic(message)
     if subject_topic:
         return subject_topic, subject_id
+    english_topic = _extract_english_topic(message)
+    if english_topic:
+        return english_topic, _subject_id_for_topic(english_topic)
 
     patterns = [
         r"(?:围绕|关于|针对|基于)\s*(.+?)\s*(?:出|来|生成|做|练|考|测试)",
@@ -354,16 +425,36 @@ def _extract_explicit_topic(message: str) -> tuple[str, str | None]:
         for term in re.findall(r"[A-Za-z][A-Za-z0-9_/#.+-]*", message)
         if term.lower() not in {"ai", "easy", "medium", "hard"}
     ]
-    if english_terms and any(term in message for term in QUIZ_INTENT_TERMS):
+    if english_terms and (
+        any(term in message for term in QUIZ_INTENT_TERMS)
+        or any(term in message.lower() for term in ENGLISH_QUIZ_INTENT_TERMS)
+    ):
         topic = english_terms[-1][:60]
         return topic, _subject_id_for_topic(topic)
     return "", None
 
 
+def _extract_english_topic(message: str) -> str:
+    normalized = " ".join(message.split()).strip()
+    patterns = [
+        r"\b(?:quiz|test|drill)\s+me\s+(?:on|about|with|for)\s+(.+)$",
+        r"\b(?:generate|create|make|write|build|give me)\s+(?:\d+|one|a|two|three|four|five|six|seven|eight|nine|ten|some|a few)?\s*(?:practice\s*)?(?:questions?|quizzes|mcqs?|multiple[- ]choice questions?)\s+(?:on|about|for|around)\s+(.+)$",
+        r"\b(?:generate|create|make|write|build|give me)\s+(?:\d+|one|a|two|three|four|five|six|seven|eight|nine|ten|some|a few)?\s+(.+?)\s+(?:practice\s*)?(?:questions?|quizzes|mcqs?)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, normalized, flags=re.IGNORECASE)
+        if not match:
+            continue
+        topic = _clean_english_topic(match.group(1))
+        if topic:
+            return topic
+    return ""
+
+
 def _extract_explicit_subject_topic(message: str) -> tuple[str, str | None]:
     compact_message = re.sub(r"\s+", "", message)
     for subject_id, subject_name, aliases in CANONICAL_SUBJECT_ALIASES:
-        matched_alias = next((alias for alias in aliases if alias and alias in compact_message), "")
+        matched_alias = next((alias for alias in aliases if alias and _subject_alias_matches(message, compact_message, alias)), "")
         if not matched_alias:
             continue
 
@@ -372,6 +463,12 @@ def _extract_explicit_subject_topic(message: str) -> tuple[str, str | None]:
             return subtopic, subject_id
         return SUBJECT_NAME_BY_ID.get(subject_id, subject_name), subject_id
     return "", None
+
+
+def _subject_alias_matches(message: str, compact_message: str, alias: str) -> bool:
+    if alias.isascii():
+        return bool(re.search(rf"\b{re.escape(alias.lower())}\b", message.lower()))
+    return alias in compact_message
 
 
 def _subject_subtopic_after_alias(message: str, alias: str) -> str:
@@ -413,13 +510,23 @@ def _topic_from_current_context(message: str, context: dict[str, Any]) -> tuple[
         if topic:
             return topic, "current_question"
 
-    current_practice = _context_question_topic(context.get("current_practice_question"))
     if "AI补题" in message or "ai补题" in message.lower() or "补题" in message:
-        if current_practice:
-            return current_practice, "current_question"
+        current_practice_explicit = _context_explicit_topic(context.get("current_practice_question"))
+        if current_practice_explicit:
+            return current_practice_explicit, "current_question"
+        for key in ("current_question_topic", "topic", "active_topic"):
+            context_topic = str(context.get(key) or "").strip()
+            if context_topic:
+                return context_topic[:60], "last_topic"
+    current_practice = _context_question_topic(context.get("current_practice_question"))
     current_topic = _context_question_topic(context.get("current_question")) or current_practice
     if current_topic:
         return current_topic, "current_question"
+
+    for key in ("current_question_topic", "topic", "active_topic"):
+        context_topic = str(context.get(key) or "").strip()
+        if context_topic:
+            return context_topic[:60], "last_topic"
 
     last_pack_topic = _context_question_topic(context.get("last_practice_pack"))
     if last_pack_topic:
@@ -429,7 +536,7 @@ def _topic_from_current_context(message: str, context: dict[str, Any]) -> tuple[
     if last_topic:
         return last_topic, "last_topic"
 
-    if any(term in message for term in CONTINUATION_TERMS):
+    if _has_continuation_signal(message):
         return "", "unknown"
 
     return "", "unknown"
@@ -439,15 +546,25 @@ def _context_question_topic(value: Any) -> str:
     if isinstance(value, PracticeRecommendation):
         return value.knowledge_point.strip() or _clean_topic(value.question)
     if isinstance(value, dict):
-        for key in ("knowledge_point", "topic", "concept", "concept_name", "title"):
-            topic = str(value.get(key) or "").strip()
-            if topic:
-                return topic[:60]
+        explicit_topic = _context_explicit_topic(value)
+        if explicit_topic:
+            return explicit_topic
         return _clean_topic(str(value.get("question") or value.get("content") or ""))
     if isinstance(value, list) and value:
         return _context_question_topic(value[0])
     text = str(value or "").strip()
     return _clean_topic(text) if text else ""
+
+
+def _context_explicit_topic(value: Any) -> str:
+    if isinstance(value, PracticeRecommendation):
+        return value.knowledge_point.strip()[:60]
+    if isinstance(value, dict):
+        for key in ("knowledge_point", "topic", "active_topic", "current_question_topic", "concept", "concept_name", "title"):
+            topic = str(value.get(key) or "").strip()
+            if topic:
+                return topic[:60]
+    return ""
 
 
 def _mentions_weak_points(message: str) -> bool:
@@ -501,4 +618,17 @@ def _clean_topic(value: str) -> str:
         flags=re.IGNORECASE,
     )
     topic = re.sub(r"\s+", " ", topic).strip(" ：:，,。.!！?？「」『』")
+    return topic[:60]
+
+
+def _clean_english_topic(value: str) -> str:
+    topic = re.sub(
+        r"\b(?:please|me|on|about|for|around|with|generate|create|make|write|build|give|"
+        r"one|a|two|three|four|five|six|seven|eight|nine|ten|some|few|"
+        r"easy|medium|hard|practice|questions?|quizzes|quiz|mcqs?|multiple|choice|single|test|drill)\b",
+        " ",
+        value,
+        flags=re.IGNORECASE,
+    )
+    topic = re.sub(r"\s+", " ", topic).strip(" ：:，,。.!！?？\"'")
     return topic[:60]

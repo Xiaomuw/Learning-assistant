@@ -1403,12 +1403,18 @@ export function createPracticePack(payload: {
   quiz_request: QuizRequestResolution;
   quiz_clarification?: QuizClarificationPanel | null;
   items: QuizItem[];
+  generation_status?: Record<string, unknown>;
+  errors?: Array<Record<string, unknown>>;
+  message?: string;
 }> {
   return request<{
     subject_id: string;
     quiz_request: QuizRequestResolution;
     quiz_clarification?: QuizClarificationPanel | null;
     items: QuizItem[];
+    generation_status?: Record<string, unknown>;
+    errors?: Array<Record<string, unknown>>;
+    message?: string;
   }>("/practice/packs", {
     method: "POST",
     body: JSON.stringify({

@@ -4,6 +4,7 @@ from app.application.errors import (
     ConflictError,
     ProcessingError,
     RateLimitError,
+    ServiceUnavailableError,
     UnauthorizedError,
     ValidationError,
 )
@@ -94,9 +95,9 @@ def send_register_code(email: str) -> VerificationDispatchResult:
     except VerificationCooldownError as exc:
         raise RateLimitError(str(exc)) from exc
     except EmailSenderConfigurationError as exc:
-        raise ProcessingError(str(exc)) from exc
+        raise ServiceUnavailableError(str(exc)) from exc
     except EmailSenderError as exc:
-        raise ProcessingError(str(exc)) from exc
+        raise ServiceUnavailableError(str(exc)) from exc
 
     return VerificationDispatchResult(
         message="验证码已发送，请检查邮箱",

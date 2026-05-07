@@ -27,6 +27,7 @@ import {
   DEFAULT_NOTEBOOK_ID,
   buildQuizSignature,
   clearStoredPracticeState,
+  loadStoredMemory,
   loadStoredPracticeState,
   loadStoredQuiz,
   loadStoredQuizMeta,
@@ -46,6 +47,32 @@ interface AttemptFeedback {
   optionRationales: Record<string, string>;
   masteryEvaluation?: MasteryEvaluationResult | null;
   personalizedFeedback?: string;
+}
+
+function practicePackFailureMessage(result: {
+  quiz_request?: { need_clarification?: boolean } | null;
+  quiz_clarification?: unknown;
+  generation_status?: Record<string, unknown>;
+  message?: string;
+}) {
+  if (result.quiz_clarification || result.quiz_request?.need_clarification) {
+    return "还需要先确认练习方向，请回问答页输入具体知识点。";
+  }
+
+  if (typeof result.message === "string" && result.message.trim()) {
+    return result.message.trim();
+  }
+
+  const status = result.generation_status ?? {};
+  const degradedReason =
+    typeof status.degraded_reason === "string" ? status.degraded_reason.trim() : "";
+  if (status.empty_generation || status.ai_generation_failed || degradedReason) {
+    return degradedReason
+      ? `已识别练习方向，但题目生成失败：${degradedReason}`
+      : "已识别练习方向，但题目生成失败，请稍后重试。";
+  }
+
+  return "AI 补题暂时没有生成题目，请稍后重试。";
 }
 
 export default function PracticePage() {
@@ -355,13 +382,34 @@ export default function PracticePage() {
     setPackError("");
     setIsGeneratingPack(true);
     try {
+      const quizMeta = loadStoredQuizMeta();
+      const practiceState = loadStoredPracticeState();
+      const memory = loadStoredMemory();
+      const topic =
+        quizMeta?.topic?.trim() ||
+        practiceState?.topic?.trim() ||
+        currentQuiz.knowledge_point?.trim() ||
+        knowledgePoints[0]?.trim() ||
+        "";
+      const currentPracticeQuestion =
+        topic && !currentQuiz.knowledge_point?.trim()
+          ? { ...currentQuiz, knowledge_point: topic }
+          : currentQuiz;
       const result = await createPracticePack({
         user_id: user.id,
         session_id: currentSessionId,
         subject_id: currentNotebookId,
         request_text: "AI补题",
-        current_practice_question: currentQuiz,
+        current_practice_question: currentPracticeQuestion,
         last_practice_pack: quizList,
+        context: {
+          topic,
+          active_topic: topic,
+          last_topic: topic,
+          current_question_topic: topic,
+          recent_topics: memory.recent_topics,
+          weak_points: memory.weak_points,
+        },
       });
       if (Array.isArray(result.items) && result.items.length > 0) {
         clearStoredPracticeState();
@@ -379,7 +427,7 @@ export default function PracticePage() {
         setIsPracticeCompleted(false);
         setPracticeCompletedAt(null);
       } else {
-        setPackError("还需要先确认练习方向，请回问答页输入具体知识点。");
+        setPackError(practicePackFailureMessage(result));
       }
     } catch (error) {
       console.error("AI 补题失败:", error);
