@@ -36,6 +36,7 @@ class PracticeAttemptRequest(BaseModel):
 
 class PracticeAttemptResponse(BaseModel):
     is_correct: bool
+    selected_option: str = ""
     correct_option: str
     explanation: str
     option_rationales: dict[str, str] = Field(default_factory=dict)
@@ -108,6 +109,7 @@ async def submit_practice_attempt(
         ) from exc
     return {
         "is_correct": result.is_correct,
+        "selected_option": result.selected_option or body.selected_option.strip().upper()[:1],
         "correct_option": result.correct_option,
         "explanation": result.explanation,
         "option_rationales": result.option_rationales,

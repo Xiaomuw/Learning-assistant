@@ -262,6 +262,7 @@ def _chat_state_from_orchestrator_result(
     reasoning_summary = str(response_ui.get("reasoning_summary") or "")
     if not reasoning_summary and retrieval_skipped_reason == "stable_concept_model_first":
         reasoning_summary = "判断为稳定概念，本轮未调用知识库或搜索，直接按教学讲解回答。"
+    quiz_items = _quiz_items_from_child_payload(child_payload)
     explanation = normalize_explanation_payload(
         {
             "topic": _topic(response, initial_state),
@@ -278,9 +279,13 @@ def _chat_state_from_orchestrator_result(
         "source_policy": str(graph_result.get("source_policy") or initial_state.get("source_policy") or ""),
         "explanation": explanation,
         "final_answer": response.answer,
-        "quiz_items": _quiz_items_from_child_payload(child_payload),
+        "quiz_items": quiz_items,
         "quiz_request": quiz_request,
         "quiz_clarification": quiz_clarification,
+        "quiz_generation_status": _quiz_generation_status_from_child_payload(
+            child_payload,
+            quiz_item_count=len(quiz_items),
+        ),
         "memory": dict(initial_state.get("memory") or {}),
         "final_response": response.model_dump(mode="json"),
         "orchestrator_result": _compact_orchestrator_result(graph_result),
@@ -331,7 +336,7 @@ def _stream_chunk_from_orchestrator_update(
             "node": "router",
             "state_update": {
                 "question_type": _question_type_from_intent(intent, initial_state),
-                "route": "explain",
+                "route": "practice" if intent == "generate_question" else "explain",
                 "source_policy": str(graph_state.get("source_policy") or ""),
                 "orchestrator_result": _compact_orchestrator_result(graph_state),
                 "streaming_mode": "node",
@@ -359,6 +364,10 @@ def _stream_chunk_from_orchestrator_update(
         else None
     )
     if quiz_items or quiz_clarification:
+        generation_status = _quiz_generation_status_from_child_payload(
+            child_payload,
+            quiz_item_count=len(quiz_items),
+        )
         return {
             "node": "quiz_output_node",
             "state_update": {
@@ -369,10 +378,7 @@ def _stream_chunk_from_orchestrator_update(
                 "quiz_clarification": quiz_clarification,
                 "final_answer": str(final_state.get("final_answer") or ""),
                 "streaming_mode": "node",
-                "quiz_generation_status": {
-                    "generated_count": len(quiz_items),
-                    "source": "LearningOrchestratorGraph",
-                },
+                "quiz_generation_status": generation_status,
             },
             "elapsed": elapsed,
         }
@@ -491,6 +497,34 @@ def _quiz_items_from_child_payload(payload: dict[str, Any]) -> list[dict[str, An
             }
         )
     return items
+
+
+def _quiz_generation_status_from_child_payload(
+    payload: dict[str, Any],
+    *,
+    quiz_item_count: int,
+) -> dict[str, Any]:
+    status = payload.get("generation_status") if isinstance(payload.get("generation_status"), dict) else {}
+    response = payload.get("final_response") if isinstance(payload.get("final_response"), dict) else {}
+    ui_payload = response.get("ui_payload") if isinstance(response.get("ui_payload"), dict) else {}
+    ui_status = (
+        ui_payload.get("quiz_generation_status")
+        if isinstance(ui_payload.get("quiz_generation_status"), dict)
+        else {}
+    )
+    quality_report = payload.get("quality_report") if isinstance(payload.get("quality_report"), dict) else {}
+    quality_failure_summary = str(ui_payload.get("quality_failure_summary") or "").strip()
+    merged = {
+        **status,
+        **ui_status,
+        "generated_count": quiz_item_count,
+        "source": "LearningOrchestratorGraph",
+    }
+    if quality_report:
+        merged["quality_report"] = quality_report
+    if quality_failure_summary:
+        merged["quality_failure_summary"] = quality_failure_summary
+    return merged
 
 
 def _quiz_request_payload(
@@ -688,7 +722,7 @@ def _question_type_from_intent(intent: str, state: dict[str, Any]) -> str:
 
 def _route_from_response(response: FinalResponse, intent: str) -> str:
     if intent == "generate_question":
-        return "explain"
+        return "practice"
     if response.source_level.value == "web":
         return "agent"
     if response.source_level.value == "notebook":

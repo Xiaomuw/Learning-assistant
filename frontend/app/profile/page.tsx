@@ -92,6 +92,7 @@ export default function ProfilePage() {
   const [historyQuery, setHistoryQuery] = useState("");
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [recommendedPractice, setRecommendedPractice] = useState<QuizItem[]>([]);
+  const [showRecommendedPractice, setShowRecommendedPractice] = useState(false);
 
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [draftDisplayName, setDraftDisplayName] = useState("");
@@ -576,7 +577,11 @@ export default function ProfilePage() {
         </div>
 
         <section className="neo-card bg-white p-4">
-          <div className="flex items-start justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => setShowRecommendedPractice((current) => !current)}
+            className="group flex w-full items-start justify-between gap-4 text-left"
+          >
             <div>
               <p className="neo-label">Recommended Practice</p>
               <h2 className="mt-2 text-2xl font-black">基于薄弱点的推荐题</h2>
@@ -584,71 +589,90 @@ export default function ProfilePage() {
                 优先推送历年真题，不够时会自动补 AI 单选题，适合直接拿来热身。
               </p>
             </div>
-            <span className="neo-badge bg-neo-secondary">
-              {recommendedPractice.length} 题
-            </span>
-          </div>
-
-          {recommendedPractice.length === 0 ? (
-            <div className="neo-card-secondary mt-4 p-4">
-              <p className="text-sm font-bold leading-relaxed">
-                目前还没有可推荐的题目。你可以先去问答页生成题包，或者导入历年真题题库。
-              </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="neo-badge bg-neo-secondary">
+                {recommendedPractice.length} 题
+              </span>
+              <ChevronRight
+                size={24}
+                strokeWidth={2.5}
+                className={`transition-transform duration-200 ${
+                  showRecommendedPractice ? "rotate-90" : "group-hover:translate-x-1"
+                }`}
+              />
             </div>
-          ) : (
-            <>
-              <div className="mt-4 space-y-3">
-                {recommendedPractice.slice(0, 2).map((item) => (
-                  <div
-                    key={item.question_id}
-                    className="border-[3px] border-neo-ink bg-neo-bg p-4 shadow-neo-sm"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="neo-badge bg-neo-accent">{item.difficulty}</span>
-                      <span className="neo-badge bg-white">{item.knowledge_point}</span>
-                      <span className="neo-badge bg-neo-secondary">
-                        {item.source_type === "question_bank"
-                          ? item.source_year
-                            ? `${item.source_name} · ${item.source_year}`
-                            : item.source_name || "题库真题"
-                          : "AI 补题"}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm font-black leading-relaxed">
-                      {item.question}
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      {item.options?.slice(0, 4).map((option) => (
-                        <div
-                          key={`${item.question_id}-${option.key}`}
-                          className="border-[3px] border-neo-ink bg-white p-3"
-                        >
-                          <div className="flex items-start gap-2">
-                            <span className="neo-badge bg-neo-bg">{option.key}</span>
-                            <p className="text-xs font-bold leading-relaxed">
-                              {option.text}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+          </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  persistQuiz(recommendedPractice);
-                  router.push("/practice");
-                }}
-                className="neo-button mt-4 w-full justify-center"
-              >
-                <CheckCircle2 size={16} strokeWidth={2.8} />
-                开始做这组推荐题
-              </button>
+          {showRecommendedPractice ? (
+            <>
+              {recommendedPractice.length === 0 ? (
+                <div className="neo-card-secondary mt-4 p-4">
+                  <p className="text-sm font-bold leading-relaxed">
+                    目前还没有可推荐的题目。你可以先去问答页生成题包，或者导入历年真题题库。
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-4 space-y-3">
+                    {recommendedPractice.slice(0, 2).map((item) => (
+                      <div
+                        key={item.question_id}
+                        className="border-[3px] border-neo-ink bg-neo-bg p-4 shadow-neo-sm"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="neo-badge bg-neo-accent">
+                            {item.difficulty}
+                          </span>
+                          <span className="neo-badge bg-white">
+                            {item.knowledge_point}
+                          </span>
+                          <span className="neo-badge bg-neo-secondary">
+                            {item.source_type === "question_bank"
+                              ? item.source_year
+                                ? `${item.source_name} · ${item.source_year}`
+                                : item.source_name || "题库真题"
+                              : "AI 补题"}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm font-black leading-relaxed">
+                          {item.question}
+                        </p>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          {item.options?.slice(0, 4).map((option) => (
+                            <div
+                              key={`${item.question_id}-${option.key}`}
+                              className="border-[3px] border-neo-ink bg-white p-3"
+                            >
+                              <div className="flex items-start gap-2">
+                                <span className="neo-badge bg-neo-bg">
+                                  {option.key}
+                                </span>
+                                <p className="text-xs font-bold leading-relaxed">
+                                  {option.text}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      persistQuiz(recommendedPractice);
+                      router.push("/practice");
+                    }}
+                    className="neo-button mt-4 w-full justify-center"
+                  >
+                    <CheckCircle2 size={16} strokeWidth={2.8} />
+                    开始做这组推荐题
+                  </button>
+                </>
+              )}
             </>
-          )}
+          ) : null}
         </section>
 
         <div className="neo-card flex flex-col divide-y-4 divide-neo-ink">

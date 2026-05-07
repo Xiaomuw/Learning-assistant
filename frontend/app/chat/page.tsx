@@ -81,6 +81,7 @@ const ROUTE_LABELS: Record<string, string> = {
   explain: "教学讲解",
   rag: "资料优先",
   agent: "工具增强",
+  practice: "练习出题",
 };
 
 const NOTEBOOK_POLICY_LABELS: Record<string, string> = {
@@ -108,6 +109,7 @@ const TOOL_LABELS: Record<string, string> = {
 
 const PROCESS_STAGE_ORDER: Record<string, number> = {
   status: 0,
+  heartbeat: 0.5,
   routing: 1,
   guard: 2,
   retrieval: 3,
@@ -1075,6 +1077,27 @@ export default function ChatPage() {
               break;
             }
 
+            if (data.heartbeat === true) {
+              updateLastAssistant((message) => ({
+                ...message,
+                process: upsertProcessStage(
+                  message.process,
+                  {
+                    key: "heartbeat",
+                    label: "处理中",
+                    status: "running",
+                    detail:
+                      typeof data.message === "string"
+                        ? data.message
+                        : "仍在处理，本轮可能需要更久。",
+                  },
+                  "处理中",
+                  { completeRunning: false }
+                ),
+              }));
+              break;
+            }
+
             updateLastAssistant((message) => ({
               ...message,
               process: upsertProcessStage(
@@ -1332,6 +1355,16 @@ export default function ChatPage() {
                 : undefined;
             const finalAnswer =
               typeof data.final_answer === "string" ? data.final_answer : "";
+            const quizGenerationStatus =
+              data.quiz_generation_status &&
+              typeof data.quiz_generation_status === "object" &&
+              !Array.isArray(data.quiz_generation_status)
+                ? (data.quiz_generation_status as Record<string, unknown>)
+                : {};
+            const qualityFailureSummary =
+              typeof quizGenerationStatus.quality_failure_summary === "string"
+                ? quizGenerationStatus.quality_failure_summary
+                : "";
             const eventQuestionType = extractQuestionType(data);
             const eventRoute = extractRoute(data);
 
@@ -1359,7 +1392,9 @@ export default function ChatPage() {
                       ? `已准备 ${quizItems.length} 道练习题，并同步生成了最终回答。`
                       : quizClarification
                         ? "需要先确认练习方向。"
-                        : "练习题结果已经准备好了。",
+                        : qualityFailureSummary
+                          ? `练习题未保存：${qualityFailureSummary}`
+                          : "练习题结果已经准备好了。",
                   elapsed:
                     typeof data.elapsed === "number" ? data.elapsed : undefined,
                 },
@@ -1445,7 +1480,14 @@ export default function ChatPage() {
       },
       (error) => {
         updateLastAssistant((message) => {
-          const errorMessage = `连接失败：${error.message}`;
+          const rawErrorMessage =
+            error instanceof Error && error.message
+              ? error.message
+              : "学习引擎连接中断，请稍后重试。";
+          const isProcessingTimeout = rawErrorMessage.includes("处理超时");
+          const errorMessage = isProcessingTimeout
+            ? rawErrorMessage
+            : `连接失败：${rawErrorMessage}`;
           return {
             ...message,
             content: errorMessage,
@@ -1453,11 +1495,11 @@ export default function ChatPage() {
               message.process,
               {
                 key: "error",
-                label: "处理失败",
+                label: isProcessingTimeout ? "处理超时" : "处理失败",
                 status: "failed",
                 detail: errorMessage,
               },
-              "处理失败",
+              isProcessingTimeout ? "处理超时" : "处理失败",
               { completeRunning: false }
             ),
           };
@@ -1468,7 +1510,24 @@ export default function ChatPage() {
       {
         notebookId: selectedNotebookId,
         sessionId,
-        idleTimeoutMs: 45000,
+        idleTimeoutMs: 90000,
+        maxConnectRetries: 2,
+        onRetry: (attempt, maxRetries) => {
+          updateLastAssistant((message) => ({
+            ...message,
+            process: upsertProcessStage(
+              message.process,
+              {
+                key: "connection_retry",
+                label: "连接恢复中",
+                status: "running",
+                detail: `学习引擎连接失败，正在自动重试 ${attempt}/${maxRetries}。`,
+              },
+              "连接恢复中",
+              { completeRunning: false }
+            ),
+          }));
+        },
       }
     );
   }

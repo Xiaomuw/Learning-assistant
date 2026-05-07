@@ -55,6 +55,7 @@ def update_memories_after_turn(
     quiz_items: list[dict[str, Any]],
     final_answer: str,
     subject_name: str,
+    quiz_request: dict[str, Any] | None = None,
     model_name: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -69,6 +70,7 @@ def update_memories_after_turn(
         question_type=question_type,
         explanation=explanation,
         quiz_items=quiz_items,
+        quiz_request=quiz_request,
         final_answer=final_answer,
         subject_name=subject_name,
         model_name=model_name,

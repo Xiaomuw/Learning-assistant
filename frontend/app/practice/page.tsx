@@ -40,6 +40,7 @@ type OptionKey = "A" | "B" | "C" | "D";
 
 interface AttemptFeedback {
   isCorrect: boolean;
+  submittedOption?: OptionKey;
   correctOption: OptionKey;
   explanation: string;
   optionRationales: Record<string, string>;
@@ -86,7 +87,6 @@ export default function PracticePage() {
         setCurrentNotebookId(fallbackNotebookId || DEFAULT_NOTEBOOK_ID);
         setIsPracticeCompleted(false);
         setPracticeCompletedAt(null);
-        clearStoredPracticeState();
         hasLoadedPracticeStateRef.current = true;
         return;
       }
@@ -218,13 +218,13 @@ export default function PracticePage() {
     return "AI 补题";
   }, [currentQuiz]);
   const selectedOptionText =
-    currentOptions.find((option) => option.key === selectedOption)?.text ?? "";
+    currentOptions.find((option) => option.key === (feedback?.submittedOption ?? selectedOption))?.text ?? "";
   const correctOptionText = feedback
     ? currentOptions.find((option) => option.key === feedback.correctOption)?.text ?? ""
     : "";
   const selectedRationale =
-    feedback && selectedOption
-      ? feedback.optionRationales[selectedOption]?.trim() ?? ""
+    feedback && (feedback.submittedOption ?? selectedOption)
+      ? feedback.optionRationales[feedback.submittedOption ?? selectedOption ?? "A"]?.trim() ?? ""
       : "";
   const correctRationale = feedback
     ? feedback.optionRationales[feedback.correctOption]?.trim() ?? ""
@@ -297,16 +297,18 @@ export default function PracticePage() {
     setSubmitError("");
     setIsSubmitting(true);
     try {
+      const submittedOption = selectedOption;
       const result = await submitPracticeAttempt({
         user_id: user.id,
         session_id: currentSessionId,
         notebookId: currentNotebookId,
         quiz_item: currentQuiz,
-        selected_option: selectedOption,
+        selected_option: submittedOption,
       });
 
       const nextFeedback: AttemptFeedback = {
-        isCorrect: result.is_correct,
+        submittedOption: result.selected_option ?? submittedOption,
+        isCorrect: (result.selected_option ?? submittedOption) === result.correct_option && result.is_correct,
         correctOption: result.correct_option,
         explanation: result.explanation,
         optionRationales: result.option_rationales,
@@ -321,7 +323,7 @@ export default function PracticePage() {
       persistPracticeState({
         quizSignature: buildQuizSignature(quizList),
         currentIndex,
-        selectedOption,
+        selectedOption: submittedOption,
         showHint,
         feedback: nextFeedback,
         sessionId: currentSessionId,
@@ -418,7 +420,7 @@ export default function PracticePage() {
       return `${base} bg-[#B8F7C1]`;
     }
 
-    if (optionKey === selectedOption && !feedback.isCorrect) {
+    if (optionKey === (feedback.submittedOption ?? selectedOption) && !feedback.isCorrect) {
       return `${base} bg-neo-accent`;
     }
 
@@ -435,7 +437,7 @@ export default function PracticePage() {
     if (optionKey === feedback.correctOption) {
       return "正确答案";
     }
-    if (optionKey === selectedOption && !feedback.isCorrect) {
+    if (optionKey === (feedback.submittedOption ?? selectedOption) && !feedback.isCorrect) {
       return "你的选择";
     }
     return "干扰项";
@@ -707,7 +709,7 @@ export default function PracticePage() {
                     <div className="border-[3px] border-neo-ink bg-white p-4 shadow-neo-sm">
                       <p className="neo-label">你的答案</p>
                       <p className="mt-2 text-lg font-black">
-                        {selectedOption}. {selectedOptionText || "未找到选项文本"}
+                        {feedback.submittedOption ?? selectedOption}. {selectedOptionText || "未找到选项文本"}
                       </p>
                     </div>
                     <div className="border-[3px] border-neo-ink bg-[#B8F7C1] p-4 shadow-neo-sm">

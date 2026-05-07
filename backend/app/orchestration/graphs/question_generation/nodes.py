@@ -319,8 +319,27 @@ def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
         candidates = _candidate_list(state)
         report = QualityReport.model_validate(state.get("quality_report") or {})
         duplicate_ids: list[str] = []
+        status = dict(state.get("generation_status") or {})
+        errors = list(state.get("errors") or [])
         for candidate in candidates:
-            matches = question_item_repository.find_similar(candidate.model_dump(mode="json"), limit=5)
+            try:
+                matches = question_item_repository.find_similar(candidate.model_dump(mode="json"), limit=5)
+            except Exception as exc:
+                status.update(
+                    {
+                        "dedupe_unavailable": True,
+                        "dedupe_error_type": exc.__class__.__name__,
+                    }
+                )
+                errors.append(
+                    GraphError(
+                        code="question_dedupe_unavailable",
+                        message=exc.__class__.__name__,
+                        node="dedupe_checker",
+                        severity=GraphErrorSeverity.WARNING,
+                    ).model_dump(mode="json")
+                )
+                matches = []
             duplicate_ids.extend(str(item.get("id") or item.get("question_id")) for item in matches if item)
 
         duplicate_ids = sorted({item for item in duplicate_ids if item})
@@ -335,7 +354,11 @@ def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
                 "dedupe_checker": dedupe,
             }
         )
-        return {"quality_report": updated.model_dump(mode="json")}
+        return {
+            "quality_report": updated.model_dump(mode="json"),
+            "generation_status": status,
+            "errors": errors,
+        }
 
     return dedupe_checker_node
 
@@ -378,6 +401,7 @@ def make_persist_question_items_node(
         items: list[QuestionItem] = []
         events: list[LearningEvent] = []
         status = dict(state.get("generation_status") or {})
+        errors = list(state.get("errors") or [])
 
         review_event = _learning_event(
             state,
@@ -423,7 +447,20 @@ def make_persist_question_items_node(
                     generation_source=candidate.generation_source,
                 )
                 payload = item.model_dump(mode="json")
-                item_id = question_item_repository.create_question_item(payload)
+                try:
+                    item_id = question_item_repository.create_question_item(payload)
+                except Exception as exc:
+                    item_id = item.id
+                    status["persist_degraded"] = True
+                    status["persist_error_type"] = exc.__class__.__name__
+                    errors.append(
+                        GraphError(
+                            code="question_item_persist_unavailable",
+                            message=exc.__class__.__name__,
+                            node="persist_question_items",
+                            severity=GraphErrorSeverity.WARNING,
+                        ).model_dump(mode="json")
+                    )
                 item = item.model_copy(update={"id": item_id})
                 item_ids.append(item_id)
                 items.append(item)
@@ -457,7 +494,19 @@ def make_persist_question_items_node(
 
         for event in events:
             if learning_event_repository is not None:
-                learning_event_repository.append(event)
+                try:
+                    learning_event_repository.append(event)
+                except Exception as exc:
+                    status["event_persist_degraded"] = True
+                    status["event_persist_error_type"] = exc.__class__.__name__
+                    errors.append(
+                        GraphError(
+                            code="question_event_persist_unavailable",
+                            message=exc.__class__.__name__,
+                            node="persist_question_items",
+                            severity=GraphErrorSeverity.WARNING,
+                        ).model_dump(mode="json")
+                    )
 
         existing_events = list(state.get("learning_events") or [])
         status.update(
@@ -472,6 +521,7 @@ def make_persist_question_items_node(
             "question_item_ids": item_ids,
             "learning_events": [*existing_events, *[event.model_dump(mode="json") for event in events]],
             "generation_status": status,
+            "errors": errors,
         }
 
     return persist_question_items_node
@@ -482,10 +532,17 @@ def compose_response_node(state: QuestionGenerationState) -> dict[str, Any]:
     item_ids = list(state.get("question_item_ids") or [])
     blueprint = ItemBlueprint.model_validate(state.get("generation_blueprint") or {})
     source_refs = list(state.get("source_refs") or [])
+    status = dict(state.get("generation_status") or {})
+    quality_failure_summary = "" if report.passed else _quality_failure_summary(report, status)
     if report.passed:
-        answer = f"已围绕「{blueprint.concept_name}」生成并保存 {len(item_ids)} 道{blueprint.difficulty}单选题。"
+        if status.get("persist_degraded"):
+            answer = f"已围绕「{blueprint.concept_name}」生成 {len(item_ids)} 道{blueprint.difficulty}单选题，已放入本轮练习；长期题库保存稍后会再试。"
+        else:
+            answer = f"已围绕「{blueprint.concept_name}」生成并保存 {len(item_ids)} 道{blueprint.difficulty}单选题。"
     else:
         answer = f"围绕「{blueprint.concept_name}」的出题未通过质量门，本轮没有保存题目。"
+        if quality_failure_summary:
+            answer += f"原因：{quality_failure_summary}"
 
     response = FinalResponse(
         answer=answer,
@@ -505,6 +562,8 @@ def compose_response_node(state: QuestionGenerationState) -> dict[str, Any]:
             "question_item_ids": item_ids,
             "quality_passed": report.passed,
             "quality_report": report.model_dump(mode="json"),
+            "quality_failure_summary": quality_failure_summary,
+            "quiz_generation_status": status,
             "errors": list(state.get("errors") or []),
         },
     )
@@ -833,6 +892,8 @@ def _is_degraded_generation(status: dict[str, Any]) -> bool:
         status.get("source_refs_degraded")
         or status.get("partial")
         or status.get("degraded_reason")
+        or status.get("question_bank_unavailable")
+        or status.get("ai_generation_failed")
         or int(status.get("fallback_count") or 0) > 0
     )
 
@@ -843,8 +904,25 @@ def _degraded_reason(status: dict[str, Any]) -> str:
         return reason
     if status.get("source_refs_degraded"):
         return "no_evidence_source_refs"
+    if status.get("question_bank_unavailable"):
+        return "question_bank_unavailable"
+    if status.get("ai_generation_failed"):
+        return "ai_generation_failed"
     if status.get("partial"):
         return "partial_generation"
     if int(status.get("fallback_count") or 0) > 0:
         return "fallback_questions_used"
     return "question_generation_degraded"
+
+
+def _quality_failure_summary(report: QualityReport, status: dict[str, Any]) -> str:
+    if report.issues:
+        primary_issue = str(report.issues[0]).strip()
+        if primary_issue:
+            return primary_issue
+    if status.get("empty_generation"):
+        return "没有生成足够题目。"
+    degraded_reason = str(status.get("degraded_reason") or "").strip()
+    if degraded_reason:
+        return degraded_reason
+    return "题目结构或主题对齐检查未通过。"

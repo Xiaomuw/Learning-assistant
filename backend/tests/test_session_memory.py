@@ -75,6 +75,34 @@ class SessionMemoryTest(unittest.TestCase):
         self.assertTrue(result["summary_text"])
         self.assertEqual(result["last_question_type"], "concept")
 
+    def test_failed_practice_quality_gate_does_not_replace_active_topic(self) -> None:
+        result = session_memory_module.update_session_memory(
+            previous_session_memory={
+                "summary_text": "当前会话正在围绕 HTTP 学习。",
+                "active_topic": "HTTP",
+                "current_goal": "理解 HTTP 的基本概念",
+                "open_loops": [],
+                "resolved_points": [],
+                "last_question_type": "concept",
+            },
+            short_term_messages=[],
+            short_term_context="学生1: 给我出两道数据库索引练习题",
+            long_term_context="（暂无长期学习记忆）",
+            question="给我出两道数据库索引练习题",
+            question_type="practice",
+            explanation={
+                "topic": "容易把 HTTP 的 80 和 HTTPS 的 443 混淆",
+                "thinking": "围绕「容易把 HTTP 的 80 和 HTTPS 的 443 混淆」的出题未通过质量门，本轮没有保存题目。",
+                "steps": [],
+            },
+            quiz_items=[],
+            final_answer="围绕「容易把 HTTP 的 80 和 HTTPS 的 443 混淆」的出题未通过质量门，本轮没有保存题目。",
+            subject_name="数据结构与算法",
+        )
+
+        self.assertEqual(result["active_topic"], "HTTP")
+        self.assertNotIn("HTTP 的 80 和 HTTPS 的 443 混淆", result["active_topic"])
+
 
 if __name__ == "__main__":
     unittest.main()

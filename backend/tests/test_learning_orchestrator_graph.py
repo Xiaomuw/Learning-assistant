@@ -126,6 +126,22 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         self.assertEqual(repository.audit_events[0]["run_id"], result["run_id"])
         self.assertTrue(result["audit_events"])
 
+    def test_persist_audit_event_fails_open_when_repository_is_unavailable(self) -> None:
+        class FailingAuditRepository:
+            def record_audit_event(self, payload: dict) -> None:
+                raise RuntimeError("db unavailable")
+
+        result = build_graph(audit_repository=FailingAuditRepository()).compile().invoke(
+            {"user_id": "u1", "thread_id": "t1", "user_message": "什么是 HTTP？"}
+        )
+
+        self.assertTrue(result["final_response"]["answer"])
+        self.assertTrue(result["audit_events"])
+        self.assertEqual(result["audit_events"][0]["status"], "degraded")
+        self.assertTrue(
+            any(error["code"] == "orchestrator_audit_persist_unavailable" for error in result["errors"])
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

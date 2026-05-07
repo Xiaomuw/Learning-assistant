@@ -174,6 +174,10 @@ class LegacyPracticeQuestionCandidateGenerator:
             "fallback_count": int(raw_status.get("fallback_count") or 0),
             "partial": bool(raw_status.get("partial", False)) or len(candidates) < blueprint.count,
             "degraded_reason": str(raw_status.get("degraded_reason") or ""),
+            "question_bank_unavailable": bool(raw_status.get("question_bank_unavailable", False)),
+            "question_bank_error_type": str(raw_status.get("question_bank_error_type") or ""),
+            "question_bank_error_count": int(raw_status.get("question_bank_error_count") or 0),
+            "ai_generation_failed": bool(raw_status.get("ai_generation_failed", False)),
         }
         return QuestionCandidateGenerationResult(candidates=candidates, status=status)
 

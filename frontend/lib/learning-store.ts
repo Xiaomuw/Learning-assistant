@@ -220,6 +220,7 @@ export function clearStoredQuiz() {
 
 export interface StoredPracticeFeedback {
   isCorrect: boolean;
+  submittedOption?: "A" | "B" | "C" | "D";
   correctOption: "A" | "B" | "C" | "D";
   explanation: string;
   optionRationales: Record<string, string>;
@@ -268,6 +269,9 @@ export function loadStoredPracticeState(): StoredPracticeState | null {
     typeof stored.feedback.explanation === "string"
       ? {
           isCorrect: stored.feedback.isCorrect,
+          submittedOption: isOptionKey(stored.feedback.submittedOption)
+            ? stored.feedback.submittedOption
+            : undefined,
           correctOption: stored.feedback.correctOption,
           explanation: stored.feedback.explanation,
           optionRationales:

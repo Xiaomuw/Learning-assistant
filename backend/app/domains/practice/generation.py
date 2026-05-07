@@ -512,7 +512,22 @@ def build_mixed_practice_items_with_status(
     effective_points = [point for point in list(knowledge_points or []) if str(point).strip()]
     if not effective_points:
         effective_points = [topic]
-    bank_candidates = _list_question_bank_items(
+    degraded_reasons: list[str] = []
+    question_bank_error_types: list[str] = []
+    question_bank_error_stages: list[str] = []
+
+    def safe_list_question_bank_items(*, stage: str, **kwargs: Any) -> list[dict[str, Any]]:
+        try:
+            return _list_question_bank_items(**kwargs)
+        except Exception as exc:
+            error_type = exc.__class__.__name__
+            logger.warning(f"⚠️ 题库读取失败: stage={stage}, error_type={error_type}")
+            question_bank_error_types.append(error_type)
+            question_bank_error_stages.append(stage)
+            return []
+
+    bank_candidates = safe_list_question_bank_items(
+        stage="strict",
         subject_id=subject_id,
         knowledge_points=effective_points,
         difficulty=difficulty,
@@ -520,14 +535,25 @@ def build_mixed_practice_items_with_status(
     )
 
     if len(bank_candidates) < requested_count:
-        fallback_candidates = _list_question_bank_items(
+        fallback_candidates = safe_list_question_bank_items(
+            stage="relaxed",
             subject_id=subject_id,
             knowledge_points=effective_points,
             limit=requested_count * 3,
         )
         bank_candidates = dedupe_quiz_items([*bank_candidates, *fallback_candidates])
+    question_bank_unavailable = bool(question_bank_error_types)
+    if question_bank_unavailable:
+        error_summary = ",".join(sorted(set(question_bank_error_types)))
+        degraded_reasons.append(f"题库读取失败: {error_summary}")
 
     picked = bank_candidates[:requested_count]
+    question_bank_status = {
+        "question_bank_unavailable": question_bank_unavailable,
+        "question_bank_error_type": question_bank_error_types[-1] if question_bank_error_types else "",
+        "question_bank_error_count": len(question_bank_error_types),
+        "question_bank_error_stages": question_bank_error_stages,
+    }
     if len(picked) >= requested_count:
         items = [normalize_quiz_item(item) for item in picked[:requested_count]]
         return PracticeGenerationResult(
@@ -539,13 +565,15 @@ def build_mixed_practice_items_with_status(
                 "ai_count": 0,
                 "fallback_count": 0,
                 "partial": False,
-                "degraded_reason": "",
+                "ai_generation_failed": False,
+                "degraded_reason": "；".join(degraded_reasons),
+                **question_bank_status,
             },
         )
 
     missing_count = requested_count - len(picked)
     user_style_instruction = format_user_style_instruction(user_style_name, user_style_prompt)
-    degraded_reason = ""
+    ai_generation_failed = False
 
     try:
         generated = _invoke_generation_chain(
@@ -577,7 +605,8 @@ def build_mixed_practice_items_with_status(
         ]
     except Exception as exc:
         logger.error(f"❌ AI 选择题生成失败: {exc}")
-        degraded_reason = f"AI 选择题生成失败: {exc}"
+        ai_generation_failed = True
+        degraded_reasons.append(f"AI 选择题生成失败: {exc.__class__.__name__}")
         generated_items = []
 
     normalized_picked = [normalize_quiz_item(item) for item in picked]
@@ -598,8 +627,8 @@ def build_mixed_practice_items_with_status(
         attempt += 1
 
     final_items = [PracticeRecommendation.model_validate(item) for item in deduped_items[:requested_count]]
-    if fallback_count and not degraded_reason:
-        degraded_reason = "AI 选择题不足，已用备用题补齐。"
+    if fallback_count:
+        degraded_reasons.append("已用备用题补齐。")
 
     return PracticeGenerationResult(
         items=final_items,
@@ -610,7 +639,9 @@ def build_mixed_practice_items_with_status(
             "ai_count": len(generated_items),
             "fallback_count": fallback_count,
             "partial": len(final_items) < requested_count,
-            "degraded_reason": degraded_reason,
+            "ai_generation_failed": ai_generation_failed,
+            "degraded_reason": "；".join(degraded_reasons),
+            **question_bank_status,
         },
     )
 

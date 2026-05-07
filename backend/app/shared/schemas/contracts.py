@@ -446,6 +446,7 @@ class PracticeRecommendationsResult(BaseModel):
 
 class PracticeSubmissionResult(BaseModel):
     is_correct: bool
+    selected_option: str = ""
     correct_option: str
     explanation: str
     option_rationales: dict[str, str] = Field(default_factory=dict)

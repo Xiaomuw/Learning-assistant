@@ -135,6 +135,7 @@ def record_practice_attempt_and_update_memory(
 
     return PracticeSubmissionResult(
         is_correct=is_correct,
+        selected_option=selected,
         correct_option=correct_option,
         explanation=normalized_item.explanation,
         option_rationales=normalized_item.option_rationales,

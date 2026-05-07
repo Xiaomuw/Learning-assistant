@@ -137,6 +137,7 @@ class PracticeApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertFalse(payload["is_correct"])
+        self.assertEqual(payload["selected_option"], "A")
         self.assertEqual(payload["correct_option"], "C")
 
     def test_submit_practice_attempt_returns_clear_error_message(self) -> None:

@@ -90,6 +90,31 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.question_type, "single_choice")
         self.assertEqual(result.count, 5)
 
+    def test_chinese_topic_generation_overrides_failed_http_topic(self) -> None:
+        result = resolve_quiz_request(
+            "给我出两道数据库索引练习题",
+            {"last_topic": "容易把 HTTP 的 80 和 HTTPS 的 443 混淆"},
+        )
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.intent, "quiz_generation")
+        self.assertEqual(result.topic, "数据库索引")
+        self.assertEqual(result.requested_topic, "数据库索引")
+        self.assertEqual(result.active_topic, "数据库索引")
+        self.assertEqual(result.source, "explicit_user_input")
+        self.assertTrue(result.should_switch_topic)
+        self.assertFalse(result.need_clarification)
+
+    def test_continuation_without_explicit_topic_still_inherits_last_topic(self) -> None:
+        result = resolve_quiz_request("再来两道", {"last_topic": "HTTP"})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.intent, "continue_quiz_generation")
+        self.assertEqual(result.topic, "HTTP")
+        self.assertIsNone(result.requested_topic)
+        self.assertEqual(result.active_topic, "HTTP")
+        self.assertFalse(result.should_switch_topic)
+
     def test_explicit_data_structure_subject_overrides_last_topic(self) -> None:
         result = resolve_quiz_request("出一些数据与结构类型的题目给我", {"last_topic": "TCP"})
 

@@ -22,6 +22,7 @@
 - [LangGraph 工作流总览](langgraph-overview.md)：图结构、节点职责、Platform sidecar。
 - [后端维护约定](backend-maintenance-guide.md)：分层规则、禁止事项、最低自检。
 - [API 参考](api-reference.md)：当前 HTTP 接口形状。
+- [RAG 知识库内容 AI 工作说明](rag-knowledge-content-ai.md)：PDF 资料治理、notebook 入库、状态检查和抽检报告规范。
 - [数据库设计](database-design.md) 与 [ER 图](database-er.md)：当前 PostgreSQL 结构、PGVector 说明。
 - [LangGraph Platform 部署](langgraph-platform-deployment.md)：Cloud / Studio 部署说明。
 - [测试报告](test-reports/full-functional-2026-04-27.md)：最近一次全功能验收与修复记录。

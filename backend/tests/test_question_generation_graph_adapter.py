@@ -57,6 +57,14 @@ class MockQuestionItemRepository:
         return self.similar[:limit]
 
 
+class FailingQuestionItemRepository:
+    def create_question_item(self, payload: dict[str, Any]) -> str:
+        raise RuntimeError("db unavailable")
+
+    def find_similar(self, payload: dict[str, Any], *, limit: int = 10) -> list[dict[str, Any]]:
+        raise RuntimeError("db unavailable")
+
+
 class MockLearningEventRepository:
     def __init__(self) -> None:
         self.events: list[LearningEvent] = []
@@ -67,6 +75,14 @@ class MockLearningEventRepository:
 
     def list_for_user(self, *, user_id: str, limit: int = 100) -> list[LearningEvent]:
         return [event for event in self.events if event.user_id == user_id][:limit]
+
+
+class FailingLearningEventRepository:
+    def append(self, event: LearningEvent) -> str:
+        raise RuntimeError("db unavailable")
+
+    def list_for_user(self, *, user_id: str, limit: int = 100) -> list[LearningEvent]:
+        return []
 
 
 class QuestionGenerationGraphAdapterTest(unittest.TestCase):
@@ -362,6 +378,51 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertFalse(any("学习方法" in stem for stem in stems))
         self.assertTrue(any("数组" in stem or "链表" in stem for stem in stems))
 
+    def test_question_repository_failure_does_not_drop_valid_practice_pack(self) -> None:
+        result = build_graph(
+            question_item_repository=FailingQuestionItemRepository(),
+            learning_event_repository=FailingLearningEventRepository(),
+        ).compile().invoke(
+            {
+                "run_id": "run-qgen-repo-fail-open",
+                "user_id": "u1",
+                "user_message": "出一些数据结构的题目",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "数据结构与算法",
+                    "requested_topic": "数据结构与算法",
+                    "previous_topic": "HTTP",
+                    "active_topic": "数据结构与算法",
+                    "should_switch_topic": True,
+                    "subject_id": "data-structure",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 5,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertTrue(report.passed)
+        self.assertEqual(len(result["question_items"]), 5)
+        self.assertEqual(len(result["question_item_ids"]), 5)
+        self.assertTrue(result["generation_status"]["dedupe_unavailable"])
+        self.assertTrue(result["generation_status"]["persist_degraded"])
+        self.assertTrue(result["generation_status"]["event_persist_degraded"])
+        self.assertTrue(response.ui_payload["quality_passed"])
+        self.assertIn("长期题库保存稍后会再试", response.answer)
+        self.assertTrue(
+            any(error["code"] == "question_item_persist_unavailable" for error in result["errors"])
+        )
+
     def test_topic_alignment_retries_once_and_repairs_mismatched_http_questions(self) -> None:
         class MismatchedThenAlignedGenerator:
             def __init__(self) -> None:
@@ -598,6 +659,8 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertEqual(question_repo.created, [])
         self.assertEqual(result["errors"][0]["code"], "question_generation_empty")
         self.assertIn("question_generation_empty", json.dumps(response.ui_payload["errors"], ensure_ascii=False))
+        self.assertIn("题目数量不足", response.answer)
+        self.assertIn("题目数量不足", response.ui_payload["quality_failure_summary"])
         self.assertEqual(
             [event.event_type for event in event_repo.events],
             [
@@ -715,6 +778,66 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertEqual(result.status["generation_source"], "practice_generation")
         self.assertEqual(result.status["fallback_count"], 1)
         self.assertTrue(result.status["production_output_mapped"])
+
+    def test_legacy_practice_generator_falls_back_when_question_bank_and_ai_fail(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        event_repo = MockLearningEventRepository()
+        generator = LegacyPracticeQuestionCandidateGenerator(
+            subject_id="data-structure",
+            subject_name="数据结构与算法",
+            original_question="出一些数据结构的题目",
+            model_name="test-model",
+        )
+
+        with (
+            patch("app.domains.practice.generation._list_question_bank_items", side_effect=RuntimeError("db down")),
+            patch("app.domains.practice.generation._invoke_generation_chain", side_effect=RuntimeError("model down")),
+        ):
+            result = build_graph(
+                candidate_generator=generator,
+                question_item_repository=question_repo,
+                learning_event_repository=event_repo,
+            ).compile().invoke(
+                {
+                    "run_id": "run-qgen-bank-ai-fallback",
+                    "user_id": "u1",
+                    "user_message": "出一些数据结构的题目",
+                    "graph_type": GraphType.QUESTION_GENERATION.value,
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "quiz_request": {
+                        "is_quiz_request": True,
+                        "action": "generate_practice_pack",
+                        "intent": "quiz_generation",
+                        "topic": "数据结构与算法",
+                        "requested_topic": "数据结构与算法",
+                        "previous_topic": "HTTP",
+                        "active_topic": "数据结构与算法",
+                        "should_switch_topic": True,
+                        "subject_id": "data-structure",
+                        "source": "explicit_user_input",
+                        "question_type": "single_choice",
+                        "difficulty": "easy",
+                        "count": 5,
+                        "target_module": "practice",
+                        "reason": "explicit_topic_in_user_input",
+                    },
+                }
+            )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        response = FinalResponse.model_validate(result["final_response"])
+        stems = "\n".join(str(item["stem"]) for item in question_repo.created)
+        status = result["generation_status"]
+        self.assertTrue(report.passed)
+        self.assertTrue(response.ui_payload["quality_passed"])
+        self.assertEqual(len(question_repo.created), 5)
+        self.assertTrue(status["question_bank_unavailable"])
+        self.assertTrue(status["ai_generation_failed"])
+        self.assertEqual(status["fallback_count"], 5)
+        self.assertIn("题库读取失败", status["degraded_reason"])
+        self.assertIn("AI 选择题生成失败", status["degraded_reason"])
+        self.assertIn("数组", stems)
+        self.assertNotIn("HTTP", stems)
 
     def test_legacy_question_bank_repository_maps_question_item_through_protocol_boundary(self) -> None:
         saved_payloads: list[list[dict[str, Any]]] = []

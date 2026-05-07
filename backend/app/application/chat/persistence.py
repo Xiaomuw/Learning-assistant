@@ -28,6 +28,7 @@ def persist_chat_session(
         question_type=final_state.get("question_type", "concept"),
         explanation=final_state.get("explanation", {}),
         quiz_items=final_state.get("quiz_items", []) or [],
+        quiz_request=final_state.get("quiz_request") if isinstance(final_state.get("quiz_request"), dict) else None,
         final_answer=final_state.get("final_answer", "") or assistant_message.get("content", ""),
         subject_name=final_state.get("subject_name", str(DEFAULT_SUBJECTS[0]["name"])),
         model_name=str(final_state.get("model_name", "") or "").strip() or None,

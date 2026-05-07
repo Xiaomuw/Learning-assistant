@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+from loguru import logger
+
 from app.orchestration.graphs.orchestrator.schemas import (
     ChildGraphOutput,
     IntentDecision,
@@ -235,6 +237,8 @@ def question_generation_graph_stub(state: OrchestratorState) -> dict[str, Any]:
             "final_response": result.get("final_response") or {},
             "question_items": list(result.get("question_items") or []),
             "question_item_ids": list(result.get("question_item_ids") or []),
+            "quality_report": result.get("quality_report") or {},
+            "generation_status": result.get("generation_status") or {},
             "learning_events": list(result.get("learning_events") or []),
             "errors": list(result.get("errors") or []),
             "quiz_request": state.get("quiz_request") or {},
@@ -323,9 +327,28 @@ def persist_audit_event(state: OrchestratorState, *, audit_repository: Any | Non
         "intent_decision": state.get("intent_decision") or {},
         "final_response_present": bool(state.get("final_response")),
     }
+    errors = list(state.get("errors") or [])
     if audit_repository is not None:
-        audit_repository.record_audit_event(audit_event)
-    return {"audit_events": [*list(state.get("audit_events") or []), audit_event]}
+        try:
+            audit_repository.record_audit_event(audit_event)
+        except Exception as exc:  # noqa: BLE001 - audit writes must never block user-facing graph output
+            error_type = exc.__class__.__name__
+            logger.warning(f"Orchestrator audit persistence failed open: {error_type}")
+            audit_event = {
+                **audit_event,
+                "status": "degraded",
+                "error_type": error_type,
+            }
+            errors.append(
+                GraphError(
+                    code="orchestrator_audit_persist_unavailable",
+                    message="审计事件暂时无法持久化，已继续完成本轮请求。",
+                    node="persist_audit_event",
+                    severity="warning",
+                    metadata={"error_type": error_type},
+                ).model_dump(mode="json")
+            )
+    return {"audit_events": [*list(state.get("audit_events") or []), audit_event], "errors": errors}
 
 
 def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, Any]:

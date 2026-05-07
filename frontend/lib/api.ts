@@ -78,6 +78,7 @@ export interface MasteryEvaluationResult {
 
 export interface PracticeAttemptResult {
   is_correct: boolean;
+  selected_option?: "A" | "B" | "C" | "D";
   correct_option: "A" | "B" | "C" | "D";
   explanation: string;
   option_rationales: Record<string, string>;
@@ -296,6 +297,39 @@ export interface SendChatOptions {
   notebookId?: string;
   sessionId?: string;
   idleTimeoutMs?: number;
+  maxConnectRetries?: number;
+  onRetry?: (attempt: number, maxRetries: number) => void;
+}
+
+const CHAT_CONNECT_RETRY_STATUS = new Set([502, 503, 504]);
+
+class ChatConnectionError extends Error {
+  attempts: number;
+  retryable: boolean;
+  status?: number;
+  receivedAnyEvent: boolean;
+
+  constructor(
+    message: string,
+    {
+      attempts,
+      retryable,
+      status,
+      receivedAnyEvent = false,
+    }: {
+      attempts: number;
+      retryable: boolean;
+      status?: number;
+      receivedAnyEvent?: boolean;
+    },
+  ) {
+    super(message);
+    this.name = "ChatConnectionError";
+    this.attempts = attempts;
+    this.retryable = retryable;
+    this.status = status;
+    this.receivedAnyEvent = receivedAnyEvent;
+  }
 }
 
 /** 笔记本 */
@@ -618,6 +652,36 @@ async function readErrorMessage(response: Response): Promise<string> {
   return response.statusText || `请求失败（${response.status}）`;
 }
 
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error && typeof error.message === "string" && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    for (const key of ["message", "detail", "error", "reason"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+  }
+  return "连接学习引擎时出现未知错误。";
+}
+
+function buildChatConnectionFailureMessage(error: unknown, attempts: number): string {
+  const message = normalizeErrorMessage(error);
+  const retryText =
+    attempts > 1 ? `已自动重试 ${attempts - 1} 次，仍无法连接学习引擎。` : "无法连接学习引擎。";
+  return `${retryText}${message ? `原因：${message}` : ""} 请检查后端服务或稍后重试。`;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 async function refreshAuthSession(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
@@ -656,9 +720,11 @@ export function sendChatSSE(
   options: SendChatOptions = {},
 ): AbortController {
   const controller = new AbortController();
-  const idleTimeoutMs = options.idleTimeoutMs ?? 45000;
+  const idleTimeoutMs = options.idleTimeoutMs ?? 90000;
+  const maxConnectRetries = Math.max(0, options.maxConnectRetries ?? 2);
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let finished = false;
+  let receivedAnyEvent = false;
 
   const cleanup = () => {
     finished = true;
@@ -684,9 +750,18 @@ export function sendChatSSE(
 
       controller.abort("idle-timeout");
       cleanup();
+      const timeoutSeconds = Math.round(idleTimeoutMs / 1000);
+      const message = receivedAnyEvent
+        ? `处理超时：学习引擎处理时间较长，超过 ${timeoutSeconds} 秒没有新的进度。请稍后重试或换一种问法。`
+        : `连接超时：超过 ${timeoutSeconds} 秒仍未连接到学习引擎。请检查后端服务或稍后重试。`;
       onError?.(
-        new Error(
-          `本次请求超过 ${Math.round(idleTimeoutMs / 1000)} 秒没有收到新内容，已自动结束，你可以直接重试。`
+        new ChatConnectionError(
+          message,
+          {
+            attempts: 1,
+            retryable: false,
+            receivedAnyEvent,
+          }
         )
       );
     }, idleTimeoutMs);
@@ -694,28 +769,49 @@ export function sendChatSSE(
 
   scheduleIdleTimeout();
 
-  const openStream = async (hasRetried = false) => {
-    const res = await fetch(`${API_BASE}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        user_id: userId,
-        session_id: options.sessionId,
-        question,
-        subject_id: options.notebookId ?? DEFAULT_NOTEBOOK_ID,
-      }),
-      signal: controller.signal,
-    });
+  const openStream = async (hasAuthRetried = false, connectAttempt = 0): Promise<Response> => {
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          user_id: userId,
+          session_id: options.sessionId,
+          question,
+          subject_id: options.notebookId ?? DEFAULT_NOTEBOOK_ID,
+        }),
+        signal: controller.signal,
+      });
 
-    if (res.status === 401 && !hasRetried) {
-      const refreshed = await refreshAuthSession();
-      if (refreshed) {
-        return openStream(true);
+      if (res.status === 401 && !hasAuthRetried) {
+        const refreshed = await refreshAuthSession();
+        if (refreshed) {
+          return openStream(true, connectAttempt);
+        }
       }
-    }
 
-    return res;
+      if (
+        CHAT_CONNECT_RETRY_STATUS.has(res.status) &&
+        connectAttempt < maxConnectRetries
+      ) {
+        options.onRetry?.(connectAttempt + 1, maxConnectRetries);
+        await wait(400 * (connectAttempt + 1));
+        return openStream(hasAuthRetried, connectAttempt + 1);
+      }
+
+      return res;
+    } catch (error) {
+      if (
+        !(error instanceof DOMException && error.name === "AbortError") &&
+        connectAttempt < maxConnectRetries
+      ) {
+        options.onRetry?.(connectAttempt + 1, maxConnectRetries);
+        await wait(400 * (connectAttempt + 1));
+        return openStream(hasAuthRetried, connectAttempt + 1);
+      }
+      throw error;
+    }
   };
 
   openStream()
@@ -744,6 +840,7 @@ export function sendChatSSE(
             currentEvent = line.slice(6).trim();
           } else if (line.startsWith("data:")) {
             const raw = line.slice(5).trim();
+            receivedAnyEvent = true;
             try {
               const data = JSON.parse(raw);
               onEvent({ event: currentEvent || "message", data });
@@ -771,7 +868,17 @@ export function sendChatSSE(
     .catch((err) => {
       cleanup();
       if (err.name !== "AbortError") {
-        onError?.(err);
+        const attempts = maxConnectRetries + 1;
+        const message = receivedAnyEvent
+          ? `连接中断：学习引擎已经开始处理，本轮不会自动重发以避免重复执行。${normalizeErrorMessage(err)} 你可以直接手动重试。`
+          : buildChatConnectionFailureMessage(err, attempts);
+        onError?.(
+          new ChatConnectionError(message, {
+            attempts,
+            retryable: !receivedAnyEvent,
+            receivedAnyEvent,
+          })
+        );
       }
     });
 

@@ -23,6 +23,7 @@ ROUTE_LABELS = {
     "explain": "教学讲解",
     "rag": "资料优先",
     "agent": "工具增强",
+    "practice": "练习出题",
 }
 
 TEACHING_ACTION_LABELS = {

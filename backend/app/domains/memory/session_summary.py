@@ -160,10 +160,32 @@ def _pick_active_topic(
     question_type: str,
     explanation: dict[str, Any],
     quiz_items: list[dict[str, Any]],
+    quiz_request: dict[str, Any] | None,
     previous_session_memory: dict[str, Any],
 ) -> str:
     previous_topic = str(previous_session_memory.get("active_topic", "") or "").strip()
     if question_type in {"meta", "smalltalk"} and previous_topic:
+        return previous_topic
+
+    final_text = " ".join(
+        [
+            str(explanation.get("thinking", "") or ""),
+            " ".join(str(item) for item in list(explanation.get("steps", []) or [])),
+        ]
+    )
+    is_failed_practice_generation = (
+        question_type == "practice"
+        and not quiz_items
+        and any(marker in final_text for marker in ("质量门", "没有保存题目", "未通过"))
+    )
+    requested_topic = ""
+    if isinstance(quiz_request, dict):
+        requested_topic = str(
+            quiz_request.get("active_topic") or quiz_request.get("requested_topic") or quiz_request.get("topic") or ""
+        ).strip()
+    if is_failed_practice_generation and requested_topic:
+        return requested_topic
+    if is_failed_practice_generation and previous_topic:
         return previous_topic
 
     topic = str(explanation.get("topic", "") or "").strip()
@@ -186,6 +208,8 @@ def _pick_current_goal(
     question: str,
     active_topic: str,
     previous_session_memory: dict[str, Any],
+    *,
+    failed_practice_generation: bool = False,
 ) -> str:
     anchor = active_topic or question[:40].strip() or "当前主题"
     previous_goal = str(previous_session_memory.get("current_goal", "") or "").strip()
@@ -197,6 +221,8 @@ def _pick_current_goal(
     if question_type == "review":
         return f"复习并巩固「{anchor}」的关键知识点"
     if question_type == "practice":
+        if failed_practice_generation:
+            return f"围绕「{anchor}」重新生成可用练习题"
         return f"围绕「{anchor}」练习并检查掌握情况"
     if question_type in {"meta", "smalltalk"}:
         return previous_goal
@@ -246,6 +272,8 @@ def _build_rule_open_loops(
     question_type: str,
     active_topic: str,
     quiz_items: list[dict[str, Any]],
+    *,
+    failed_practice_generation: bool = False,
 ) -> list[str]:
     previous_open_loops = [
         str(item).strip()
@@ -254,6 +282,9 @@ def _build_rule_open_loops(
     ]
 
     if question_type == "practice":
+        if failed_practice_generation:
+            failure_loop = f"重新尝试围绕「{active_topic or '当前主题'}」生成有效练习题"
+            return _unique_recent([failure_loop, *previous_open_loops], MAX_OPEN_LOOPS)
         practice_loop = f"继续完成围绕「{active_topic or '当前主题'}」的练习，并核对答案"
         return _unique_recent([practice_loop, *previous_open_loops], MAX_OPEN_LOOPS)
 
@@ -336,15 +367,22 @@ def update_session_memory(
     quiz_items: list[dict[str, Any]],
     final_answer: str,
     subject_name: str,
+    quiz_request: dict[str, Any] | None = None,
     model_name: str | None = None,
 ) -> dict[str, Any]:
     previous = normalize_session_memory(previous_session_memory)
+    failed_practice_generation = (
+        question_type == "practice"
+        and not quiz_items
+        and any(marker in str(final_answer or "") for marker in ("质量门", "没有保存题目", "未通过"))
+    )
 
     active_topic = _pick_active_topic(
         question=question,
         question_type=question_type,
         explanation=explanation,
         quiz_items=quiz_items,
+        quiz_request=quiz_request,
         previous_session_memory=previous,
     )
     current_goal = _pick_current_goal(
@@ -352,6 +390,7 @@ def update_session_memory(
         question,
         active_topic,
         previous,
+        failed_practice_generation=failed_practice_generation,
     )
     resolved_points = _unique_recent(
         [
@@ -365,6 +404,7 @@ def update_session_memory(
         question_type=question_type,
         active_topic=active_topic,
         quiz_items=quiz_items,
+        failed_practice_generation=failed_practice_generation,
     )
 
     summary_text = _build_rule_summary(

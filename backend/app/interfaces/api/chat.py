@@ -35,6 +35,17 @@ from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
 
 router = APIRouter()
 
+CHAT_HEARTBEAT_SECONDS = 12.0
+
+
+def _safe_chat_error_message(exc: Exception) -> str:
+    raw_message = str(exc).strip()
+    if raw_message:
+        return raw_message
+    if exc.__class__.__name__ and exc.__class__.__name__ != "Exception":
+        return f"学习引擎处理失败（{exc.__class__.__name__}），请稍后重试。"
+    return "学习引擎处理失败，请稍后重试。"
+
 
 # ---------- 请求 / 响应模型 ----------
 class ChatRequest(BaseModel):
@@ -76,6 +87,8 @@ async def chat(
 
     async def event_generator():
         stream_state: dict = {}
+        chat_stream = None
+        pending_chunk_task: asyncio.Task | None = None
         try:
             yield {
                 "event": "status",
@@ -88,12 +101,42 @@ async def chat(
                 ),
             }
 
-            async for chunk in stream_chat(
+            chat_stream = stream_chat(
                 user_id=request.user_id,
                 session_id=request.session_id,
                 question=request.question,
                 subject_id=request.subject_id,
-            ):
+            )
+            pending_chunk_task = asyncio.create_task(anext(chat_stream))
+            heartbeat_count = 0
+
+            while True:
+                done, _pending = await asyncio.wait(
+                    {pending_chunk_task},
+                    timeout=CHAT_HEARTBEAT_SECONDS,
+                )
+                if not done:
+                    heartbeat_count += 1
+                    yield {
+                        "event": "status",
+                        "data": json.dumps(
+                            {
+                                "message": "仍在处理，本轮可能需要更久。",
+                                "heartbeat": True,
+                                "heartbeat_count": heartbeat_count,
+                                "session_id": request.session_id,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                    continue
+
+                try:
+                    chunk = pending_chunk_task.result()
+                except StopAsyncIteration:
+                    break
+
+                pending_chunk_task = asyncio.create_task(anext(chat_stream))
                 node = chunk["node"]
                 state_update = chunk["state_update"]
                 elapsed = chunk["elapsed"]
@@ -134,9 +177,17 @@ async def chat(
 
         except asyncio.CancelledError:
             logger.info("💬 SSE 客户端已断开连接")
+            if pending_chunk_task and not pending_chunk_task.done():
+                pending_chunk_task.cancel()
+            if chat_stream is not None:
+                await chat_stream.aclose()
             raise
         except Exception as e:
-            error_message = str(e).strip() or e.__class__.__name__
+            if pending_chunk_task and not pending_chunk_task.done():
+                pending_chunk_task.cancel()
+            if chat_stream is not None:
+                await chat_stream.aclose()
+            error_message = _safe_chat_error_message(e)
             logger.exception(f"❌ 工作流执行异常: {error_message}")
             yield {
                 "event": "error",
@@ -144,6 +195,7 @@ async def chat(
                     {
                         "error": error_message,
                         "error_type": e.__class__.__name__,
+                        "retryable": True,
                         "session_id": request.session_id,
                     },
                     ensure_ascii=False,
@@ -187,5 +239,6 @@ async def chat_sync(
         )
 
     except Exception as e:
-        logger.error(f"❌ 同步工作流执行失败: {e}")
-        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+        error_message = _safe_chat_error_message(e)
+        logger.error(f"❌ 同步工作流执行失败: {error_message}")
+        raise HTTPException(status_code=500, detail=f"处理失败: {error_message}")

@@ -91,6 +91,39 @@ class QuizAgentTest(unittest.TestCase):
         self.assertIn("AI 选择题生成失败", result.status["degraded_reason"])
         self.assertNotEqual(result.items[0].question, result.items[1].question)
 
+    def test_question_bank_failure_does_not_block_deterministic_fallback(self) -> None:
+        with (
+            patch("app.domains.practice.generation._list_question_bank_items", side_effect=RuntimeError("db down")),
+            patch("app.domains.practice.generation._invoke_generation_chain", side_effect=RuntimeError("model down")),
+        ):
+            result = build_mixed_practice_items_with_status(
+                subject_id="data-structure",
+                subject_name="数据结构与算法",
+                topic="数据结构与算法",
+                difficulty="基础",
+                count=5,
+                original_question="出一些数据结构的题目",
+                user_style_name="",
+                user_style_prompt="",
+                short_term_context="",
+                session_memory_context="",
+                long_term_context="",
+                model_name="test-model",
+            )
+
+        questions = "\n".join(item.question for item in result.items)
+        self.assertEqual(len(result.items), 5)
+        self.assertEqual(result.status["generated_count"], 5)
+        self.assertEqual(result.status["fallback_count"], 5)
+        self.assertTrue(result.status["question_bank_unavailable"])
+        self.assertEqual(result.status["question_bank_error_type"], "RuntimeError")
+        self.assertTrue(result.status["ai_generation_failed"])
+        self.assertFalse(result.status["partial"])
+        self.assertIn("题库读取失败", result.status["degraded_reason"])
+        self.assertIn("AI 选择题生成失败", result.status["degraded_reason"])
+        self.assertIn("数组", questions)
+        self.assertNotIn("HTTP", questions)
+
 
 if __name__ == "__main__":
     unittest.main()

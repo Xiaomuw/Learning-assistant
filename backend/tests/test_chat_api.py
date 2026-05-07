@@ -54,6 +54,11 @@ async def _fake_stream_failure(**_kwargs):
     yield {"node": "never", "state_update": {}, "elapsed": 0.0}
 
 
+async def _fake_stream_with_slow_first_chunk(**_kwargs):
+    await asyncio.sleep(0.02)
+    yield {"node": "router", "state_update": {"question_type": "concept"}, "elapsed": 0.02}
+
+
 class ChatApiTest(unittest.TestCase):
     def setUp(self) -> None:
         AppStatus.should_exit_event = None
@@ -297,6 +302,23 @@ class ChatApiTest(unittest.TestCase):
         self.assertIn(json.dumps({"question_type": "smalltalk", "elapsed": 0.01}, ensure_ascii=False), body)
         self.assertIn('{"question_type": "smalltalk", "explanation":', body)
 
+    def test_chat_sse_emits_heartbeat_during_slow_processing(self) -> None:
+        with patch.object(chat_module, "CHAT_HEARTBEAT_SECONDS", 0.001):
+            with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_stream_with_slow_first_chunk):
+                with self.client.stream(
+                    "POST",
+                    "/api/chat",
+                    json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
+                ) as response:
+                    body = "".join(chunk for chunk in response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: status", body)
+        self.assertIn('"heartbeat": true', body)
+        self.assertIn("仍在处理，本轮可能需要更久。", body)
+        self.assertIn("event: routing", body)
+        self.assertIn("event: done", body)
+
     def test_stream_chat_uses_orchestrator_runtime_without_shadow_events(self) -> None:
         async def _collect_events():
             chunks = []
@@ -411,8 +433,9 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("event: status", body)
         self.assertIn("event: error", body)
-        self.assertIn('"error": "RuntimeError"', body)
+        self.assertIn('"error": "学习引擎处理失败（RuntimeError），请稍后重试。"', body)
         self.assertIn('"error_type": "RuntimeError"', body)
+        self.assertIn('"retryable": true', body)
 
     def test_initial_state_contains_short_and_long_term_context(self) -> None:
         request = ChatRequest(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -9,6 +10,9 @@ from app.application.chat.persistence import persist_chat_session
 from app.application.chat.state_builder import build_initial_state
 from app.domains.practice.service import normalize_quiz_item
 from app.shared.schemas.contracts import ChatExecutionResult, UserMemoryRecord
+
+
+_STREAM_DONE = object()
 
 
 def run_chat_sync(
@@ -77,8 +81,19 @@ async def stream_chat(
 
 
 async def _async_stream_orchestrator_chunks(initial_state: dict[str, Any]) -> AsyncGenerator[dict[str, Any], None]:
-    for chunk in stream_orchestrator_chat(initial_state, request_mode="sse"):
+    iterator = stream_orchestrator_chat(initial_state, request_mode="sse")
+    while True:
+        chunk = await asyncio.to_thread(_next_stream_chunk, iterator)
+        if chunk is _STREAM_DONE:
+            break
         yield chunk
+
+
+def _next_stream_chunk(iterator: Any) -> dict[str, Any] | object:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return _STREAM_DONE
 
 
 def _stream_chunks_from_final_state(final_state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -104,6 +119,16 @@ def _stream_chunks_from_final_state(final_state: dict[str, Any]) -> list[dict[st
         final_state.get("quiz_clarification") if isinstance(final_state.get("quiz_clarification"), dict) else None
     )
     if quiz_items or quiz_clarification:
+        quiz_generation_status = (
+            final_state.get("quiz_generation_status")
+            if isinstance(final_state.get("quiz_generation_status"), dict)
+            else {}
+        )
+        if not quiz_generation_status:
+            quiz_generation_status = {
+                "generated_count": len(quiz_items),
+                "source": "LearningOrchestratorGraph",
+            }
         chunks.append(
             {
                 "node": "quiz_output_node",
@@ -114,10 +139,7 @@ def _stream_chunks_from_final_state(final_state: dict[str, Any]) -> list[dict[st
                     "quiz_request": quiz_request,
                     "quiz_clarification": quiz_clarification,
                     "final_answer": str(final_state.get("final_answer") or ""),
-                    "quiz_generation_status": {
-                        "generated_count": len(quiz_items),
-                        "source": "LearningOrchestratorGraph",
-                    },
+                    "quiz_generation_status": quiz_generation_status,
                 },
                 "elapsed": elapsed,
             }
