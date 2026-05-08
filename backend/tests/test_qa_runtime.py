@@ -728,6 +728,14 @@ class QARuntimeTest(unittest.TestCase):
             supports_structured_output=True,
             context_window=128000,
         )
+        fallback_profile = ModelProfile(
+            model_id="qwen3-coder-flash",
+            provider="Alibaba",
+            family="Qwen",
+            supports_tool_calling=False,
+            supports_structured_output=True,
+            context_window=128000,
+        )
         fallback_answer = AnswerSchema(
             topic="HTTP",
             thinking="HTTP 是应用层协议。",
@@ -746,6 +754,19 @@ class QARuntimeTest(unittest.TestCase):
                     fallback_answer,
                 ],
             ),
+            patch(
+                "app.domains.qa.runtime.get_model_profile",
+                return_value=fallback_profile,
+            ),
+            patch(
+                "app.domains.qa.runtime.retrieve_for_qa_fallback",
+                return_value={
+                    "retrieved_docs": [],
+                    "verified_context": [],
+                    "retrieval_diagnosis": {},
+                    "contextual_query": "什么是 HTTP？",
+                },
+            ) as mocked_retrieve,
         ):
             result = QARuntimeAgent(
                 request=request,
@@ -753,6 +774,7 @@ class QARuntimeTest(unittest.TestCase):
                 model_profile=profile,
             ).run()
 
+        mocked_retrieve.assert_not_called()
         self.assertTrue(result.degraded)
         self.assertTrue(result.fallback_used)
         self.assertEqual(result.primary_model_id, "llama3.3-70b-instruct")

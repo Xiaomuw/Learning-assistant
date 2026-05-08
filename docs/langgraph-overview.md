@@ -379,26 +379,26 @@ preflight_node -> router -> ...异常... -> graph_error_node -> finalize_node
 - `backend/app/orchestration/platform/webapp.py`
 
 用途：
-- 在 LangSmith Cloud / LangGraph Platform 中部署 `learning_assistant` graph
+- 在 LangSmith Cloud / LangGraph Platform 中部署兼容名 `learning_assistant`
 - 让 Studio 直接查看节点、边、state 和 trace
-- 不替换现有 FastAPI `/api/chat*`，当前仍是 sidecar 模式
+- 与 FastAPI `/api/chat*` 共享新 `LearningOrchestratorGraph` 入口；`learning_assistant` 只是外部兼容导出名，不再指向旧单体 graph
 
 ## 推荐阅读顺序
 
 如果你第一次接手这套 LangGraph，建议按下面顺序看：
 
-1. [backend/app/orchestration/graph/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graph/graph.py)
-2. [backend/app/shared/schemas/state.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/shared/schemas/state.py)
-3. [backend/app/orchestration/agents/router.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/agents/router.py)
-4. [backend/app/orchestration/agents/qa_agent.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/agents/qa_agent.py)
-5. [backend/app/domains/qa/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/domains/qa/runtime.py)
-6. [backend/app/orchestration/workflow/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/workflow/runtime.py)
+1. [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py)
+2. [backend/app/orchestration/graphs/orchestrator/intent_rules.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/intent_rules.py)
+3. [backend/app/orchestration/graphs/orchestrator/child_invokers.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/child_invokers.py)
+4. [backend/app/orchestration/graphs/qa/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/qa/graph.py)
+5. [backend/app/orchestration/graphs/question_generation/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/question_generation/graph.py)
+6. [backend/app/orchestration/graphs/mastery/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/mastery/graph.py)
 
 ## 一句话结论
 
-这个项目里的 LangGraph 主要负责两件事：
+这个项目里的企业级 LangGraph 主要负责两件事：
 
-- 把不同类型的问题分流到正确节点
-- 用共享状态把问答、出题、判题、记忆更新串成一条稳定学习工作流
+- 由 `LearningOrchestratorGraph` 把用户请求路由到 QA、出题或掌握度子图
+- 用 shared contract、repository Protocol 和 capability tooling 约束子图协作边界
 
-真正复杂的智能推理，现在主要在 `qa_agent_node` 内部完成，而不是直接散落在图边上。
+真正复杂的教学回答、题目生成和掌握度更新分别留在对应业务 Graph / domain service 内，Orchestrator 只做编排、组合与审计。

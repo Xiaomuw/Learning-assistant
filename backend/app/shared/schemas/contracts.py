@@ -391,6 +391,9 @@ class PracticePackResult(BaseModel):
     quiz_request: QuizRequestResolution
     quiz_clarification: QuizClarificationPanel | None = None
     items: list[PracticeRecommendation] = Field(default_factory=list)
+    generation_status: dict[str, Any] = Field(default_factory=dict)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+    message: str = ""
 
 
 class QuizPlan(BaseModel):

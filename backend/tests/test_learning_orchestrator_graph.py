@@ -60,6 +60,17 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
             GraphType.QUESTION_GENERATION.value,
         )
 
+    def test_routes_english_question_generation_intent(self) -> None:
+        result = build_graph().compile().invoke(
+            {"user_id": "u1", "thread_id": "t1", "user_message": "Generate two stack practice questions"}
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
+        self.assertEqual(result["quiz_request"]["action"], "generate_practice_pack")
+        self.assertEqual(result["quiz_request"]["topic"], "stack")
+        self.assertEqual(result["quiz_request"]["count"], 2)
+        self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
+
     def test_explicit_subject_quiz_request_overrides_session_topic(self) -> None:
         result = build_graph().compile().invoke(
             {
@@ -82,11 +93,34 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         self.assertEqual(result["quiz_request"]["active_topic"], "数据结构与算法")
         self.assertTrue(result["quiz_request"]["should_switch_topic"])
         self.assertTrue(result["child_graph_output"]["payload"]["question_items"])
+        ui_payload = result["child_graph_output"]["payload"]["final_response"]["ui_payload"]
+        self.assertNotIn("发现重复题目", str(ui_payload.get("quality_failure_summary") or ""))
         stems = "\n".join(str(item.get("stem") or "") for item in result["child_graph_output"]["payload"]["question_items"])
         self.assertIn("数组", stems)
         self.assertNotIn("TCP", stems)
         self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
         self.assertEqual(result["notebook_id"], "computer-network")
+
+    def test_explicit_http_quiz_request_overrides_session_dns_topic(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "user_id": "u1",
+                "thread_id": "t1",
+                "notebook_id": "computer-network",
+                "user_message": "给我出两道 HTTP 单选题\n请只给题目和选项",
+                "chat_runtime_context": {
+                    "session_memory": {"active_topic": "DNS"},
+                    "memory": {"recent_topics": ["DNS"]},
+                },
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
+        self.assertEqual(result["quiz_request"]["topic"], "HTTP")
+        self.assertEqual(result["quiz_request"]["requested_topic"], "HTTP")
+        self.assertEqual(result["quiz_request"]["active_topic"], "HTTP")
+        self.assertTrue(result["quiz_request"]["should_switch_topic"])
+        self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
 
     def test_clarifies_quiz_request_without_topic_or_context(self) -> None:
         result = build_graph().compile().invoke(

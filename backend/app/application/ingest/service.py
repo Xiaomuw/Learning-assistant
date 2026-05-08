@@ -6,7 +6,12 @@ from typing import Any
 
 from loguru import logger
 
-from app.application.errors import NotFoundError, ProcessingError, ValidationError
+from app.application.errors import (
+    NotFoundError,
+    ProcessingError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from app.infrastructure.db.repositories.subjects import get_subject_record
 from app.infrastructure.ingest.pdf import extract_text_from_pdf
 from app.infrastructure.ingest.web import extract_text_from_url
@@ -18,6 +23,72 @@ from app.shared.schemas.subject import normalize_subject_id
 def _ensure_subject_exists(subject_id: str) -> None:
     if not get_subject_record(subject_id):
         raise NotFoundError(f"学科 '{subject_id}' 不存在")
+
+
+_INFRASTRUCTURE_FAILURE_MARKERS = (
+    "api connection",
+    "apiconnectionerror",
+    "connection error",
+    "connection refused",
+    "connection to server",
+    "connecterror",
+    "could not translate host name",
+    "embedding",
+    "inference.do-ai.run",
+    "model is not available",
+    "model not found",
+    "model unavailable",
+    "name or service not known",
+    "nodename nor servname",
+    "operationalerror",
+    "pgvector",
+    "psycopg",
+    "temporary failure in name resolution",
+    "timed out",
+    "timeout",
+    "vector store",
+    "vectorstore",
+)
+
+_PDF_PARSE_FAILURE_MARKERS = (
+    "cannot read an empty file",
+    "eof marker",
+    "invalid pdf",
+    "pdfreaderror",
+    "startxref",
+    "stream has ended unexpectedly",
+)
+
+
+def _exception_chain_text(exc: Exception) -> str:
+    parts: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        parts.append(type(current).__name__)
+        parts.append(str(current))
+        current = current.__cause__ or current.__context__
+    return " ".join(parts).lower()
+
+
+def _is_infrastructure_failure(exc: Exception) -> bool:
+    text = _exception_chain_text(exc)
+    return any(marker in text for marker in _INFRASTRUCTURE_FAILURE_MARKERS)
+
+
+def _is_pdf_parse_failure(exc: Exception) -> bool:
+    text = _exception_chain_text(exc)
+    return any(marker in text for marker in _PDF_PARSE_FAILURE_MARKERS)
+
+
+def _raise_ingest_failure(prefix: str, exc: Exception) -> None:
+    detail = f"{prefix}: {str(exc)}"
+    if _is_infrastructure_failure(exc):
+        logger.warning(f"⚠️ {detail}")
+        raise ServiceUnavailableError(detail) from exc
+    logger.error(f"❌ {detail}")
+    raise ProcessingError(detail) from exc
 
 
 def _build_pdf_ingest_payload(*, filename: str, subject_id: str, pages: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, Any]]]:
@@ -99,8 +170,9 @@ def ingest_pdf_bytes(*, filename: str, content: bytes, subject_id: str, user_id:
     except (NotFoundError, ValidationError):
         raise
     except Exception as exc:
-        logger.error(f"❌ 文件处理失败: {exc}")
-        raise ProcessingError(f"文件处理失败: {str(exc)}")
+        if _is_pdf_parse_failure(exc):
+            raise ValidationError(f"PDF 解析失败或文件格式不正确: {str(exc)}") from exc
+        _raise_ingest_failure("文件处理失败", exc)
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -129,5 +201,4 @@ def ingest_urls(*, subject_id: str, urls: list[str], user_id: str) -> IngestResu
     except (NotFoundError, ValidationError):
         raise
     except Exception as exc:
-        logger.error(f"❌ URL 入库失败: {exc}")
-        raise ProcessingError(f"URL 入库失败: {str(exc)}") from exc
+        _raise_ingest_failure("URL 入库失败", exc)

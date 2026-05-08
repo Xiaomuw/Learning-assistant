@@ -12,6 +12,7 @@ from app.infrastructure.llm.provider import (
     validate_chat_model_access,
 )
 from app.infrastructure.llm.config import (
+    get_embedding_model,
     get_locked_chat_model,
     get_model_switching_status,
     is_model_switching_enabled,
@@ -30,7 +31,7 @@ def _locked_model_config_snapshot() -> ModelConfigSnapshot:
     }
     return ModelConfigSnapshot(
         current_model=locked_model,
-        embedding_model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+        embedding_model=get_embedding_model(),
         available_models=[ModelOptionRecord.model_validate(option)],
         model_switching_enabled=False,
         model_switching_status=get_model_switching_status(),
@@ -55,7 +56,7 @@ def build_model_config_response(*, force_refresh: bool = False) -> ModelConfigSn
 
     return ModelConfigSnapshot(
         current_model=current_model,
-        embedding_model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+        embedding_model=get_embedding_model(),
         available_models=[ModelOptionRecord.model_validate(item) for item in available_models],
         model_switching_enabled=True,
         model_switching_status=get_model_switching_status(),

@@ -308,6 +308,7 @@ class ChatConnectionError extends Error {
   retryable: boolean;
   status?: number;
   receivedAnyEvent: boolean;
+  reason?: string;
 
   constructor(
     message: string,
@@ -316,11 +317,13 @@ class ChatConnectionError extends Error {
       retryable,
       status,
       receivedAnyEvent = false,
+      reason,
     }: {
       attempts: number;
       retryable: boolean;
       status?: number;
       receivedAnyEvent?: boolean;
+      reason?: string;
     },
   ) {
     super(message);
@@ -329,6 +332,7 @@ class ChatConnectionError extends Error {
     this.retryable = retryable;
     this.status = status;
     this.receivedAnyEvent = receivedAnyEvent;
+    this.reason = reason;
   }
 }
 
@@ -678,6 +682,35 @@ function buildChatConnectionFailureMessage(error: unknown, attempts: number): st
   return `${retryText}${message ? `原因：${message}` : ""} 请检查后端服务或稍后重试。`;
 }
 
+function buildChatStreamFailure(error: unknown, receivedAnyEvent: boolean): ChatConnectionError {
+  const payload =
+    error && typeof error === "object" && !Array.isArray(error)
+      ? (error as Record<string, unknown>)
+      : {};
+  const reason = typeof payload.reason === "string" ? payload.reason : "workflow_error";
+  const retryable =
+    typeof payload.retryable === "boolean" ? payload.retryable : true;
+  const rawMessage = normalizeErrorMessage(error);
+  let message: string;
+
+  if (reason === "timeout") {
+    message = `处理超时：学习引擎处理时间较长，本轮请求已经中断。你可以稍后重试，或换一种更具体的问法。${rawMessage ? `原因：${rawMessage}` : ""}`;
+  } else if (reason === "model_unavailable") {
+    message = `模型服务暂时不可用：${rawMessage} 请稍后再试。`;
+  } else if (reason === "stream_cancelled") {
+    message = "连接已中断：当前回答没有完整返回，你可以直接手动重试。";
+  } else {
+    message = `处理失败：${rawMessage} 你可以直接手动重试。`;
+  }
+
+  return new ChatConnectionError(message, {
+    attempts: 1,
+    retryable,
+    receivedAnyEvent,
+    reason,
+  });
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -761,6 +794,7 @@ export function sendChatSSE(
             attempts: 1,
             retryable: false,
             receivedAnyEvent,
+            reason: receivedAnyEvent ? "timeout" : "connect_timeout",
           }
         )
       );
@@ -841,23 +875,27 @@ export function sendChatSSE(
           } else if (line.startsWith("data:")) {
             const raw = line.slice(5).trim();
             receivedAnyEvent = true;
+            let parsedData: unknown = raw;
             try {
-              const data = JSON.parse(raw);
-              onEvent({ event: currentEvent || "message", data });
+              parsedData = JSON.parse(raw);
             } catch {
-              onEvent({ event: currentEvent || "message", data: raw });
+              parsedData = raw;
+            }
+
+            if (currentEvent === "error") {
+              onEvent({ event: currentEvent || "message", data: parsedData });
+              cleanup();
+              return;
             }
 
             if (currentEvent === "done") {
+              onEvent({ event: currentEvent || "message", data: parsedData });
               cleanup();
               onDone?.();
               return;
             }
 
-            if (currentEvent === "error") {
-              cleanup();
-              return;
-            }
+            onEvent({ event: currentEvent || "message", data: parsedData });
           }
         }
       }
@@ -877,6 +915,7 @@ export function sendChatSSE(
             attempts,
             retryable: !receivedAnyEvent,
             receivedAnyEvent,
+            reason: receivedAnyEvent ? "stream_interrupted" : "connect_failed",
           })
         );
       }
@@ -1403,12 +1442,18 @@ export function createPracticePack(payload: {
   quiz_request: QuizRequestResolution;
   quiz_clarification?: QuizClarificationPanel | null;
   items: QuizItem[];
+  generation_status?: Record<string, unknown>;
+  errors?: Array<Record<string, unknown>>;
+  message?: string;
 }> {
   return request<{
     subject_id: string;
     quiz_request: QuizRequestResolution;
     quiz_clarification?: QuizClarificationPanel | null;
     items: QuizItem[];
+    generation_status?: Record<string, unknown>;
+    errors?: Array<Record<string, unknown>>;
+    message?: string;
   }>("/practice/packs", {
     method: "POST",
     body: JSON.stringify({

@@ -11,7 +11,11 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 import app.infrastructure.llm.provider as provider
-from app.infrastructure.llm.config import get_chat_model_connection
+from app.infrastructure.llm.config import (
+    get_chat_model_connection,
+    get_embedding_model_connection,
+    get_embedding_provider,
+)
 from app.infrastructure.llm.profile import get_model_profile
 
 
@@ -104,6 +108,82 @@ class LLMProviderTest(unittest.TestCase):
         self.assertEqual(connection.base_url, "https://integrate.api.nvidia.com/v1")
         self.assertEqual(connection.provider, "NVIDIA")
 
+    def test_embedding_model_connection_can_use_dedicated_provider(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "EMBEDDING_PROVIDER": "openai-compatible",
+                "MODEL_ACCESS_KEY": "do-token",
+                "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
+                "OPENAI_EMBEDDING_BASE_URL": "https://api.openai.test/v1",
+                "OPENAI_EMBEDDING_API_KEY": "embedding-token",
+                "OPENAI_EMBEDDING_MODEL": "text-embedding-3-large",
+            },
+            clear=False,
+        ):
+            connection = get_embedding_model_connection()
+
+        self.assertEqual(connection.model_id, "text-embedding-3-large")
+        self.assertEqual(connection.api_key, "embedding-token")
+        self.assertEqual(connection.base_url, "https://api.openai.test/v1")
+        self.assertEqual(connection.provider, "OpenAI-compatible")
+
+    def test_embedding_provider_defaults_to_google_gemini_model(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "GOOGLE_API_KEY": "google-token",
+            },
+            clear=True,
+        ):
+            connection = get_embedding_model_connection()
+
+        self.assertEqual(get_embedding_provider(), "google")
+        self.assertEqual(connection.model_id, "models/gemini-embedding-2")
+        self.assertEqual(connection.api_key, "google-token")
+        self.assertEqual(connection.base_url, "")
+        self.assertEqual(connection.provider, "Google")
+
+    def test_openai_compatible_embedding_provider_has_openai_safe_default_model(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "EMBEDDING_PROVIDER": "openai-compatible",
+                "MODEL_ACCESS_KEY": "do-token",
+                "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
+            },
+            clear=True,
+        ):
+            connection = get_embedding_model_connection()
+
+        self.assertEqual(connection.model_id, "text-embedding-3-small")
+        self.assertEqual(connection.api_key, "do-token")
+        self.assertEqual(connection.base_url, "https://inference.do-ai.run/v1")
+        self.assertEqual(connection.provider, "DigitalOcean")
+
+    def test_get_embeddings_uses_dedicated_embedding_connection(self) -> None:
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "EMBEDDING_PROVIDER": "openai-compatible",
+                    "MODEL_ACCESS_KEY": "do-token",
+                    "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
+                    "OPENAI_EMBEDDING_BASE_URL": "https://api.openai.test/v1",
+                    "OPENAI_EMBEDDING_API_KEY": "embedding-token",
+                    "OPENAI_EMBEDDING_MODEL": "text-embedding-3-large",
+                },
+                clear=False,
+            ),
+            patch("app.infrastructure.llm.clients.OpenAIEmbeddings") as mocked_embeddings,
+        ):
+            provider.get_embeddings(default_model="text-embedding-3-small")
+
+        self.assertEqual(mocked_embeddings.call_args.kwargs["model"], "text-embedding-3-large")
+        self.assertEqual(mocked_embeddings.call_args.kwargs["api_key"], "embedding-token")
+        self.assertEqual(mocked_embeddings.call_args.kwargs["base_url"], "https://api.openai.test/v1")
+        mocked_embeddings.return_value.embed_query.assert_not_called()
+
     def test_glm47_tool_and_structured_capabilities_are_opt_in(self) -> None:
         with patch.dict(
             "os.environ",
@@ -142,6 +222,7 @@ class LLMProviderTest(unittest.TestCase):
                 "os.environ",
                 {
                     "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
+                    "OPENAI_EMBEDDING_BASE_URL": "",
                     "OPENAI_EMBEDDING_MODEL": "all-mini-lm-l6-v2",
                 },
                 clear=False,
@@ -157,21 +238,23 @@ class LLMProviderTest(unittest.TestCase):
     def test_digitalocean_embedding_disables_context_length_checker_by_default(self) -> None:
         with patch.dict(
             "os.environ",
-            {
-                "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
-            },
-            clear=False,
+                {
+                    "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
+                    "OPENAI_EMBEDDING_BASE_URL": "",
+                },
+                clear=False,
         ):
             self.assertFalse(provider._get_embedding_check_ctx_length())
 
     def test_embedding_context_length_checker_can_be_overridden(self) -> None:
         with patch.dict(
             "os.environ",
-            {
-                "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
-                "EMBEDDING_CHECK_CTX_LENGTH": "true",
-            },
-            clear=False,
+                {
+                    "OPENAI_BASE_URL": "https://inference.do-ai.run/v1",
+                    "OPENAI_EMBEDDING_BASE_URL": "",
+                    "EMBEDDING_CHECK_CTX_LENGTH": "true",
+                },
+                clear=False,
         ):
             self.assertTrue(provider._get_embedding_check_ctx_length())
 

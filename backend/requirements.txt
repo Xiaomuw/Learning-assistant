@@ -9,20 +9,20 @@ python-multipart==0.0.20       # 文件上传支持
 sse-starlette==2.2.1           # SSE 流式响应
 
 # ---------- LLM / Agent 框架 ----------
-langchain==0.3.25
-langchain-openai==0.3.14
-langchain-community==0.3.24
-langgraph==0.4.1
-langsmith==0.3.45
-langgraph-checkpoint-postgres
-langchain-postgres
+langchain>=1.0,<2.0
+langchain-core>=1.0,<2.0
+langchain-openai>=1.0,<2.0
+langgraph>=1.0,<2.0
+langsmith>=0.8.2,<0.9
+langgraph-checkpoint-postgres>=3.0,<4.0
+langchain-postgres>=0.0.17,<0.1
 
 # ---------- 向量数据库 ----------
 psycopg[binary,pool]>=3.2.9
 
 # ---------- 文档解析 ----------
 pypdf==5.4.0                   # PDF 解析
-langchain-text-splitters==0.3.8
+langchain-text-splitters>=1.0,<2.0
 beautifulsoup4==4.13.3         # Web scraping / URL doc ingestion
 requests==2.32.3               # Web requests
 SQLAlchemy>=2.0.36             # ORM / PostgreSQL persistence

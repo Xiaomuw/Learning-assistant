@@ -59,6 +59,17 @@ async def _fake_stream_with_slow_first_chunk(**_kwargs):
     yield {"node": "router", "state_update": {"question_type": "concept"}, "elapsed": 0.02}
 
 
+class _CloseGuardedStream:
+    def __init__(self, pending_task: asyncio.Task) -> None:
+        self.pending_task = pending_task
+        self.closed = False
+
+    async def aclose(self) -> None:
+        if not self.pending_task.done():
+            raise RuntimeError("aclose(): asynchronous generator is already running")
+        self.closed = True
+
+
 class ChatApiTest(unittest.TestCase):
     def setUp(self) -> None:
         AppStatus.should_exit_event = None
@@ -435,7 +446,22 @@ class ChatApiTest(unittest.TestCase):
         self.assertIn("event: error", body)
         self.assertIn('"error": "学习引擎处理失败（RuntimeError），请稍后重试。"', body)
         self.assertIn('"error_type": "RuntimeError"', body)
+        self.assertIn('"reason": "workflow_error"', body)
         self.assertIn('"retryable": true', body)
+
+    def test_sse_cleanup_awaits_cancelled_pending_chunk_before_close(self) -> None:
+        async def _run_cleanup() -> _CloseGuardedStream:
+            pending_task = asyncio.create_task(asyncio.sleep(10))
+            stream = _CloseGuardedStream(pending_task)
+            await chat_module._close_chat_stream_safely(
+                chat_stream=stream,
+                pending_chunk_task=pending_task,
+            )
+            self.assertTrue(pending_task.cancelled())
+            return stream
+
+        stream = asyncio.run(_run_cleanup())
+        self.assertTrue(stream.closed)
 
     def test_initial_state_contains_short_and_long_term_context(self) -> None:
         request = ChatRequest(

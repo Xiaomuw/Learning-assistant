@@ -161,3 +161,12 @@
 - 原因：业务 Graph 和 runtime 决策应按能力而不是 provider 分支，才能让 Tavily 只是 `web_search` 的一个 provider，并为后续工具扩展留出统一权限边界。
 - 影响：`domains.qa.tool_loop` 按 capability/provider 摘要记录 source usage、tool decision 和 trace metadata；新生成的 process summary 不再出现历史 provider 工具名。旧历史消息仍由展示层兼容映射为通用 capability 标签。
 - 替代方案：继续让 runtime 暴露 provider 工具名；短期少改代码，但会破坏 capability-based 工具治理和跨 provider 可观测性。
+
+## ADR-021：Orchestrator 子图调用边界采用 ChildGraphInvoker
+
+- 背景：`LearningOrchestratorGraph` 已成为 `/api/chat` 生产入口，子图调用需要避免把 QA、出题、掌握度的 runtime 细节继续堆在 Orchestrator node 中。
+- 决策：Orchestrator 到业务子图的唯一调用边界是 `ChildGraphInvokerFactory / ChildGraphInvoker`。Orchestrator node 只委托 invoker；child state 组装、child graph invoke、`ChildGraphOutput` 映射集中在 invoker 层。
+- 原因：这让路由、子图运行和响应组合分离，避免 `nodes.py` 重新变成高分支编排点，也便于后续把 production dependency wiring 抽到专门 composition builder。
+- 事实写入责任：业务领域事实原则上由子 Graph production build 通过对应 repository 写入。现有 `/api/chat` runtime 的 child facts 汇总写入视为兼容期 facts 转发器，不属于 Orchestrator Graph 节点职责；后续收口时应避免与子图内部写入重复。
+- 影响：业务 Graph 仍只能通过 shared contract、repository Protocol 和 `LearningEvent` 协作；Orchestrator 仍只负责路由、上下文加载、响应组合和运行审计。
+- 替代方案：继续在 Orchestrator node 内直接构造每个子图的生产依赖；短期少文件，但会让 Orchestrator 知道过多子领域 runtime 细节。

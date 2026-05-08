@@ -69,6 +69,36 @@ class AuthApiTest(unittest.TestCase):
             code = mocked_sender.call_args.kwargs["code"]
         return response, code
 
+    def test_send_code_returns_503_for_email_sender_failures_without_challenge(self) -> None:
+        email_sender = importlib.import_module("app.infrastructure.auth.email_sender")
+        cases = [
+            (
+                "smtp-missing@example.com",
+                email_sender.EmailSenderConfigurationError("SMTP 配置仍是占位值：SMTP_HOST"),
+                "SMTP 配置仍是占位值",
+            ),
+            (
+                "smtp-failed@example.com",
+                email_sender.EmailSenderError("SMTP 发信失败，请稍后重试"),
+                "SMTP 发信失败",
+            ),
+        ]
+
+        for email, sender_error, expected_detail in cases:
+            with self.subTest(email=email), patch(
+                "app.application.auth.service.send_register_verification_email",
+                side_effect=sender_error,
+            ):
+                response = self.client.post(
+                    "/api/auth/register/send-code",
+                    json={"email": email},
+                )
+
+            self.assertEqual(response.status_code, 503)
+            self.assertIn(expected_detail, response.json()["detail"])
+            challenge = self.auth_repos.get_active_email_verification_challenge_record(email)
+            self.assertIsNone(challenge)
+
     def test_send_code_complete_register_and_auth_flow(self) -> None:
         send_response, code = self._send_code("auth-user@example.com")
         self.assertEqual(send_response.json()["resend_after_seconds"], 60)

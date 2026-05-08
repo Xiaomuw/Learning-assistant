@@ -231,6 +231,7 @@ def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
     status = dict(state.get("generation_status") or {})
     issues = list(solver.issues)
     topic_alignment_issues: list[str] = []
+    topic_alignment_reasons: list[str] = []
 
     if len(candidates) < blueprint.count:
         issues.append(f"题目数量不足: expected={blueprint.count}, actual={len(candidates)}")
@@ -250,10 +251,12 @@ def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
             issues.append(f"第 {index} 题缺少 rubric")
         if blueprint.source_policy == SourcePolicy.NOTEBOOK_ONLY.value and not _grounded_in_notebook(candidate):
             issues.append(f"第 {index} 题不满足 notebook_only grounding")
-        topic_issue = _topic_alignment_issue(blueprint, candidate, index)
+        topic_issue, topic_reason = _topic_alignment_check(blueprint, candidate, index)
+        topic_alignment_reasons.append(topic_reason)
         if topic_issue:
             topic_alignment_issues.append(topic_issue)
 
+    issues.extend(_in_pack_duplicate_issues(candidates))
     issues.extend(topic_alignment_issues)
     topic_alignment_passed = not topic_alignment_issues
     retry_count = int(status.get("quality_retry_count") or 0)
@@ -274,10 +277,15 @@ def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
                 "concept_alignment",
                 "source_policy_grounding",
                 "topic_alignment",
+                "in_pack_dedupe",
             ],
             "issues": issues,
             "topic_alignment_passed": topic_alignment_passed,
-            "topic_alignment_reason": "pass" if topic_alignment_passed else "主题不一致",
+            "topic_alignment_reason": _summarize_topic_alignment_reason(
+                topic_alignment_reasons,
+                passed=topic_alignment_passed,
+            ),
+            "topic_alignment_reasons": topic_alignment_reasons,
         },
     )
     return {"quality_report": report.model_dump(mode="json")}
@@ -319,11 +327,15 @@ def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
         candidates = _candidate_list(state)
         report = QualityReport.model_validate(state.get("quality_report") or {})
         duplicate_ids: list[str] = []
+        reuse_by_signature: dict[str, str] = {}
         status = dict(state.get("generation_status") or {})
         errors = list(state.get("errors") or [])
         for candidate in candidates:
             try:
-                matches = question_item_repository.find_similar(candidate.model_dump(mode="json"), limit=5)
+                matches = question_item_repository.find_similar(
+                    _question_item_payload_with_context(candidate, state),
+                    limit=5,
+                )
             except Exception as exc:
                 status.update(
                     {
@@ -340,17 +352,29 @@ def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
                     ).model_dump(mode="json")
                 )
                 matches = []
-            duplicate_ids.extend(str(item.get("id") or item.get("question_id")) for item in matches if item)
+            match_ids = [
+                str(item.get("id") or item.get("question_id"))
+                for item in matches
+                if item and str(item.get("id") or item.get("question_id") or "").strip()
+            ]
+            duplicate_ids.extend(match_ids)
+            if match_ids:
+                reuse_by_signature[_candidate_signature(candidate)] = match_ids[0]
 
         duplicate_ids = sorted({item for item in duplicate_ids if item})
-        dedupe = DedupeReport(passed=not duplicate_ids, duplicate_question_ids=duplicate_ids)
-        issues = list(report.issues)
+        dedupe = DedupeReport(passed=True, duplicate_question_ids=duplicate_ids)
         if duplicate_ids:
-            issues.append(f"发现重复题目: {','.join(duplicate_ids)}")
+            status.update(
+                {
+                    "external_duplicate_count": len(duplicate_ids),
+                    "dedupe_reused_question_ids": duplicate_ids,
+                    "dedupe_reuse_by_signature": reuse_by_signature,
+                }
+            )
         updated = report.model_copy(
             update={
-                "passed": report.passed and dedupe.passed,
-                "issues": issues,
+                "passed": report.passed,
+                "issues": list(report.issues),
                 "dedupe_checker": dedupe,
             }
         )
@@ -401,6 +425,11 @@ def make_persist_question_items_node(
         items: list[QuestionItem] = []
         events: list[LearningEvent] = []
         status = dict(state.get("generation_status") or {})
+        reuse_by_signature = (
+            status.get("dedupe_reuse_by_signature")
+            if isinstance(status.get("dedupe_reuse_by_signature"), dict)
+            else {}
+        )
         errors = list(state.get("errors") or [])
 
         review_event = _learning_event(
@@ -434,8 +463,9 @@ def make_persist_question_items_node(
                     )
                 )
             for candidate in candidates:
+                reused_item_id = str(reuse_by_signature.get(_candidate_signature(candidate)) or "").strip()
                 item = QuestionItem(
-                    id=f"qitem-{uuid4()}",
+                    id=reused_item_id or f"qitem-{uuid4()}",
                     stem=candidate.stem,
                     options=candidate.options,
                     primary_concept_id=candidate.primary_concept_id,
@@ -446,22 +476,24 @@ def make_persist_question_items_node(
                     quality_report=report,
                     generation_source=candidate.generation_source,
                 )
-                payload = item.model_dump(mode="json")
-                try:
-                    item_id = question_item_repository.create_question_item(payload)
-                except Exception as exc:
-                    item_id = item.id
-                    status["persist_degraded"] = True
-                    status["persist_error_type"] = exc.__class__.__name__
-                    errors.append(
-                        GraphError(
-                            code="question_item_persist_unavailable",
-                            message=exc.__class__.__name__,
-                            node="persist_question_items",
-                            severity=GraphErrorSeverity.WARNING,
-                        ).model_dump(mode="json")
-                    )
-                item = item.model_copy(update={"id": item_id})
+                item_id = reused_item_id
+                if not item_id:
+                    payload = _question_item_payload_with_context(item, state)
+                    try:
+                        item_id = question_item_repository.create_question_item(payload)
+                    except Exception as exc:
+                        item_id = item.id
+                        status["persist_degraded"] = True
+                        status["persist_error_type"] = exc.__class__.__name__
+                        errors.append(
+                            GraphError(
+                                code="question_item_persist_unavailable",
+                                message=exc.__class__.__name__,
+                                node="persist_question_items",
+                                severity=GraphErrorSeverity.WARNING,
+                            ).model_dump(mode="json")
+                        )
+                    item = item.model_copy(update={"id": item_id})
                 item_ids.append(item_id)
                 items.append(item)
                 events.append(
@@ -475,6 +507,7 @@ def make_persist_question_items_node(
                             "difficulty": item.difficulty,
                             "source_refs": [ref.model_dump(mode="json") for ref in item.source_refs],
                             "generation_source": item.generation_source,
+                            "reused_existing": bool(reused_item_id),
                         },
                     )
                 )
@@ -573,7 +606,7 @@ def compose_response_node(state: QuestionGenerationState) -> dict[str, Any]:
 def _primary_concept(state: QuestionGenerationState) -> ConceptRef:
     quiz_request = state.get("quiz_request") if isinstance(state.get("quiz_request"), dict) else {}
     quiz_topic = str(
-        quiz_request.get("active_topic") or quiz_request.get("requested_topic") or quiz_request.get("topic") or ""
+        quiz_request.get("requested_topic") or quiz_request.get("active_topic") or quiz_request.get("topic") or ""
     ).strip()
     canonical_subject_topic = _canonical_subject_topic(
         str(quiz_request.get("subject_id") or state.get("subject_id") or state.get("notebook_id") or "")
@@ -686,39 +719,102 @@ def _topic_alignment_issue(
     candidate: QuestionCandidate,
     index: int,
 ) -> str:
+    issue, _ = _topic_alignment_check(blueprint, candidate, index)
+    return issue
+
+
+def _topic_alignment_check(
+    blueprint: ItemBlueprint,
+    candidate: QuestionCandidate,
+    index: int,
+) -> tuple[str, str]:
     topic = blueprint.concept_name.strip()
     if not topic:
-        return ""
+        return "", "missing_topic_signal"
 
     text = _candidate_search_text(candidate)
     normalized_text = _normalize_for_topic_match(text)
-    normalized_topic = _normalize_for_topic_match(topic)
     subject_id = str(blueprint.constraints.get("subject_id") or "")
+
+    for candidate_topic in _topic_candidates(blueprint):
+        normalized_topic = _normalize_for_topic_match(candidate_topic)
+        if normalized_topic and normalized_topic in normalized_text:
+            return "", "exact_topic_match"
+
+        aliases = _topic_aliases(candidate_topic)
+        if any(_normalize_for_topic_match(alias) in normalized_text for alias in aliases if alias):
+            return "", "alias_match"
 
     profile = _topic_profile(topic, subject_id)
     if profile:
         blocked = [term for term in profile["blocked"] if term in normalized_text]
         matched = [term for term in profile["keywords"] if term in normalized_text]
         if blocked:
-            return f"第 {index} 题主题不一致: requested={topic}, detected={','.join(blocked[:3])}"
+            return (
+                f"第 {index} 题主题不一致: requested={topic}, detected={','.join(blocked[:3])}",
+                "blocked_subject_mismatch",
+            )
         if not matched:
-            return f"第 {index} 题主题不一致: 未体现「{topic}」相关知识点"
-        return ""
+            return f"第 {index} 题主题不一致: 未体现「{topic}」相关知识点", "missing_topic_signal"
+        return "", "subject_profile_match"
 
-    if normalized_topic and normalized_topic in normalized_text:
-        return ""
+    return f"第 {index} 题主题不一致: 未体现「{topic}」", "missing_topic_signal"
 
-    aliases = _topic_aliases(topic)
-    if any(_normalize_for_topic_match(alias) in normalized_text for alias in aliases if alias):
-        return ""
 
-    return f"第 {index} 题主题不一致: 未体现「{topic}」"
+def _topic_candidates(blueprint: ItemBlueprint) -> tuple[str, ...]:
+    raw_topics = [
+        blueprint.concept_name,
+        blueprint.constraints.get("requested_topic") or "",
+        blueprint.constraints.get("active_topic") or "",
+        blueprint.constraints.get("topic") or "",
+    ]
+    topics: list[str] = []
+    seen: set[str] = set()
+    for raw_topic in raw_topics:
+        topic = str(raw_topic or "").strip()
+        normalized = _normalize_for_topic_match(topic)
+        if not topic or normalized in seen:
+            continue
+        seen.add(normalized)
+        topics.append(topic)
+    return tuple(topics)
 
+
+def _summarize_topic_alignment_reason(reasons: list[str], *, passed: bool) -> str:
+    ordered_reasons = (
+        "exact_topic_match",
+        "alias_match",
+        "subject_profile_match",
+        "blocked_subject_mismatch",
+        "missing_topic_signal",
+    )
+    for reason in ordered_reasons:
+        if reason in reasons:
+            return reason
+    return "pass" if passed else "missing_topic_signal"
+
+
+
+def _in_pack_duplicate_issues(candidates: list[QuestionCandidate]) -> list[str]:
+    seen: dict[str, int] = {}
+    issues: list[str] = []
+    for index, candidate in enumerate(candidates, start=1):
+        signature = _candidate_signature(candidate)
+        previous = seen.get(signature)
+        if previous is not None:
+            issues.append(f"第 {index} 题与第 {previous} 题重复")
+        else:
+            seen[signature] = index
+    return issues
+
+
+def _candidate_signature(candidate: QuestionCandidate) -> str:
+    option_text = "|".join(_normalize_for_topic_match(option.text) for option in candidate.options)
+    return f"{_normalize_for_topic_match(candidate.stem)}::{option_text}"
 
 def _candidate_search_text(candidate: QuestionCandidate) -> str:
     parts = [
         candidate.stem,
-        candidate.primary_concept_id,
         candidate.answer_key.correct_option_text,
         candidate.answer_key.explanation,
         candidate.rubric.full_credit,
@@ -744,12 +840,22 @@ def _topic_profile(topic: str, subject_id: str) -> dict[str, tuple[str, ...]] | 
                 "数组",
                 "链表",
                 "栈",
+                "stack",
+                "lifo",
+                "push",
+                "pop",
+                "入栈",
+                "出栈",
                 "队列",
+                "queue",
+                "fifo",
                 "树",
                 "二叉树",
                 "图",
                 "哈希",
                 "hash",
+                "hashmap",
+                "散列",
                 "排序",
                 "查找",
                 "复杂度",
@@ -804,8 +910,14 @@ def _topic_profile(topic: str, subject_id: str) -> dict[str, tuple[str, ...]] | 
 
 def _topic_aliases(topic: str) -> tuple[str, ...]:
     compact = _normalize_for_topic_match(topic)
+    if compact in {"stack", "栈"} or "stack" in compact or "栈" in compact:
+        return ("stack", "栈", "LIFO", "后进先出", "push", "pop", "入栈", "出栈")
+    if compact in {"queue", "队列"} or "queue" in compact or "队列" in compact:
+        return ("queue", "队列", "FIFO", "先进先出", "enqueue", "dequeue", "入队", "出队")
     if "hashmap" in compact or "hash map" in topic.lower() or "哈希" in compact:
-        return ("HashMap", "哈希", "散列", "哈希表")
+        return ("HashMap", "Hash Map", "哈希", "散列", "哈希表", "散列表", "hash")
+    if "数据库索引" in compact or "databaseindex" in compact or ("index" in compact and "database" in compact):
+        return ("数据库索引", "database index", "索引", "B+树", "B树", "联合索引", "最左前缀")
     if "http" in compact:
         return ("HTTP", "请求", "响应", "状态码", "浏览器", "服务器")
     if "tcp" in compact:
@@ -855,6 +967,24 @@ def _grounded_in_notebook(candidate: QuestionCandidate) -> bool:
 def _blueprint_concept_id(state: QuestionGenerationState) -> str:
     blueprint = ItemBlueprint.model_validate(state.get("generation_blueprint") or {})
     return blueprint.primary_concept_id
+
+
+def _question_item_payload_with_context(item: Any, state: QuestionGenerationState) -> dict[str, Any]:
+    if hasattr(item, "model_dump"):
+        payload = item.model_dump(mode="json")
+    else:
+        payload = dict(item or {})
+    quiz_request = state.get("quiz_request") if isinstance(state.get("quiz_request"), dict) else {}
+    subject_id = str(quiz_request.get("subject_id") or state.get("subject_id") or state.get("notebook_id") or "").strip()
+    payload.update(
+        {
+            "user_id": str(state.get("user_id") or ""),
+            "subject_id": subject_id,
+            "notebook_id": str(state.get("notebook_id") or subject_id or ""),
+            "graph_run_id": str(state.get("run_id") or state.get("graph_run_id") or ""),
+        }
+    )
+    return payload
 
 
 def _learning_event(
