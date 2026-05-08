@@ -37,13 +37,19 @@ import {
 } from "@/lib/api";
 import {
   DEFAULT_NOTEBOOK_ID,
+  FALLBACK_NOTEBOOKS,
+  clearStoredChatDraft,
   clearStoredPracticeState,
+  loadLatestStoredChatDraft,
+  loadStoredChatDraft,
   loadStoredMemory,
   loadStoredModelConfig,
   loadStoredNotebookId,
   loadStoredSessions,
+  mergeStoredChatDraftsWithSessions,
   persistMemory,
   persistQuiz,
+  persistStoredChatDraft,
   persistStoredModelConfig,
   persistStoredSessions,
   persistStoredNotebookId,
@@ -699,6 +705,31 @@ function getCurrentProcessLabel(message: Message) {
   return "已生成回答";
 }
 
+function notebookListOrFallback(notebooks: Notebook[]) {
+  return notebooks.length > 0 ? notebooks : FALLBACK_NOTEBOOKS;
+}
+
+function resolveNotebookId(
+  notebooks: Notebook[],
+  preferredId?: string | null,
+  fallbackId = DEFAULT_NOTEBOOK_ID
+) {
+  const normalizedNotebooks = notebookListOrFallback(notebooks);
+  const normalizedPreferredId = preferredId?.trim();
+  if (
+    normalizedPreferredId &&
+    normalizedNotebooks.some((notebook) => notebook.id === normalizedPreferredId)
+  ) {
+    return normalizedPreferredId;
+  }
+
+  if (normalizedNotebooks.some((notebook) => notebook.id === fallbackId)) {
+    return fallbackId;
+  }
+
+  return normalizedNotebooks[0]?.id ?? DEFAULT_NOTEBOOK_ID;
+}
+
 export default function ChatPage() {
   const { user, isLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -715,6 +746,7 @@ export default function ChatPage() {
   const [currentSessionId, setCurrentSessionId] = useState<string>("");
   const [showHistory, setShowHistory] = useState(false);
   const activeStreamRef = useRef<AbortController | null>(null);
+  const activeDraftSessionRef = useRef<string>("");
 
   useEffect(() => {
     if (isLoading || !user) {
@@ -733,17 +765,17 @@ export default function ChatPage() {
 
     async function initializePage() {
       setMemory(loadStoredMemory());
-      setSessions(loadStoredSessions());
+      setSessions(mergeStoredChatDraftsWithSessions(loadStoredSessions()));
       setModelConfig(loadStoredModelConfig());
 
       try {
         const [
-          remoteNotebooks,
+          remoteNotebookPayload,
           remoteMemory,
           remoteSessions,
           remoteModelConfig,
         ] = await Promise.all([
-          fetchNotebooks(),
+          fetchNotebooks().catch(() => []),
           fetchUserMemory(userId).catch(() => null),
           fetchSessions(userId).catch(() => null),
           fetchModelConfig().catch(() => null),
@@ -753,13 +785,12 @@ export default function ChatPage() {
           return;
         }
 
+        const remoteNotebooks = notebookListOrFallback(remoteNotebookPayload);
         const storedNotebookId = loadStoredNotebookId();
-        const defaultNotebookId = remoteNotebooks[0]?.id ?? DEFAULT_NOTEBOOK_ID;
-        const fallbackId = remoteNotebooks.some((item) => item.id === requestedNotebookId)
-          ? String(requestedNotebookId)
-          : remoteNotebooks.some((item) => item.id === storedNotebookId)
-            ? storedNotebookId
-            : defaultNotebookId;
+        const fallbackId = resolveNotebookId(
+          remoteNotebooks,
+          requestedNotebookId ?? storedNotebookId
+        );
 
         setNotebooks(remoteNotebooks);
         setSelectedNotebookId(fallbackId);
@@ -771,25 +802,59 @@ export default function ChatPage() {
         }
 
         if (remoteSessions) {
-          setSessions(remoteSessions);
-          persistStoredSessions(remoteSessions);
+          const mergedSessions = mergeStoredChatDraftsWithSessions(remoteSessions);
+          setSessions(mergedSessions);
+          persistStoredSessions(mergedSessions);
 
           if (requestedSessionId) {
-            const requestedSession = remoteSessions.find(
+            const requestedSession = mergedSessions.find(
               (session) => session.id === requestedSessionId
             );
 
             if (requestedSession) {
-              const sessionNotebookId = remoteNotebooks.some(
-                (item) => item.id === requestedSession.notebookId
-              )
-                ? requestedSession.notebookId
-                : fallbackId;
+              const draft = loadStoredChatDraft(requestedSession.id);
+              const sessionNotebookId = resolveNotebookId(
+                remoteNotebooks,
+                requestedSession.notebookId,
+                fallbackId
+              );
               setCurrentSessionId(requestedSession.id);
-              setMessages(requestedSession.messages);
+              activeDraftSessionRef.current = requestedSession.id;
+              setMessages(draft?.messages ?? requestedSession.messages);
               setSelectedNotebookId(sessionNotebookId);
               persistStoredNotebookId(sessionNotebookId);
             }
+          } else {
+            const latestDraft = loadLatestStoredChatDraft();
+            const draftSession = latestDraft
+              ? mergedSessions.find((session) => session.id === latestDraft.sessionId)
+              : null;
+            if (latestDraft && draftSession) {
+              const sessionNotebookId = resolveNotebookId(
+                remoteNotebooks,
+                latestDraft.notebookId,
+                fallbackId
+              );
+              setCurrentSessionId(latestDraft.sessionId);
+              activeDraftSessionRef.current = latestDraft.sessionId;
+              setMessages(latestDraft.messages);
+              setSelectedNotebookId(sessionNotebookId);
+              persistStoredNotebookId(sessionNotebookId);
+            }
+          }
+        } else {
+          const latestDraft = loadLatestStoredChatDraft();
+          if (latestDraft) {
+            const sessionNotebookId = resolveNotebookId(
+              remoteNotebooks,
+              latestDraft.notebookId,
+              fallbackId
+            );
+            setCurrentSessionId(latestDraft.sessionId);
+            activeDraftSessionRef.current = latestDraft.sessionId;
+            setMessages(latestDraft.messages);
+            setSelectedNotebookId(sessionNotebookId);
+            persistStoredNotebookId(sessionNotebookId);
           }
         }
 
@@ -817,8 +882,16 @@ export default function ChatPage() {
       return;
     }
 
+    const activeNotebookId = notebooks.some((notebook) => notebook.id === selectedNotebookId)
+      ? selectedNotebookId
+      : "";
+    if (!activeNotebookId) {
+      setSelectedKnowledgeStatus(null);
+      return;
+    }
+
     let isMounted = true;
-    fetchNotebookKnowledgeStatus(selectedNotebookId)
+    fetchNotebookKnowledgeStatus(activeNotebookId)
       .then((status) => {
         if (isMounted) {
           setSelectedKnowledgeStatus(status);
@@ -833,7 +906,33 @@ export default function ChatPage() {
     return () => {
       isMounted = false;
     };
-  }, [isLoading, selectedNotebookId, user]);
+  }, [isLoading, notebooks, selectedNotebookId, user]);
+
+  function persistDraftMessages(
+    draftMessages: Message[],
+    sessionId = currentSessionId || activeDraftSessionRef.current,
+    notebookId = selectedNotebookId
+  ) {
+    if (!user || !sessionId || draftMessages.length === 0) {
+      return;
+    }
+
+    persistStoredChatDraft({
+      sessionId,
+      notebookId: resolveNotebookId(notebooks, notebookId),
+      messages: draftMessages,
+      updatedAt: Date.now(),
+    });
+  }
+
+  function clearCurrentTransientDraft() {
+    const sessionId = currentSessionId || activeDraftSessionRef.current;
+    if (!sessionId || sessions.some((session) => session.id === sessionId)) {
+      return;
+    }
+
+    clearStoredChatDraft(sessionId);
+  }
 
   function updateLastAssistant(updater: (message: Message) => Message) {
     setMessages((previous) => {
@@ -846,34 +945,46 @@ export default function ChatPage() {
         }
       }
 
+      persistDraftMessages(next);
       return next;
     });
   }
 
   async function refreshNotebooks() {
-    const data = await fetchNotebooks();
+    const data = notebookListOrFallback(await fetchNotebooks().catch(() => []));
     setNotebooks(data);
+    const nextNotebookId = resolveNotebookId(data, selectedNotebookId);
+    if (nextNotebookId !== selectedNotebookId) {
+      setSelectedNotebookId(nextNotebookId);
+      persistStoredNotebookId(nextNotebookId);
+    }
   }
 
   async function refreshSessions() {
     if (!user) {
-      return;
+      return false;
     }
     try {
       const remoteSessions = await fetchSessions(user.id);
-      setSessions(remoteSessions);
-      persistStoredSessions(remoteSessions);
+      const mergedSessions = mergeStoredChatDraftsWithSessions(remoteSessions);
+      setSessions(mergedSessions);
+      persistStoredSessions(mergedSessions);
+      return true;
     } catch (error) {
       console.error("刷新聊天记录失败:", error);
+      return false;
     }
   }
 
   function handleNotebookSelect(notebookId: string) {
     activeStreamRef.current?.abort();
     activeStreamRef.current = null;
+    clearCurrentTransientDraft();
+    activeDraftSessionRef.current = "";
     setIsStreaming(false);
-    setSelectedNotebookId(notebookId);
-    persistStoredNotebookId(notebookId);
+    const nextNotebookId = resolveNotebookId(notebooks, notebookId);
+    setSelectedNotebookId(nextNotebookId);
+    persistStoredNotebookId(nextNotebookId);
     setMessages([]);
     setCurrentSessionId("");
   }
@@ -881,6 +992,8 @@ export default function ChatPage() {
   function handleNewSession() {
     activeStreamRef.current?.abort();
     activeStreamRef.current = null;
+    clearCurrentTransientDraft();
+    activeDraftSessionRef.current = "";
     setIsStreaming(false);
     setMessages([]);
     setCurrentSessionId("");
@@ -947,8 +1060,13 @@ export default function ChatPage() {
     if (!currentSessionId) {
       setCurrentSessionId(sessionId);
     }
+    activeDraftSessionRef.current = sessionId;
 
-    setMessages((previous) => [...previous, userMessage, assistantMessage]);
+    setMessages((previous) => {
+      const next = [...previous, userMessage, assistantMessage];
+      persistDraftMessages(next, sessionId, selectedNotebookId);
+      return next;
+    });
     setIsStreaming(true);
 
     activeStreamRef.current = sendChatSSE(
@@ -1522,7 +1640,11 @@ export default function ChatPage() {
         });
         activeStreamRef.current = null;
         setIsStreaming(false);
-        void refreshSessions();
+        void refreshSessions().then((synced) => {
+          if (synced) {
+            clearStoredChatDraft(sessionId);
+          }
+        });
       },
       (error) => {
         updateLastAssistant((message) => {

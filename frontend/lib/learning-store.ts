@@ -2,8 +2,10 @@ import { normalizeModelConfig } from "@/lib/api";
 import type {
   ChatSession,
   MasteryEvaluationResult,
+  Message,
   Memory,
   ModelConfig,
+  Notebook,
   QuizItem,
 } from "@/lib/api";
 
@@ -17,12 +19,49 @@ const MEMORY_KEY = "learning_memory";
 const QUIZ_KEY = "learning_quiz";
 const QUIZ_META_KEY = "learning_quiz_meta";
 const PRACTICE_STATE_KEY = "learning_practice_state";
+const CHAT_DRAFTS_KEY = "learning_chat_drafts";
 const LEGACY_SUBJECT_KEY = "learning_subject_id";
 const NOTEBOOK_KEY = "learning_notebook_id";
 const SESSIONS_KEY = "learning_chat_sessions";
 const MODEL_CONFIG_KEY = "learning_model_config";
 const ACTIVE_USER_KEY = "learning_active_user_id";
 export const DEFAULT_NOTEBOOK_ID = "data-structure";
+const CHAT_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+
+export const FALLBACK_NOTEBOOKS: Notebook[] = [
+  {
+    id: "data-structure",
+    name: "数据结构与算法",
+    icon: "🌳",
+    description: "线性表、树、图、排序、查找、动态规划、贪心等",
+    doc_count: 0,
+    created_at: "",
+  },
+  {
+    id: "computer-network",
+    name: "计算机网络",
+    icon: "🌐",
+    description: "TCP/IP、HTTP、DNS、路由协议、网络安全等",
+    doc_count: 0,
+    created_at: "",
+  },
+  {
+    id: "computer-organization",
+    name: "计算机组成原理",
+    icon: "🧠",
+    description: "数据表示、存储系统、指令系统、CPU、总线与 I/O 等",
+    doc_count: 0,
+    created_at: "",
+  },
+  {
+    id: "operating-system",
+    name: "操作系统原理",
+    icon: "⚙️",
+    description: "进程管理、内存管理、文件系统、I/O、死锁等",
+    doc_count: 0,
+    created_at: "",
+  },
+];
 
 const EMPTY_MEMORY: Memory = {
   weak_points: [],
@@ -189,6 +228,13 @@ export interface StoredQuizMeta {
   createdAt?: number;
   updatedAt?: number;
   shouldSwitchTopic?: boolean;
+}
+
+export interface StoredChatDraft {
+  sessionId: string;
+  notebookId: string;
+  messages: Message[];
+  updatedAt: number;
 }
 
 export function buildQuizSignature(quizList: QuizItem[]) {
@@ -426,6 +472,158 @@ export function persistStoredSessions(sessions: ChatSession[]) {
   writeStoreItem(SESSIONS_KEY, JSON.stringify(sessions));
 }
 
+function draftTitle(messages: Message[]) {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  return (firstUserMessage?.content || "未完成对话").slice(0, 50);
+}
+
+function normalizeDraft(value: unknown): StoredChatDraft | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const draft = value as Partial<StoredChatDraft>;
+  const sessionId = typeof draft.sessionId === "string" ? draft.sessionId.trim() : "";
+  const messages = Array.isArray(draft.messages)
+    ? draft.messages.filter(
+        (message): message is Message =>
+          Boolean(message) &&
+          typeof message === "object" &&
+          (message.role === "user" || message.role === "assistant") &&
+          typeof message.content === "string"
+      )
+    : [];
+  const updatedAt = Number(draft.updatedAt);
+
+  if (!sessionId || messages.length === 0 || !Number.isFinite(updatedAt)) {
+    return null;
+  }
+
+  if (Date.now() - updatedAt > CHAT_DRAFT_TTL_MS) {
+    return null;
+  }
+
+  return {
+    sessionId,
+    notebookId: normalizeStoredNotebookId(draft.notebookId),
+    messages,
+    updatedAt,
+  };
+}
+
+function loadStoredChatDraftMap(): Record<string, StoredChatDraft> {
+  if (!isBrowser()) {
+    return {};
+  }
+
+  const stored = safeParse<Record<string, unknown>>(readStoreItem(CHAT_DRAFTS_KEY), {});
+  const drafts: Record<string, StoredChatDraft> = {};
+
+  for (const [sessionId, rawDraft] of Object.entries(stored || {})) {
+    const draft = normalizeDraft(rawDraft);
+    if (draft) {
+      drafts[sessionId] = draft;
+    }
+  }
+
+  return drafts;
+}
+
+function persistStoredChatDraftMap(drafts: Record<string, StoredChatDraft>) {
+  writeStoreItem(CHAT_DRAFTS_KEY, JSON.stringify(drafts));
+}
+
+export function persistStoredChatDraft(draft: StoredChatDraft) {
+  if (!isBrowser()) {
+    return;
+  }
+
+  const normalized = normalizeDraft({
+    ...draft,
+    notebookId: normalizeStoredNotebookId(draft.notebookId),
+    updatedAt: draft.updatedAt || Date.now(),
+  });
+  if (!normalized) {
+    return;
+  }
+
+  const drafts = loadStoredChatDraftMap();
+  drafts[normalized.sessionId] = normalized;
+  persistStoredChatDraftMap(drafts);
+}
+
+export function loadStoredChatDraft(sessionId: string): StoredChatDraft | null {
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId) {
+    return null;
+  }
+
+  return loadStoredChatDraftMap()[normalizedSessionId] ?? null;
+}
+
+export function loadLatestStoredChatDraft(): StoredChatDraft | null {
+  const drafts = Object.values(loadStoredChatDraftMap()).sort(
+    (a, b) => b.updatedAt - a.updatedAt
+  );
+  return drafts[0] ?? null;
+}
+
+export function clearStoredChatDraft(sessionId: string) {
+  if (!isBrowser()) {
+    return;
+  }
+
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId) {
+    return;
+  }
+
+  const drafts = loadStoredChatDraftMap();
+  delete drafts[normalizedSessionId];
+  persistStoredChatDraftMap(drafts);
+}
+
+export function mergeStoredChatDraftsWithSessions(sessions: ChatSession[]): ChatSession[] {
+  const drafts = Object.values(loadStoredChatDraftMap());
+  if (drafts.length === 0) {
+    return sessions;
+  }
+
+  const byId = new Map<string, ChatSession>();
+  for (const session of sessions) {
+    byId.set(session.id, session);
+  }
+
+  for (const draft of drafts) {
+    const existing = byId.get(draft.sessionId);
+    if (!existing) {
+      byId.set(draft.sessionId, {
+        id: draft.sessionId,
+        title: draftTitle(draft.messages),
+        notebookId: draft.notebookId,
+        updatedAt: draft.updatedAt,
+        messages: draft.messages,
+        latestQuiz: [],
+      });
+      continue;
+    }
+
+    if (
+      draft.updatedAt >= existing.updatedAt ||
+      draft.messages.length >= existing.messages.length
+    ) {
+      byId.set(draft.sessionId, {
+        ...existing,
+        notebookId: existing.notebookId || draft.notebookId,
+        updatedAt: Math.max(existing.updatedAt, draft.updatedAt),
+        messages: draft.messages,
+      });
+    }
+  }
+
+  return Array.from(byId.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 export function deleteStoredSession(sessionId: string) {
   if (!isBrowser()) {
     return;
@@ -488,6 +686,7 @@ export function clearLearningStore() {
   removeStoreItem(MEMORY_KEY, activeUserId);
   removeStoreItem(QUIZ_KEY, activeUserId);
   removeStoreItem(PRACTICE_STATE_KEY, activeUserId);
+  removeStoreItem(CHAT_DRAFTS_KEY, activeUserId);
   removeStoreItem(NOTEBOOK_KEY, activeUserId);
   removeStoreItem(LEGACY_SUBJECT_KEY, activeUserId);
   removeStoreItem(SESSIONS_KEY, activeUserId);

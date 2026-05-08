@@ -193,6 +193,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
       if (active && cachedUser) {
         setUser(cachedUser);
+        setLearningStoreUser(cachedUser.id);
         setIsLoading(false);
       }
 
