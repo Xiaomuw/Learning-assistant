@@ -11,6 +11,7 @@ class QuestionGenerationState(BaseLearningState, total=False):
     requested_count: int
     difficulty: str
     question_type: str
+    max_quality_repair_attempts: int
     generation_blueprint: dict[str, Any]
     source_refs: list[dict[str, Any]]
     question_candidates: list[dict[str, Any]]

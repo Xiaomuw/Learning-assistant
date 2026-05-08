@@ -646,6 +646,109 @@ def build_mixed_practice_items_with_status(
     )
 
 
+def repair_practice_items_with_status(
+    *,
+    subject_id: str,
+    subject_name: str,
+    topic: str,
+    difficulty: str,
+    count: int,
+    original_question: str,
+    quality_issues: list[str],
+    forbidden_stems: list[str],
+    user_style_name: str,
+    user_style_prompt: str,
+    short_term_context: str,
+    session_memory_context: str,
+    long_term_context: str,
+    model_name: str | None = None,
+    rag_context: str = "（本轮未检索到额外知识库材料）",
+) -> PracticeGenerationResult:
+    requested_count = max(1, count)
+    issue_context = "；".join(str(item).strip() for item in quality_issues if str(item).strip())
+    forbidden_context = "；".join(str(item).strip() for item in forbidden_stems if str(item).strip())
+    repair_question = "\n".join(
+        item
+        for item in [
+            original_question or f"围绕「{topic}」修复题包",
+            f"质量门反馈：{issue_context}" if issue_context else "",
+            f"禁止重复这些题干：{forbidden_context}" if forbidden_context else "",
+            "请重新思考并只输出不重复、能通过质量门的单选题。",
+        ]
+        if item
+    )
+    generated_items: list[dict[str, Any]] = []
+    fallback_count = 0
+    ai_generation_failed = False
+    degraded_reasons: list[str] = []
+
+    try:
+        generated = _invoke_generation_chain(
+            {
+                "count": requested_count,
+                "topic": topic,
+                "difficulty": difficulty,
+                "subject_name": subject_name,
+                "user_style_instruction": format_user_style_instruction(user_style_name, user_style_prompt),
+                "short_term_context": short_term_context,
+                "session_memory_context": session_memory_context,
+                "long_term_context": long_term_context,
+                "rag_context": rag_context or "（本轮未检索到额外知识库材料）",
+                "original_question": repair_question,
+            },
+            model_name=model_name,
+        )
+        generated_items = [
+            normalize_quiz_item(
+                {
+                    **item.model_dump(),
+                    "question_id": f"repair-ai-{uuid.uuid4()}",
+                    "source_type": "ai_generated",
+                    "source_name": "quality_repair",
+                    "source_year": None,
+                }
+            )
+            for item in generated.items[:requested_count]
+        ]
+    except Exception as exc:
+        logger.warning(f"⚠️ AI 修题失败，使用备用题补齐: {exc.__class__.__name__}")
+        ai_generation_failed = True
+        degraded_reasons.append(f"AI 修题失败: {exc.__class__.__name__}")
+
+    deduped_items = dedupe_quiz_items(generated_items)
+    attempt = 0
+    while len(deduped_items) < requested_count and attempt < requested_count * 6:
+        fallback_item = _build_fallback_practice_item(
+            topic=topic,
+            subject_name=subject_name,
+            difficulty=difficulty,
+            index=100 + attempt,
+        )
+        previous_count = len(deduped_items)
+        deduped_items = dedupe_quiz_items([*deduped_items, fallback_item])
+        if len(deduped_items) > previous_count:
+            fallback_count += 1
+        attempt += 1
+
+    final_items = [PracticeRecommendation.model_validate(item) for item in deduped_items[:requested_count]]
+    if fallback_count:
+        degraded_reasons.append("已用备用题补齐修复题包。")
+
+    return PracticeGenerationResult(
+        items=final_items,
+        status={
+            "requested_count": requested_count,
+            "generated_count": len(final_items),
+            "repair_model_used": not ai_generation_failed,
+            "repair_generated_count": len(generated_items),
+            "repair_fallback_count": fallback_count,
+            "repair_degraded": bool(ai_generation_failed or fallback_count),
+            "repair_ai_generation_failed": ai_generation_failed,
+            "degraded_reason": "；".join(degraded_reasons),
+        },
+    )
+
+
 def build_mixed_practice_items(
     **kwargs: Any,
 ) -> list[PracticeRecommendation]:

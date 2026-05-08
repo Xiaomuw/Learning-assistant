@@ -27,6 +27,9 @@ const MODEL_CONFIG_KEY = "learning_model_config";
 const ACTIVE_USER_KEY = "learning_active_user_id";
 export const DEFAULT_NOTEBOOK_ID = "data-structure";
 const CHAT_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+const LEGACY_DUPLICATE_QUALITY_GATE_TEXT = "发现重复题目";
+const LEGACY_DUPLICATE_DRAFT_NOTICE =
+  "这是旧质量门策略产生的历史失败结果；新请求会复用已有题，不应再因为题库已有相似题整包失败。";
 
 export const FALLBACK_NOTEBOOKS: Notebook[] = [
   {
@@ -477,6 +480,27 @@ function draftTitle(messages: Message[]) {
   return (firstUserMessage?.content || "未完成对话").slice(0, 50);
 }
 
+function isLegacyDuplicateQualityGateMessage(message: Message) {
+  return (
+    message.role === "assistant" &&
+    message.content.includes(LEGACY_DUPLICATE_QUALITY_GATE_TEXT)
+  );
+}
+
+function annotateLegacyDuplicateQualityGateMessage(message: Message): Message {
+  if (
+    !isLegacyDuplicateQualityGateMessage(message) ||
+    message.content.includes(LEGACY_DUPLICATE_DRAFT_NOTICE)
+  ) {
+    return message;
+  }
+
+  return {
+    ...message,
+    content: `${message.content}\n\n${LEGACY_DUPLICATE_DRAFT_NOTICE}`,
+  };
+}
+
 function normalizeDraft(value: unknown): StoredChatDraft | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -491,7 +515,7 @@ function normalizeDraft(value: unknown): StoredChatDraft | null {
           typeof message === "object" &&
           (message.role === "user" || message.role === "assistant") &&
           typeof message.content === "string"
-      )
+      ).map(annotateLegacyDuplicateQualityGateMessage)
     : [];
   const updatedAt = Number(draft.updatedAt);
 
@@ -509,6 +533,10 @@ function normalizeDraft(value: unknown): StoredChatDraft | null {
     messages,
     updatedAt,
   };
+}
+
+function isLegacyDuplicateDraft(draft: StoredChatDraft) {
+  return draft.messages.some(isLegacyDuplicateQualityGateMessage);
 }
 
 function loadStoredChatDraftMap(): Record<string, StoredChatDraft> {
@@ -605,6 +633,13 @@ export function mergeStoredChatDraftsWithSessions(sessions: ChatSession[]): Chat
         messages: draft.messages,
         latestQuiz: [],
       });
+      continue;
+    }
+
+    if (
+      isLegacyDuplicateDraft(draft) &&
+      existing.updatedAt >= draft.updatedAt
+    ) {
       continue;
     }
 

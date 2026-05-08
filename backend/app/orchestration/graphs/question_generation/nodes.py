@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from app.orchestration.graphs.question_generation.adapter import QuestionCandidateGenerator
+from app.orchestration.graphs.question_generation.adapter import (
+    DeterministicQuestionCandidateGenerator,
+    QuestionCandidateGenerator,
+    QuestionCandidateRepairer,
+)
 from app.orchestration.graphs.question_generation.schemas import (
     DedupeReport,
     DifficultyCalibration,
@@ -294,10 +298,10 @@ def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
 def route_after_quality_reviewer(state: QuestionGenerationState) -> str:
     report = QualityReport.model_validate(state.get("quality_report") or {})
     status = dict(state.get("generation_status") or {})
-    retry_count = int(status.get("quality_retry_count") or 0)
-    has_topic_mismatch = any("主题不一致" in issue for issue in report.issues)
-    if not report.passed and has_topic_mismatch and retry_count < 1:
-        return "retry"
+    repair_count = int(status.get("repair_attempt_count") or 0)
+    max_repair_attempts = _bounded_repair_attempts(status.get("max_quality_repair_attempts") or state.get("max_quality_repair_attempts"))
+    if not report.passed and _has_repairable_quality_issues(report) and repair_count < max_repair_attempts:
+        return "repair"
     return "continue"
 
 
@@ -322,6 +326,105 @@ def prepare_quality_retry_node(state: QuestionGenerationState) -> dict[str, Any]
     }
 
 
+def make_repair_candidates_node(repairer: QuestionCandidateRepairer | None = None):
+    fallback_repairer = DeterministicQuestionCandidateGenerator()
+    candidate_repairer = repairer or fallback_repairer
+
+    def repair_candidates_node(state: QuestionGenerationState) -> dict[str, Any]:
+        blueprint = ItemBlueprint.model_validate(state.get("generation_blueprint") or {})
+        source_refs = [SourceRef.model_validate(item) for item in list(state.get("source_refs") or [])]
+        candidates = _candidate_list(state)
+        report = QualityReport.model_validate(state.get("quality_report") or {})
+        status = dict(state.get("generation_status") or {})
+        errors = list(state.get("errors") or [])
+        repair_attempt_count = int(status.get("repair_attempt_count") or 0) + 1
+        base_candidates = (
+            _unique_candidates(candidates, limit=blueprint.count)
+            if _should_preserve_base_candidates(report.issues)
+            else []
+        )
+        forbidden_signatures = [_candidate_signature(candidate) for candidate in base_candidates]
+        repair_status: dict[str, Any] = {}
+        repaired_candidates: list[QuestionCandidate] = []
+
+        try:
+            repair_runner = getattr(candidate_repairer, "repair_with_status", None)
+            if callable(repair_runner):
+                result = repair_runner(
+                    blueprint=blueprint,
+                    source_refs=source_refs,
+                    candidates=candidates,
+                    issues=report.issues,
+                    forbidden_signatures=forbidden_signatures,
+                )
+                repaired_candidates = list(getattr(result, "candidates", []) or [])
+                repair_status = dict(getattr(result, "status", {}) or {})
+            else:
+                repaired_candidates = candidate_repairer.repair(
+                    blueprint=blueprint,
+                    source_refs=source_refs,
+                    candidates=candidates,
+                    issues=report.issues,
+                    forbidden_signatures=forbidden_signatures,
+                )
+                repair_status = {"repair_source": candidate_repairer.__class__.__name__}
+        except Exception as exc:
+            status["repair_degraded"] = True
+            status["repair_error_type"] = exc.__class__.__name__
+            errors.append(
+                GraphError(
+                    code="question_candidate_repair_unavailable",
+                    message=exc.__class__.__name__,
+                    node="repair_candidates",
+                    severity=GraphErrorSeverity.WARNING,
+                    metadata={"repair_attempt_count": repair_attempt_count},
+                ).model_dump(mode="json")
+            )
+            repaired_candidates = []
+
+        merged_candidates = _merge_repaired_candidates(
+            base_candidates=base_candidates,
+            repaired_candidates=repaired_candidates,
+            blueprint=blueprint,
+            source_refs=source_refs,
+        )
+        replaced_count = max(0, len(candidates) - len(base_candidates))
+        repaired_unique_count = len(_unique_candidates(repaired_candidates, limit=blueprint.count))
+        repair_fallback_count = max(0, len(merged_candidates) - len(base_candidates) - repaired_unique_count)
+        status.update(
+            {
+                **repair_status,
+                "repair_attempt_count": repair_attempt_count,
+                "quality_retry_count": repair_attempt_count,
+                "retry_count": max(int(status.get("retry_count") or 0), repair_attempt_count),
+                "repair_reason": "; ".join(report.issues[:3]),
+                "repair_replaced_count": replaced_count,
+                "repair_candidate_count": len(repaired_candidates),
+                "repair_fallback_count": max(
+                    int(repair_status.get("repair_fallback_count") or 0),
+                    repair_fallback_count,
+                ),
+                "generated_count": len(merged_candidates),
+                "max_quality_repair_attempts": _bounded_repair_attempts(
+                    status.get("max_quality_repair_attempts") or state.get("max_quality_repair_attempts")
+                ),
+            }
+        )
+        if not repaired_candidates or repair_fallback_count > 0 or len(merged_candidates) < blueprint.count:
+            status["repair_degraded"] = True
+        if len(merged_candidates) < blueprint.count:
+            status["partial"] = True
+        return {
+            "question_candidates": [item.model_dump(mode="json") for item in merged_candidates],
+            "solver_report": {},
+            "quality_report": {},
+            "generation_status": status,
+            "errors": errors,
+        }
+
+    return repair_candidates_node
+
+
 def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
     def dedupe_checker_node(state: QuestionGenerationState) -> dict[str, Any]:
         candidates = _candidate_list(state)
@@ -329,6 +432,7 @@ def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
         duplicate_ids: list[str] = []
         reuse_by_signature: dict[str, str] = {}
         status = dict(state.get("generation_status") or {})
+        status["dedupe_policy_version"] = "external_duplicates_reused_v1"
         errors = list(state.get("errors") or [])
         for candidate in candidates:
             try:
@@ -956,6 +1060,83 @@ def _bounded_retry_count(value: Any) -> int:
     return max(1, min(3, count))
 
 
+def _bounded_repair_attempts(value: Any) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        count = 2
+    return max(0, min(3, count))
+
+
+def _has_repairable_quality_issues(report: QualityReport) -> bool:
+    if not report.issues:
+        return False
+    non_repairable_markers = ("notebook_only grounding",)
+    return any(
+        not any(marker in issue for marker in non_repairable_markers)
+        for issue in report.issues
+    )
+
+
+def _should_preserve_base_candidates(issues: list[str]) -> bool:
+    if not issues:
+        return True
+    preserve_markers = ("重复", "题目数量不足")
+    return all(any(marker in issue for marker in preserve_markers) for issue in issues)
+
+
+def _unique_candidates(candidates: list[QuestionCandidate], *, limit: int) -> list[QuestionCandidate]:
+    seen: set[str] = set()
+    unique: list[QuestionCandidate] = []
+    for candidate in candidates:
+        signature = _candidate_signature(candidate)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(candidate)
+        if len(unique) >= limit:
+            break
+    return unique
+
+
+def _merge_repaired_candidates(
+    *,
+    base_candidates: list[QuestionCandidate],
+    repaired_candidates: list[QuestionCandidate],
+    blueprint: ItemBlueprint,
+    source_refs: list[SourceRef],
+) -> list[QuestionCandidate]:
+    merged: list[QuestionCandidate] = []
+    seen: set[str] = set()
+
+    def add_candidate(candidate: QuestionCandidate) -> None:
+        if len(merged) >= blueprint.count:
+            return
+        signature = _candidate_signature(candidate)
+        if signature in seen:
+            return
+        seen.add(signature)
+        merged.append(candidate)
+
+    for candidate in base_candidates:
+        add_candidate(candidate)
+    for candidate in repaired_candidates:
+        add_candidate(candidate)
+
+    if len(merged) < blueprint.count:
+        fallback = DeterministicQuestionCandidateGenerator().repair_with_status(
+            blueprint=blueprint,
+            source_refs=source_refs,
+            candidates=merged,
+            issues=["repair fallback补齐"],
+            forbidden_signatures=list(seen),
+        )
+        for candidate in fallback.candidates:
+            add_candidate(candidate)
+
+    return merged
+
+
 def _candidate_list(state: QuestionGenerationState) -> list[QuestionCandidate]:
     return [QuestionCandidate.model_validate(item) for item in list(state.get("question_candidates") or [])]
 
@@ -1024,7 +1205,9 @@ def _is_degraded_generation(status: dict[str, Any]) -> bool:
         or status.get("degraded_reason")
         or status.get("question_bank_unavailable")
         or status.get("ai_generation_failed")
+        or status.get("repair_degraded")
         or int(status.get("fallback_count") or 0) > 0
+        or int(status.get("repair_fallback_count") or 0) > 0
     )
 
 
@@ -1038,8 +1221,12 @@ def _degraded_reason(status: dict[str, Any]) -> str:
         return "question_bank_unavailable"
     if status.get("ai_generation_failed"):
         return "ai_generation_failed"
+    if status.get("repair_degraded"):
+        return "quality_repair_degraded"
     if status.get("partial"):
         return "partial_generation"
+    if int(status.get("repair_fallback_count") or 0) > 0:
+        return "repair_fallback_questions_used"
     if int(status.get("fallback_count") or 0) > 0:
         return "fallback_questions_used"
     return "question_generation_degraded"

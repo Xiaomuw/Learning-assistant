@@ -95,6 +95,10 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         self.assertTrue(result["child_graph_output"]["payload"]["question_items"])
         ui_payload = result["child_graph_output"]["payload"]["final_response"]["ui_payload"]
         self.assertNotIn("发现重复题目", str(ui_payload.get("quality_failure_summary") or ""))
+        self.assertEqual(
+            result["child_graph_output"]["payload"]["generation_status"]["dedupe_policy_version"],
+            "external_duplicates_reused_v1",
+        )
         stems = "\n".join(str(item.get("stem") or "") for item in result["child_graph_output"]["payload"]["question_items"])
         self.assertIn("数组", stems)
         self.assertNotIn("TCP", stems)

@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from uuid import uuid4
 
-from app.domains.practice.generation import build_mixed_practice_items_with_status
+from app.domains.practice.generation import (
+    build_mixed_practice_items_with_status,
+    repair_practice_items_with_status,
+)
 from app.orchestration.graphs.question_generation.schemas import (
     AnswerKey,
     AnswerOption,
@@ -37,6 +40,25 @@ class QuestionCandidateGenerationResult:
 
     candidates: list[QuestionCandidate] = field(default_factory=list)
     status: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class QuestionCandidateRepairResult:
+    candidates: list[QuestionCandidate] = field(default_factory=list)
+    status: dict[str, Any] = field(default_factory=dict)
+
+
+class QuestionCandidateRepairer(Protocol):
+    def repair(
+        self,
+        *,
+        blueprint: ItemBlueprint,
+        source_refs: list[SourceRef],
+        candidates: list[QuestionCandidate],
+        issues: list[str],
+        forbidden_signatures: list[str],
+    ) -> list[QuestionCandidate]:
+        """Repair candidate questions after quality gate feedback."""
 
 
 @dataclass(frozen=True)
@@ -79,6 +101,49 @@ class DeterministicQuestionCandidateGenerator:
             },
         )
 
+    def repair(
+        self,
+        *,
+        blueprint: ItemBlueprint,
+        source_refs: list[SourceRef],
+        candidates: list[QuestionCandidate],
+        issues: list[str],
+        forbidden_signatures: list[str],
+    ) -> list[QuestionCandidate]:
+        return self.repair_with_status(
+            blueprint=blueprint,
+            source_refs=source_refs,
+            candidates=candidates,
+            issues=issues,
+            forbidden_signatures=forbidden_signatures,
+        ).candidates
+
+    def repair_with_status(
+        self,
+        *,
+        blueprint: ItemBlueprint,
+        source_refs: list[SourceRef],
+        candidates: list[QuestionCandidate],
+        issues: list[str],
+        forbidden_signatures: list[str],
+    ) -> QuestionCandidateRepairResult:
+        repaired = [
+            _build_candidate(
+                blueprint=blueprint,
+                source_refs=source_refs,
+                index=index,
+            )
+            for index in range(0, max(blueprint.count * 6, blueprint.count + len(forbidden_signatures)))
+        ]
+        return QuestionCandidateRepairResult(
+            candidates=repaired,
+            status={
+                "repair_source": "deterministic_adapter",
+                "repair_model_used": False,
+                "repair_generated_count": len(repaired),
+            },
+        )
+
 
 @dataclass(frozen=True)
 class EmptyQuestionCandidateGenerator:
@@ -113,6 +178,17 @@ class EmptyQuestionCandidateGenerator:
                 "degraded_reason": self.degraded_reason,
             },
         )
+
+    def repair(
+        self,
+        *,
+        blueprint: ItemBlueprint,
+        source_refs: list[SourceRef],
+        candidates: list[QuestionCandidate],
+        issues: list[str],
+        forbidden_signatures: list[str],
+    ) -> list[QuestionCandidate]:
+        return []
 
 
 @dataclass(frozen=True)
@@ -180,6 +256,71 @@ class LegacyPracticeQuestionCandidateGenerator:
             "ai_generation_failed": bool(raw_status.get("ai_generation_failed", False)),
         }
         return QuestionCandidateGenerationResult(candidates=candidates, status=status)
+
+    def repair(
+        self,
+        *,
+        blueprint: ItemBlueprint,
+        source_refs: list[SourceRef],
+        candidates: list[QuestionCandidate],
+        issues: list[str],
+        forbidden_signatures: list[str],
+    ) -> list[QuestionCandidate]:
+        return self.repair_with_status(
+            blueprint=blueprint,
+            source_refs=source_refs,
+            candidates=candidates,
+            issues=issues,
+            forbidden_signatures=forbidden_signatures,
+        ).candidates
+
+    def repair_with_status(
+        self,
+        *,
+        blueprint: ItemBlueprint,
+        source_refs: list[SourceRef],
+        candidates: list[QuestionCandidate],
+        issues: list[str],
+        forbidden_signatures: list[str],
+    ) -> QuestionCandidateRepairResult:
+        result = repair_practice_items_with_status(
+            subject_id=self.subject_id,
+            subject_name=self.subject_name,
+            topic=blueprint.concept_name,
+            difficulty=blueprint.difficulty,
+            count=blueprint.count,
+            original_question=self.original_question or f"围绕「{blueprint.concept_name}」修复题包",
+            quality_issues=issues,
+            forbidden_stems=[candidate.stem for candidate in candidates],
+            user_style_name="",
+            user_style_prompt="",
+            short_term_context="",
+            session_memory_context="",
+            long_term_context="",
+            model_name=self.model_name,
+            rag_context=_rag_context_from_source_refs(source_refs),
+        )
+        repaired = [
+            _practice_item_to_candidate(
+                item=item,
+                blueprint=blueprint,
+                source_refs=source_refs,
+            )
+            for item in result.items
+        ]
+        raw_status = dict(getattr(result, "status", {}) or {})
+        return QuestionCandidateRepairResult(
+            candidates=repaired,
+            status={
+                "repair_source": "practice_generation_repair",
+                "repair_model_used": bool(raw_status.get("repair_model_used", False)),
+                "repair_generated_count": len(repaired),
+                "repair_fallback_count": int(raw_status.get("repair_fallback_count") or 0),
+                "repair_degraded": bool(raw_status.get("repair_degraded", False)),
+                "repair_ai_generation_failed": bool(raw_status.get("repair_ai_generation_failed", False)),
+                "degraded_reason": str(raw_status.get("degraded_reason") or ""),
+            },
+        )
 
 
 @dataclass

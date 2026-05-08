@@ -62,6 +62,9 @@ const EMPTY_MEMORY: Memory = {
   recent_topics: [],
   last_session: "",
 };
+const LEGACY_DUPLICATE_QUALITY_GATE_TEXT = "发现重复题目";
+const LEGACY_DUPLICATE_QUALITY_GATE_NOTICE =
+  "当前服务返回了旧质量门策略的重复题失败结果。请确认后端已重启到最新代码后重试；新策略会复用已有题，不会因为题库已有相似题整包失败。";
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   concept: "概念理解",
@@ -728,6 +731,14 @@ function resolveNotebookId(
   }
 
   return normalizedNotebooks[0]?.id ?? DEFAULT_NOTEBOOK_ID;
+}
+
+function normalizeQualityFailureSummary(summary: string) {
+  if (summary.includes(LEGACY_DUPLICATE_QUALITY_GATE_TEXT)) {
+    return LEGACY_DUPLICATE_QUALITY_GATE_NOTICE;
+  }
+
+  return summary;
 }
 
 export default function ChatPage() {
@@ -1521,12 +1532,18 @@ export default function ChatPage() {
               !Array.isArray(data.quiz_generation_status)
                 ? (data.quiz_generation_status as Record<string, unknown>)
                 : {};
-            const qualityFailureSummary =
+            let qualityFailureSummary =
               typeof quizGenerationStatus.quality_failure_summary === "string"
                 ? quizGenerationStatus.quality_failure_summary
                 : "";
+            qualityFailureSummary = normalizeQualityFailureSummary(qualityFailureSummary);
             const eventQuestionType = extractQuestionType(data);
             const eventRoute = extractRoute(data);
+            const presentedFinalAnswer = finalAnswer.includes(
+              LEGACY_DUPLICATE_QUALITY_GATE_TEXT
+            )
+              ? LEGACY_DUPLICATE_QUALITY_GATE_NOTICE
+              : finalAnswer;
 
             if (quizItems.length > 0) {
               if (quizRequest?.should_switch_topic) {
@@ -1541,7 +1558,7 @@ export default function ChatPage() {
             }
 
             updateLastAssistant((message) => {
-              const nextProcess = upsertProcessStage(
+              let nextProcess = upsertProcessStage(
                 message.process,
                 {
                   key: "answer",
@@ -1560,11 +1577,37 @@ export default function ChatPage() {
                 },
                 "练习题已准备"
               );
+              const repairAttemptCount =
+                typeof quizGenerationStatus.repair_attempt_count === "number"
+                  ? quizGenerationStatus.repair_attempt_count
+                  : Number(quizGenerationStatus.repair_attempt_count || 0);
+              if (repairAttemptCount > 0) {
+                const repairModelUsed = Boolean(quizGenerationStatus.repair_model_used);
+                const repairReplacedCount = Number(
+                  quizGenerationStatus.repair_replaced_count || 0
+                );
+                nextProcess = upsertProcessStage(
+                  nextProcess,
+                  {
+                    key: "quality_repair",
+                    label: repairModelUsed ? "模型修题" : "质量门复审",
+                    status: quizItems.length > 0 ? "completed" : "failed",
+                    detail: [
+                      `质量门打回后已修复 ${repairAttemptCount} 轮`,
+                      repairReplacedCount > 0 ? `替换/补齐 ${repairReplacedCount} 道题` : "",
+                      repairModelUsed ? "已调用模型重新命题" : "使用确定性备用题补齐",
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                  },
+                  repairModelUsed ? "模型修题完成" : "质量门复审完成"
+                );
+              }
 
               return {
                 ...message,
                 content:
-                  finalAnswer ||
+                  presentedFinalAnswer ||
                   (quizClarification
                     ? "我可以帮你出题，但需要先确定练习方向。"
                     : "") ||

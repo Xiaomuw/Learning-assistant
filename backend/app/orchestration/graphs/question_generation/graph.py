@@ -7,6 +7,8 @@ from app.orchestration.graphs.question_generation.adapter import (
     InMemoryLearningEventRepository,
     InMemoryQuestionItemRepository,
     QuestionCandidateGenerator,
+    QuestionCandidateRepairer,
+    LegacyPracticeQuestionCandidateGenerator,
 )
 from app.orchestration.graphs.question_generation.nodes import (
     build_blueprint_node,
@@ -15,7 +17,7 @@ from app.orchestration.graphs.question_generation.nodes import (
     make_dedupe_checker_node,
     make_generate_candidates_node,
     make_persist_question_items_node,
-    prepare_quality_retry_node,
+    make_repair_candidates_node,
     prepare_source_refs_node,
     quality_reviewer_node,
     route_after_quality_reviewer,
@@ -29,10 +31,12 @@ from app.persistence.repositories.graph_facts import build_graph_fact_repositori
 def build_graph(
     *,
     candidate_generator: QuestionCandidateGenerator | None = None,
+    candidate_repairer: QuestionCandidateRepairer | None = None,
     question_item_repository: QuestionItemRepository | None = None,
     learning_event_repository: LearningEventRepository | None = None,
 ) -> StateGraph:
     generator = candidate_generator or DeterministicQuestionCandidateGenerator()
+    repairer = candidate_repairer or (generator if hasattr(generator, "repair") else DeterministicQuestionCandidateGenerator())
     question_repo = question_item_repository or InMemoryQuestionItemRepository()
     event_repo = learning_event_repository or InMemoryLearningEventRepository()
 
@@ -42,7 +46,7 @@ def build_graph(
     graph.add_node("generate_candidates", make_generate_candidates_node(generator))
     graph.add_node("solver_verifier", solver_verifier_node)
     graph.add_node("quality_reviewer", quality_reviewer_node)
-    graph.add_node("prepare_quality_retry", prepare_quality_retry_node)
+    graph.add_node("repair_candidates", make_repair_candidates_node(repairer))
     graph.add_node("dedupe_checker", make_dedupe_checker_node(question_repo))
     graph.add_node("difficulty_calibrator", difficulty_calibrator_node)
     graph.add_node(
@@ -62,9 +66,9 @@ def build_graph(
     graph.add_conditional_edges(
         "quality_reviewer",
         route_after_quality_reviewer,
-        {"retry": "prepare_quality_retry", "continue": "dedupe_checker"},
+        {"repair": "repair_candidates", "continue": "dedupe_checker"},
     )
-    graph.add_edge("prepare_quality_retry", "generate_candidates")
+    graph.add_edge("repair_candidates", "solver_verifier")
     graph.add_edge("dedupe_checker", "difficulty_calibrator")
     graph.add_edge("difficulty_calibrator", "persist_question_items")
     graph.add_edge("persist_question_items", "compose_response")
@@ -75,12 +79,15 @@ def build_graph(
 def build_production_graph(
     *,
     candidate_generator: QuestionCandidateGenerator | None = None,
+    candidate_repairer: QuestionCandidateRepairer | None = None,
 ) -> StateGraph:
+    repairer = candidate_repairer or LegacyPracticeQuestionCandidateGenerator()
     if not is_graph_facts_enabled():
-        return build_graph(candidate_generator=candidate_generator)
+        return build_graph(candidate_generator=candidate_generator, candidate_repairer=repairer)
     repos = build_graph_fact_repositories()
     return build_graph(
         candidate_generator=candidate_generator,
+        candidate_repairer=repairer,
         question_item_repository=repos.question_items,
         learning_event_repository=repos.learning_events,
     )

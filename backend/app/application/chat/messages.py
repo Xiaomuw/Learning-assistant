@@ -482,6 +482,23 @@ def _build_process_stages(final_state: dict[str, Any]) -> list[dict[str, Any]]:
     explanation = final_state.get("explanation") or {}
     quiz_items = list(final_state.get("quiz_items") or [])
     quiz_status = final_state.get("quiz_generation_status") if isinstance(final_state.get("quiz_generation_status"), dict) else {}
+    repair_attempt_count = int(quiz_status.get("repair_attempt_count") or 0) if quiz_status else 0
+    if repair_attempt_count:
+        repair_model_used = bool(quiz_status.get("repair_model_used", False))
+        repair_replaced_count = int(quiz_status.get("repair_replaced_count") or 0)
+        detail_parts = [
+            f"质量门打回后已修复 {repair_attempt_count} 轮",
+            f"替换/补齐 {repair_replaced_count} 道题" if repair_replaced_count else "",
+            "已调用模型重新命题" if repair_model_used else "使用确定性备用题补齐",
+        ]
+        stages.append(
+            {
+                "key": "quality_repair",
+                "label": "模型修题" if repair_model_used else "质量门复审",
+                "status": "completed" if quiz_items else "failed",
+                "detail": " · ".join(part for part in detail_parts if part),
+            }
+        )
     if final_answer or explanation or quiz_items:
         detail = "已生成最终回答。"
         current_stage = "已生成回答"

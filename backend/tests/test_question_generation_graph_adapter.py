@@ -224,6 +224,10 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
             result["generation_status"]["dedupe_reused_question_ids"],
             ["existing-q-1"],
         )
+        self.assertEqual(
+            result["generation_status"]["dedupe_policy_version"],
+            "external_duplicates_reused_v1",
+        )
         generated_events = [
             event for event in result["learning_events"] if event["event_type"] == "question_generated"
         ]
@@ -645,11 +649,12 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         )
 
         report = QualityReport.model_validate(result["quality_report"])
-        self.assertEqual(generator.calls, 2)
+        self.assertEqual(generator.calls, 1)
         self.assertTrue(report.passed)
         self.assertEqual(result["generation_status"]["quality_retry_count"], 1)
+        self.assertEqual(result["generation_status"]["repair_attempt_count"], 1)
         self.assertEqual(len(question_repo.created), 1)
-        self.assertIn("栈", question_repo.created[0]["stem"])
+        self.assertNotIn("HTTP", question_repo.created[0]["stem"])
 
     def test_topic_alignment_blocks_mismatched_http_questions_after_retry_limit(self) -> None:
         class AlwaysHttpGenerator:
@@ -701,6 +706,7 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
                 "user_message": "生成一些有关数据结构的题目",
                 "graph_type": GraphType.QUESTION_GENERATION.value,
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "max_quality_repair_attempts": 0,
                 "quiz_request": {
                     "is_quiz_request": True,
                     "action": "generate_practice_pack",
@@ -722,7 +728,7 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         report = QualityReport.model_validate(result["quality_report"])
         self.assertFalse(report.passed)
         self.assertEqual(report.reviewer["topic_alignment_reason"], "blocked_subject_mismatch")
-        self.assertEqual(generator.calls, 2)
+        self.assertEqual(generator.calls, 1)
         self.assertEqual(question_repo.created, [])
         self.assertTrue(any("主题不一致" in issue for issue in report.issues))
 
@@ -798,7 +804,7 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertEqual(len(question_repo.created), 2)
         self.assertTrue(all("HTTP" in item["stem"] or "http" in item["stem"].lower() for item in question_repo.created))
 
-    def test_in_pack_duplicate_questions_are_blocked_before_persist(self) -> None:
+    def test_in_pack_duplicate_questions_are_repaired_before_persist(self) -> None:
         class DuplicateGenerator:
             def generate_with_status(self, *, blueprint: ItemBlueprint, source_refs: list[SourceRef]):
                 candidate = QuestionCandidate(
@@ -864,9 +870,13 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         )
 
         report = QualityReport.model_validate(result["quality_report"])
-        self.assertFalse(report.passed)
-        self.assertTrue(any("重复" in issue for issue in report.issues))
-        self.assertEqual(question_repo.created, [])
+        self.assertTrue(report.passed)
+        self.assertEqual(result["generation_status"]["repair_attempt_count"], 1)
+        self.assertGreaterEqual(result["generation_status"]["repair_replaced_count"], 1)
+        self.assertFalse(any("重复" in issue for issue in report.issues))
+        self.assertEqual(len(question_repo.created), 2)
+        stems = [item["stem"] for item in question_repo.created]
+        self.assertEqual(len(stems), len(set(stems)))
 
     def test_generic_fallback_generates_distinct_questions_for_same_topic(self) -> None:
         question_repo = MockQuestionItemRepository()
@@ -903,7 +913,7 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertEqual(len(set(stems)), 2)
         self.assertFalse(any("选择 A" in hint or "正确答案是" in hint for hint in hints))
 
-    def test_empty_generation_records_graph_error_and_does_not_persist_question_item(self) -> None:
+    def test_empty_generation_repairs_with_deterministic_fallback(self) -> None:
         question_repo = MockQuestionItemRepository()
         event_repo = MockLearningEventRepository()
         result = build_graph(
@@ -923,17 +933,20 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
 
         report = QualityReport.model_validate(result["quality_report"])
         response = FinalResponse.model_validate(result["final_response"])
-        self.assertFalse(report.passed)
-        self.assertEqual(question_repo.created, [])
+        self.assertTrue(report.passed)
+        self.assertEqual(len(question_repo.created), 1)
+        self.assertEqual(result["generation_status"]["repair_attempt_count"], 1)
+        self.assertTrue(result["generation_status"]["repair_degraded"])
         self.assertEqual(result["errors"][0]["code"], "question_generation_empty")
         self.assertIn("question_generation_empty", json.dumps(response.ui_payload["errors"], ensure_ascii=False))
-        self.assertIn("题目数量不足", response.answer)
-        self.assertIn("题目数量不足", response.ui_payload["quality_failure_summary"])
+        self.assertNotIn("题目数量不足", response.answer)
+        self.assertEqual(response.ui_payload["quality_failure_summary"], "")
         self.assertEqual(
             [event.event_type for event in event_repo.events],
             [
                 LearningEventType.QUESTION_REVIEWED.value,
-                LearningEventType.QUESTION_GENERATION_FAILED.value,
+                LearningEventType.QUESTION_GENERATION_DEGRADED.value,
+                LearningEventType.QUESTION_GENERATED.value,
             ],
         )
 
