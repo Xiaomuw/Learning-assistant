@@ -145,6 +145,48 @@ function createInitialProcess(message = "已连接学习引擎，正在准备处
   };
 }
 
+function buildChatFailurePresentation(
+  rawMessage: string,
+  reason?: string,
+  retryable = true
+): { label: string; message: string } {
+  if (reason === "timeout" || rawMessage.includes("处理超时")) {
+    return {
+      label: "处理超时",
+      message:
+        rawMessage ||
+        "处理超时：学习引擎处理时间较长，本轮请求已经中断。你可以稍后重试，或换一种更具体的问法。",
+    };
+  }
+
+  if (reason === "model_unavailable") {
+    return {
+      label: "模型暂不可用",
+      message:
+        rawMessage ||
+        "模型服务暂时不可用，请稍后再试。当前页面和历史记录仍可继续使用。",
+    };
+  }
+
+  if (reason === "stream_interrupted" || reason === "stream_cancelled") {
+    return {
+      label: "连接中断",
+      message:
+        rawMessage ||
+        "连接已中断：当前回答没有完整返回，你可以直接手动重试。",
+    };
+  }
+
+  return {
+    label: retryable ? "可重试失败" : "处理失败",
+    message:
+      rawMessage ||
+      (retryable
+        ? "学习引擎处理失败，你可以直接再发一次问题。"
+        : "学习引擎处理失败，请稍后再试。"),
+  };
+}
+
 function cloneProcess(process?: MessageProcess): MessageProcess {
   if (!process) {
     return createInitialProcess();
@@ -1373,7 +1415,7 @@ export default function ChatPage() {
                 clearStoredPracticeState();
               }
               persistQuiz(quizItems, {
-                topic: quizRequest?.active_topic || quizRequest?.topic || quizItems[0]?.knowledge_point,
+                topic: quizRequest?.requested_topic || quizRequest?.active_topic || quizRequest?.topic || quizItems[0]?.knowledge_point,
                 subjectId: quizRequest?.subject_id || selectedNotebookId,
                 sessionId,
                 shouldSwitchTopic: Boolean(quizRequest?.should_switch_topic),
@@ -1432,24 +1474,27 @@ export default function ChatPage() {
             break;
           }
 
-          case "error":
+          case "error": {
+            const reason = typeof data.reason === "string" ? data.reason : undefined;
+            const retryable = typeof data.retryable === "boolean" ? data.retryable : true;
+            const rawError =
+              typeof data.error === "string" && data.error.trim()
+                ? data.error.trim()
+                : "学习引擎处理失败，请稍后重试。";
+            const failure = buildChatFailurePresentation(rawError, reason, retryable);
             updateLastAssistant((message) => {
-              const errorMessage = `出错了：${String(
-                data.error ?? "未知错误"
-              )}。你可以直接再发一次问题。`;
-
               return {
                 ...message,
-                content: errorMessage,
+                content: failure.message,
                 process: upsertProcessStage(
                   message.process,
                   {
                     key: "error",
-                    label: "处理失败",
+                    label: failure.label,
                     status: "failed",
-                    detail: errorMessage,
+                    detail: failure.message,
                   },
-                  "处理失败",
+                  failure.label,
                   { completeRunning: false }
                 ),
               };
@@ -1457,6 +1502,7 @@ export default function ChatPage() {
             activeStreamRef.current = null;
             setIsStreaming(false);
             break;
+          }
 
           default:
             break;
@@ -1480,26 +1526,31 @@ export default function ChatPage() {
       },
       (error) => {
         updateLastAssistant((message) => {
+          const errorRecord =
+            error && typeof error === "object"
+              ? (error as Error & { reason?: string; retryable?: boolean })
+              : undefined;
           const rawErrorMessage =
             error instanceof Error && error.message
               ? error.message
               : "学习引擎连接中断，请稍后重试。";
-          const isProcessingTimeout = rawErrorMessage.includes("处理超时");
-          const errorMessage = isProcessingTimeout
-            ? rawErrorMessage
-            : `连接失败：${rawErrorMessage}`;
+          const failure = buildChatFailurePresentation(
+            rawErrorMessage,
+            errorRecord?.reason,
+            errorRecord?.retryable ?? true
+          );
           return {
             ...message,
-            content: errorMessage,
+            content: failure.message,
             process: upsertProcessStage(
               message.process,
               {
                 key: "error",
-                label: isProcessingTimeout ? "处理超时" : "处理失败",
+                label: failure.label,
                 status: "failed",
-                detail: errorMessage,
+                detail: failure.message,
               },
-              isProcessingTimeout ? "处理超时" : "处理失败",
+              failure.label,
               { completeRunning: false }
             ),
           };
@@ -1574,6 +1625,8 @@ export default function ChatPage() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              aria-label={showHistory ? "关闭聊天历史" : "打开聊天历史"}
               onClick={() => setShowHistory(true)}
               className="group flex flex-col items-center gap-1 transition-transform hover:-translate-y-1"
             >

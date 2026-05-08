@@ -8,7 +8,8 @@ from pydo import Client
 DEFAULT_DO_BASE_URL = "https://inference.do-ai.run/v1"
 DEFAULT_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_CHAT_MODEL = "openai-gpt-4.1"
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+DEFAULT_EMBEDDING_MODEL = "models/gemini-embedding-2"
+DEFAULT_OPENAI_COMPATIBLE_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_FALLBACK_CHAT_MODEL = "anthropic-claude-3-haiku-20240306"
 DEFAULT_NVIDIA_GLM_MODEL = "z-ai/glm4.7"
 DEFAULT_LLM_TIMEOUT_SECONDS = 45.0
@@ -109,12 +110,48 @@ def get_openai_compatible_base_url() -> str:
     return os.getenv("OPENAI_BASE_URL", DEFAULT_DO_BASE_URL)
 
 
+def get_embedding_provider() -> str:
+    """返回当前配置的 Embedding provider: 'google' 或 'openai-compatible'。"""
+    return (os.getenv("EMBEDDING_PROVIDER") or "google").strip().lower()
+
+
+def get_google_api_keys() -> list[str]:
+    """返回所有配置的 Google API Key 列表（支持 GOOGLE_API_KEYS 逗号分隔或旧的 GOOGLE_API_KEY）。"""
+    raw = (os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or "").strip()
+    if not raw:
+        return []
+    return [k.strip() for k in raw.split(",") if k.strip()]
+
+
+def get_google_api_key() -> str | None:
+    """返回第一个 Google API Key（兼容旧调用方）。"""
+    keys = get_google_api_keys()
+    return keys[0] if keys else None
+
+
+def get_google_embedding_model() -> str:
+    return (os.getenv("GOOGLE_EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL).strip()
+
+
 def get_embedding_base_url() -> str:
     return os.getenv("OPENAI_EMBEDDING_BASE_URL") or get_openai_compatible_base_url()
 
 
 def get_embedding_model() -> str:
-    return os.getenv("OPENAI_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL).strip() or DEFAULT_EMBEDDING_MODEL
+    """返回当前 Embedding 模型名称（兼容旧调用方）。"""
+    provider = get_embedding_provider()
+    if provider == "google":
+        return get_google_embedding_model()
+    return (
+        os.getenv("OPENAI_EMBEDDING_MODEL", DEFAULT_OPENAI_COMPATIBLE_EMBEDDING_MODEL).strip()
+        or DEFAULT_OPENAI_COMPATIBLE_EMBEDDING_MODEL
+    )
+
+
+def get_fallback_embedding_model() -> str | None:
+    """返回兜底 Embedding 模型名称，若未配置则返回 None。"""
+    raw = (os.getenv("OPENAI_EMBEDDING_FALLBACK_MODEL") or "").strip()
+    return raw or None
 
 
 def get_nvidia_base_url() -> str:
@@ -148,14 +185,48 @@ def get_chat_model_connection(model_id: str | None) -> ChatModelConnection:
     )
 
 
+def _detect_embedding_provider(base_url: str) -> str:
+    url_lower = base_url.lower()
+    if "inference.do-ai.run" in url_lower:
+        return "DigitalOcean"
+    if "dashscope" in url_lower:
+        return "DashScope"
+    return "OpenAI-compatible"
+
+
 def get_embedding_model_connection(model_id: str | None = None) -> EmbeddingModelConnection:
+    """返回当前 Embedding 模型连接信息。Google provider 返回 provider='Google'。"""
+    provider = get_embedding_provider()
+    if provider == "google":
+        return EmbeddingModelConnection(
+            model_id=model_id or get_google_embedding_model(),
+            api_key=get_google_api_key(),
+            base_url="",  # Google SDK 不使用 base_url
+            provider="Google",
+        )
     base_url = get_embedding_base_url()
-    provider = "DigitalOcean" if "inference.do-ai.run" in base_url.lower() else "OpenAI-compatible"
     return EmbeddingModelConnection(
-        model_id=(model_id or get_embedding_model()).strip() or DEFAULT_EMBEDDING_MODEL,
+        model_id=(model_id or get_embedding_model()).strip() or DEFAULT_OPENAI_COMPATIBLE_EMBEDDING_MODEL,
         api_key=get_embedding_api_key(),
         base_url=base_url,
-        provider=provider,
+        provider=_detect_embedding_provider(base_url),
+    )
+
+
+def get_fallback_embedding_model_connection() -> EmbeddingModelConnection | None:
+    """返回兜底 Embedding 模型连接，若未配置则返回 None。"""
+    fallback_model = get_fallback_embedding_model()
+    if not fallback_model:
+        return None
+    provider = get_embedding_provider()
+    if provider == "google":
+        return None  # Google 模型暂不配置 fallback
+    base_url = get_embedding_base_url()
+    return EmbeddingModelConnection(
+        model_id=fallback_model,
+        api_key=get_embedding_api_key(),
+        base_url=base_url,
+        provider=_detect_embedding_provider(base_url),
     )
 
 
@@ -176,9 +247,13 @@ def get_embedding_check_ctx_length() -> bool:
     if raw is not None:
         return raw.strip().lower() in {"1", "true", "yes", "on"}
 
-    # DigitalOcean's OpenAI-compatible embedding endpoint expects strings, while
-    # LangChain's context-length checker may send token-id arrays.
-    return not is_digitalocean_embedding_endpoint()
+    # DigitalOcean / DashScope 的 OpenAI 兼容 embedding endpoint 只接受字符串，
+    # 而 LangChain 的 context-length checker 会把文本 tokenize 成整数数组发送，
+    # 导致 400 错误。对这些 provider 必须关闭该检查。
+    embedding_url = get_embedding_base_url().lower()
+    if "inference.do-ai.run" in embedding_url or "dashscope" in embedding_url:
+        return False
+    return True
 
 
 def get_pydo_client() -> Client:

@@ -17,6 +17,7 @@ SSE 事件类型：
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 
@@ -45,6 +46,54 @@ def _safe_chat_error_message(exc: Exception) -> str:
     if exc.__class__.__name__ and exc.__class__.__name__ != "Exception":
         return f"学习引擎处理失败（{exc.__class__.__name__}），请稍后重试。"
     return "学习引擎处理失败，请稍后重试。"
+
+
+def _chat_error_reason(exc: Exception) -> str:
+    text = f"{exc.__class__.__name__} {str(exc)}".lower()
+    if any(marker in text for marker in ("timeout", "timed out", "超时")):
+        return "timeout"
+    if any(
+        marker in text
+        for marker in (
+            "api connection",
+            "connection error",
+            "connection refused",
+            "dns",
+            "inference.do-ai.run",
+            "model not found",
+            "model unavailable",
+            "temporary failure in name resolution",
+        )
+    ):
+        return "model_unavailable"
+    return "workflow_error"
+
+
+async def _close_chat_stream_safely(
+    *,
+    chat_stream,
+    pending_chunk_task: asyncio.Task | None,
+) -> None:
+    if pending_chunk_task and not pending_chunk_task.done():
+        pending_chunk_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
+            await pending_chunk_task
+
+    if chat_stream is None:
+        return
+
+    try:
+        await chat_stream.aclose()
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        if "aclose" in message and "running" in message:
+            logger.debug("SSE stream close skipped because async generator is already closing")
+            return
+        logger.warning(f"⚠️ SSE stream close failed: {exc}")
+    except asyncio.CancelledError:
+        logger.debug("SSE stream close was cancelled by client disconnect")
+    except Exception as exc:  # pragma: no cover - defensive cleanup guard
+        logger.warning(f"⚠️ SSE stream close failed: {exc}")
 
 
 # ---------- 请求 / 响应模型 ----------
@@ -177,24 +226,29 @@ async def chat(
 
         except asyncio.CancelledError:
             logger.info("💬 SSE 客户端已断开连接")
-            if pending_chunk_task and not pending_chunk_task.done():
-                pending_chunk_task.cancel()
-            if chat_stream is not None:
-                await chat_stream.aclose()
+            await _close_chat_stream_safely(
+                chat_stream=chat_stream,
+                pending_chunk_task=pending_chunk_task,
+            )
             raise
         except Exception as e:
-            if pending_chunk_task and not pending_chunk_task.done():
-                pending_chunk_task.cancel()
-            if chat_stream is not None:
-                await chat_stream.aclose()
+            await _close_chat_stream_safely(
+                chat_stream=chat_stream,
+                pending_chunk_task=pending_chunk_task,
+            )
             error_message = _safe_chat_error_message(e)
-            logger.exception(f"❌ 工作流执行异常: {error_message}")
+            reason = _chat_error_reason(e)
+            if reason in {"timeout", "model_unavailable"}:
+                logger.warning(f"⚠️ 工作流执行中断: reason={reason} error={error_message}")
+            else:
+                logger.warning(f"❌ 工作流执行异常: reason={reason} error={error_message}")
             yield {
                 "event": "error",
                 "data": json.dumps(
                     {
                         "error": error_message,
                         "error_type": e.__class__.__name__,
+                        "reason": reason,
                         "retryable": True,
                         "session_id": request.session_id,
                     },

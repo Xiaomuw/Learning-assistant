@@ -363,6 +363,7 @@ def _stream_chunk_from_orchestrator_update(
         if isinstance(final_state.get("quiz_clarification"), dict)
         else None
     )
+    child_payload = _child_payload(graph_state)
     if quiz_items or quiz_clarification:
         generation_status = _quiz_generation_status_from_child_payload(
             child_payload,

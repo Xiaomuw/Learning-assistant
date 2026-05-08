@@ -56,6 +56,38 @@ class ModelConfigApiTest(unittest.TestCase):
         self.assertEqual([item["id"] for item in payload["available_models"]], ["llama3.3-70b-instruct"])
         self.assertNotIn("GPT-5", payload["available_models"][0]["label"])
 
+    def test_model_config_displays_default_google_embedding_model(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "MODEL_SWITCHING_ENABLED": "false",
+                "LOCKED_CHAT_MODEL": "llama3.3-70b-instruct",
+                "EMBEDDING_PROVIDER": "google",
+                "GOOGLE_EMBEDDING_MODEL": "models/gemini-embedding-2",
+            },
+            clear=False,
+        ):
+            response = self.client.get("/api/settings/model")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["embedding_model"], "models/gemini-embedding-2")
+
+    def test_model_config_displays_openai_compatible_embedding_model(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "MODEL_SWITCHING_ENABLED": "false",
+                "LOCKED_CHAT_MODEL": "llama3.3-70b-instruct",
+                "EMBEDDING_PROVIDER": "openai-compatible",
+                "OPENAI_EMBEDDING_MODEL": "text-embedding-3-large",
+            },
+            clear=False,
+        ):
+            response = self.client.get("/api/settings/model")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["embedding_model"], "text-embedding-3-large")
+
     def test_locked_model_config_rejects_non_locked_update(self) -> None:
         with patch.dict(
             os.environ,

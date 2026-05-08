@@ -219,8 +219,11 @@ def _build_candidate(
     index: int,
 ) -> QuestionCandidate:
     concept = blueprint.concept_name.strip() or blueprint.primary_concept_id
+    specific_variant = _specific_topic_candidate_variant(concept, index)
     subject_variant = _subject_candidate_variant(concept, index)
-    if subject_variant is not None:
+    if specific_variant is not None:
+        stem, raw_options, correct, explanation, rationales, misconceptions = specific_variant
+    elif subject_variant is not None:
         stem, raw_options, correct, explanation, rationales, misconceptions = subject_variant
     elif "http" in concept.lower() or "端口" in concept:
         variants = [
@@ -253,22 +256,63 @@ def _build_candidate(
         ]
         stem, raw_options, correct, explanation, rationales, misconceptions = variants[index % len(variants)]
     else:
-        stem = f"关于「{concept}」的学习，哪一项最能说明已经理解核心概念？"
-        raw_options = [
-            ("A", "能用自己的话解释并解决变式问题"),
-            ("B", "只觉得概念看起来熟悉"),
-            ("C", "看到答案后觉得自己会"),
-            ("D", "完全不做练习也不复盘"),
+        variants = [
+            (
+                f"关于「{concept}」的学习，哪一项最能说明已经理解核心概念？",
+                [
+                    ("A", "能用自己的话解释并解决变式问题"),
+                    ("B", "只觉得概念看起来熟悉"),
+                    ("C", "看到答案后觉得自己会"),
+                    ("D", "完全不做练习也不复盘"),
+                ],
+                "A",
+                f"真正理解「{concept}」通常表现为能解释、能迁移、能处理变式问题。",
+                {
+                    "A": "解释和迁移能检验理解深度。",
+                    "B": "熟悉感容易造成掌握错觉。",
+                    "C": "看答案后会不等于独立会做。",
+                    "D": "缺少练习和复盘无法验证掌握。",
+                },
+                ["把熟悉感当成掌握", "只背答案不理解条件"],
+            ),
+            (
+                f"学习「{concept}」时，最适合先确认哪一类边界？",
+                [
+                    ("A", "概念适用场景和不适用场景"),
+                    ("B", "只记住一个固定例题答案"),
+                    ("C", "跳过定义直接刷难题"),
+                    ("D", "看到熟悉词就认为已经掌握"),
+                ],
+                "A",
+                f"学习「{concept}」要先分清定义、适用条件和典型场景，再进入变式练习。",
+                {
+                    "A": "边界和场景能帮助迁移到新题。",
+                    "B": "固定答案不能覆盖变式。",
+                    "C": "跳过定义会让后续判断失去依据。",
+                    "D": "熟悉词不等于能独立判断。",
+                },
+                ["忽略适用边界", "把见过当成掌握"],
+            ),
+            (
+                f"复盘「{concept}」错题时，哪种做法最能帮助下次迁移？",
+                [
+                    ("A", "写出错因和触发条件，再找一道变式题验证"),
+                    ("B", "只把正确答案背下来"),
+                    ("C", "跳过解析继续刷下一题"),
+                    ("D", "只看题目关键词，不看条件"),
+                ],
+                "A",
+                f"复盘「{concept}」要把错因、条件和变式验证串起来，才能提升迁移能力。",
+                {
+                    "A": "错因加变式验证能形成可迁移经验。",
+                    "B": "背答案难以应对新题。",
+                    "C": "不看解析会重复同类错误。",
+                    "D": "只看关键词容易误判题意。",
+                },
+                ["只背答案", "不复盘错因"],
+            ),
         ]
-        correct = "A"
-        explanation = f"真正理解「{concept}」通常表现为能解释、能迁移、能处理变式问题。"
-        rationales = {
-            "A": "解释和迁移能检验理解深度。",
-            "B": "熟悉感容易造成掌握错觉。",
-            "C": "看答案后会不等于独立会做。",
-            "D": "缺少练习和复盘无法验证掌握。",
-        }
-        misconceptions = ["把熟悉感当成掌握", "只背答案不理解条件"]
+        stem, raw_options, correct, explanation, rationales, misconceptions = variants[index % len(variants)]
 
     options = [AnswerOption(key=key, text=text) for key, text in raw_options]  # type: ignore[arg-type]
     correct_text = next(option.text for option in options if option.key == correct)
@@ -286,11 +330,18 @@ def _build_candidate(
         ),
         rubric=Rubric(
             criteria=["single_correct_option", "concept_alignment", "complete_rationales"],
-            full_credit=f"选择 {correct} 并能说明：{explanation}",
+            full_credit=_directional_hint(explanation),
             common_misconceptions=misconceptions,
         ),
     )
 
+
+
+def _directional_hint(explanation: str) -> str:
+    detail = str(explanation or "").strip()
+    if detail:
+        return f"先根据题干中的关键条件排除明显不符合的选项，再用这个依据核对：{detail}"
+    return "先找出题干中的关键条件，再逐项排除不符合条件的选项。"
 
 def _practice_item_to_candidate(
     *,
@@ -327,7 +378,7 @@ def _practice_item_to_candidate(
         ),
         rubric=Rubric(
             criteria=["single_correct_option", "complete_explanation", "option_rationales"],
-            full_credit=f"选择 {item.correct_option} 并能说明：{item.explanation}",
+            full_credit=_directional_hint(item.explanation),
             common_misconceptions=[
                 rationale
                 for key, rationale in item.option_rationales.items()
@@ -336,6 +387,56 @@ def _practice_item_to_candidate(
         ),
         generation_source="practice_generation",
     )
+
+
+def _specific_topic_candidate_variant(
+    concept: str,
+    index: int,
+) -> tuple[str, list[tuple[str, str]], str, str, dict[str, str], list[str]] | None:
+    compact = concept.replace(" ", "").lower()
+    if "stack" in compact or "栈" in compact:
+        variants = [
+            (
+                "栈这种数据结构最典型的访问规则是什么？",
+                [("A", "先进先出"), ("B", "后进先出"), ("C", "按优先级先出"), ("D", "随机访问任意位置")],
+                "B",
+                "栈的核心规则是 LIFO：后进入栈的元素会先被 pop 出来。",
+                {"A": "先进先出是队列。", "B": "后进先出是栈。", "C": "这是优先队列。", "D": "栈不支持随机访问作为核心规则。"},
+                ["把栈和队列规则混淆", "不理解 push/pop 顺序"],
+            ),
+            (
+                "依次 push 1、push 2、pop、push 3、pop，最后一次 pop 得到什么？",
+                [("A", "1"), ("B", "2"), ("C", "3"), ("D", "空栈")],
+                "C",
+                "栈是后进先出：先 pop 得到 2，再 push 3，最后一次 pop 得到 3。",
+                {"A": "1 最早入栈，不会在最后一次 pop 先出。", "B": "2 已经在第一次 pop 出栈。", "C": "3 最后入栈，因此最后一次 pop 先出。", "D": "最后一次 pop 前栈中仍有 1 和 3。"},
+                ["没有按 LIFO 模拟栈操作"],
+            ),
+        ]
+        return variants[index % len(variants)]
+
+    if "数据库索引" in compact or "databaseindex" in compact:
+        variants = [
+            (
+                "数据库索引最主要的作用是什么？",
+                [("A", "减少查询时需要扫描的数据范围"), ("B", "保证所有查询都不需要磁盘访问"), ("C", "自动消除所有重复数据"), ("D", "让写入操作一定更快")],
+                "A",
+                "数据库索引通常借助 B+树、哈希等结构缩小查找范围，从而减少全表扫描。",
+                {"A": "这是索引优化查询的核心价值。", "B": "索引不能保证完全不访问磁盘。", "C": "去重通常依赖约束，不是普通索引的直接作用。", "D": "维护索引反而可能增加写入成本。"},
+                ["把索引理解成万能加速器", "忽略索引维护成本"],
+            ),
+            (
+                "关于联合索引的最左前缀原则，哪一项理解更准确？",
+                [("A", "查询条件从索引最左列开始连续匹配时更容易用上索引"), ("B", "只要有任意一列条件就一定完整命中联合索引"), ("C", "联合索引只能包含一列"), ("D", "最左前缀原则只影响插入，不影响查询")],
+                "A",
+                "联合索引通常按列顺序组织，查询从最左列开始连续匹配时，优化器更容易利用索引。",
+                {"A": "准确体现了最左前缀原则。", "B": "跳过最左列可能无法有效使用联合索引。", "C": "联合索引本来就是多列索引。", "D": "最左前缀主要影响查询是否能命中索引。"},
+                ["以为联合索引任意列都等价", "忽略索引列顺序"],
+            ),
+        ]
+        return variants[index % len(variants)]
+
+    return None
 
 
 def _subject_candidate_variant(

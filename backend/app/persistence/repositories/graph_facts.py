@@ -352,6 +352,8 @@ class SqlQuestionItemRepository(QuestionItemRepository):
     def find_similar(self, payload: dict[str, Any], *, limit: int = 10) -> list[dict[str, Any]]:
         stem = _text(payload.get("stem") or payload.get("question"), 4000)
         concept_id = _text(payload.get("primary_concept_id") or payload.get("concept_id"), 160)
+        user_id = _text(payload.get("user_id"), 100)
+        subject_id = _text(payload.get("subject_id") or payload.get("notebook_id"), 64)
         with self.session_factory() as session:
             query = select(GraphQuestionItemModel)
             if stem:
@@ -360,6 +362,10 @@ class SqlQuestionItemRepository(QuestionItemRepository):
                 query = query.where(GraphQuestionItemModel.primary_concept_id == concept_id)
             else:
                 return []
+            if user_id:
+                query = query.where(GraphQuestionItemModel.user_id == user_id)
+            if subject_id:
+                query = query.where(GraphQuestionItemModel.subject_id == subject_id)
             rows = session.scalars(query.order_by(GraphQuestionItemModel.created_at.desc()).limit(_bounded_limit(limit))).all()
             return [_question_item_from_row(row) for row in rows]
 

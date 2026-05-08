@@ -166,6 +166,29 @@ class CrossGraphContractsTest(unittest.TestCase):
                     f"{graph_dir} must not directly import sibling business graphs: {path} has {leaked}",
                 )
 
+    def test_business_graphs_do_not_import_provider_specific_tavily_modules(self) -> None:
+        forbidden_modules = {
+            "app.services.tooling.adapters.tavily",
+            "app.services.tools.tavily_tool",
+            "tavily",
+        }
+        forbidden_symbols = {"TavilyClient", "TavilyWebSearchAdapter"}
+
+        for path in _py_files():
+            imports = _imported_names(path)
+            leaked_modules = {
+                module
+                for module in imports
+                for forbidden in forbidden_modules
+                if module == forbidden or module.startswith(f"{forbidden}.")
+            }
+            leaked_symbols = imports & forbidden_symbols
+            self.assertFalse(
+                leaked_modules or leaked_symbols,
+                f"business graph must request capability, not Tavily provider directly: {path} has "
+                f"{leaked_modules | leaked_symbols}",
+            )
+
     def test_enterprise_graphs_compile_and_return_final_response_contract(self) -> None:
         cases = [
             (GraphType.QA, build_qa_graph, "什么是 HTTP？"),

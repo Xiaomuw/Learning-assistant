@@ -16,7 +16,10 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
-from app.application.chat.orchestrator_runtime import _quiz_items_from_child_payload
+from app.application.chat.orchestrator_runtime import (
+    _quiz_items_from_child_payload,
+    _stream_chunk_from_orchestrator_update,
+)
 from app.domains.practice.attempts import record_practice_attempt_and_update_memory
 from app.domains.practice.common import normalize_practice_source_type, normalize_quiz_item
 from app.shared.schemas.contracts import MasteryEvaluationResult, PracticeRecommendation
@@ -51,6 +54,59 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
 
         self.assertEqual(items[0]["source_type"], "ai_generated")
         self.assertEqual(items[0]["source_name"], "QuestionGenerationGraph")
+
+    def test_stream_chunk_maps_question_generation_quiz_output(self) -> None:
+        final_response = {
+            "answer": "已围绕「stack」生成并保存 1 道基础单选题。",
+            "source_level": "model",
+            "concepts": [{"concept_id": "stack", "name": "stack", "confidence": 0.8, "source": "test"}],
+            "ui_payload": {"target_graph_type": "question_generation"},
+        }
+        graph_state = {
+            "source_policy": "open_tools",
+            "intent_decision": {"intent": "generate_question"},
+            "final_response": final_response,
+            "child_graph_output": {
+                "target_graph_type": "question_generation",
+                "payload": {
+                    "final_response": final_response,
+                    "question_items": [
+                        {
+                            "id": "q1",
+                            "stem": "栈这种数据结构最典型的访问规则是什么？",
+                            "options": [
+                                {"key": "A", "text": "先进先出"},
+                                {"key": "B", "text": "后进先出"},
+                                {"key": "C", "text": "按优先级先出"},
+                                {"key": "D", "text": "随机访问任意位置"},
+                            ],
+                            "primary_concept_id": "stack",
+                            "difficulty": "基础",
+                            "answer_key": {
+                                "correct_option": "B",
+                                "explanation": "栈是 LIFO 后进先出。",
+                                "option_rationales": {"B": "后进先出是栈。"},
+                            },
+                        }
+                    ],
+                    "generation_status": {"quality_passed": True},
+                },
+            },
+        }
+
+        chunk = _stream_chunk_from_orchestrator_update(
+            node_name="response_composer",
+            node_update={"final_response": final_response},
+            graph_state=graph_state,
+            initial_state={"question": "Generate one stack practice question"},
+            request_mode="sync",
+            latency_ms=120,
+        )
+
+        self.assertIsNotNone(chunk)
+        self.assertEqual(chunk["node"], "quiz_output_node")
+        self.assertEqual(chunk["state_update"]["quiz_items"][0]["knowledge_point"], "stack")
+        self.assertTrue(chunk["state_update"]["quiz_generation_status"]["quality_passed"])
 
     def test_normalize_quiz_item_keeps_source_type_compatible_with_attempt_table(self) -> None:
         item = normalize_quiz_item(

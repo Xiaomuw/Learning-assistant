@@ -90,6 +90,8 @@ export default function ProfilePage() {
   const [showHistoryManager, setShowHistoryManager] = useState(false);
   const [historyFilterNotebookId, setHistoryFilterNotebookId] = useState("all");
   const [historyQuery, setHistoryQuery] = useState("");
+  const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
+  const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [recommendedPractice, setRecommendedPractice] = useState<QuizItem[]>([]);
   const [showRecommendedPractice, setShowRecommendedPractice] = useState(false);
@@ -396,19 +398,20 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleDeleteSession(sessionId: string) {
-    if (!user) {
-      return;
-    }
-    const confirmed = window.confirm("确定删除这条聊天记录吗？删除后无法恢复。");
-    if (!confirmed) {
+  function handleDeleteSession(sessionId: string) {
+    setPendingDeleteSessionId(sessionId);
+  }
+
+  async function handleConfirmDeleteSession() {
+    if (!user || !pendingDeleteSessionId) {
       return;
     }
 
-    setDeletingSessionId(sessionId);
+    setDeletingSessionId(pendingDeleteSessionId);
     try {
-      await deleteSession(user.id, sessionId);
+      await deleteSession(user.id, pendingDeleteSessionId);
       await refreshSessions();
+      setPendingDeleteSessionId(null);
       showFeedback("success", "聊天记录已删除。");
     } catch (error) {
       console.error("删除聊天记录失败", error);
@@ -421,13 +424,14 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleExit() {
-    const confirmed = window.confirm("确定退出当前账号吗？退出后会返回登录页。");
-    if (!confirmed) {
-      return;
-    }
+  function handleExit() {
+    setIsExitConfirmOpen(true);
+  }
 
+  async function handleConfirmExit() {
+    setIsExitConfirmOpen(false);
     await logout();
+    router.push("/login");
   }
 
   async function handleChangePassword() {
@@ -680,7 +684,7 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() =>
-                showFeedback("info", "我的笔记本功能待开发，暂时请在问答页选择知识库。")
+                showFeedback("info", "我的笔记本管理入口暂未开放；当前请在问答页顶部选择知识库。")
               }
               className="flex items-center justify-between bg-neo-secondary p-4 text-left transition-colors hover:bg-neo-accent"
             >
@@ -1081,6 +1085,82 @@ export default function ProfilePage() {
       </main>
 
       <BottomNav />
+
+      {pendingDeleteSessionId && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-session-confirm-title"
+            className="neo-card w-full max-w-md p-5"
+          >
+            <p className="neo-label">Danger Zone</p>
+            <h2 id="delete-session-confirm-title" className="mt-2 text-xl font-black">
+              删除这条聊天记录？
+            </h2>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-neo-ink/70">
+              删除后无法恢复。这个操作只会影响当前选择的聊天记录。
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteSessionId(null)}
+                disabled={Boolean(deletingSessionId)}
+                className="neo-button-ghost w-full justify-center"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleConfirmDeleteSession();
+                }}
+                disabled={Boolean(deletingSessionId)}
+                className="neo-button w-full justify-center bg-neo-accent"
+              >
+                {deletingSessionId === pendingDeleteSessionId ? "删除中" : "确认删除"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isExitConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-confirm-title"
+            className="neo-card w-full max-w-md p-5"
+          >
+            <p className="neo-label">Sign Out</p>
+            <h2 id="logout-confirm-title" className="mt-2 text-xl font-black">
+              退出当前账号？
+            </h2>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-neo-ink/70">
+              退出后会返回登录页，之后访问问答、刷题、中心和我的页面都需要重新登录。
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setIsExitConfirmOpen(false)}
+                className="neo-button-ghost w-full justify-center"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleConfirmExit();
+                }}
+                className="neo-button w-full justify-center bg-neo-accent"
+              >
+                确认退出
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showEditProfile && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">

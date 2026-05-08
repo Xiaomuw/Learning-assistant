@@ -48,9 +48,9 @@ def _parse_args() -> argparse.Namespace:
 
 def _validate_test_email(email: str) -> str:
     normalized = email.strip().lower()
-    allowed_markers = ("+auth-auto-", "+ui-e2e-")
+    allowed_markers = ("+auth-auto-", "+ui-e2e-", "+browser-e2e-")
     if not normalized.endswith("@gmail.com") or not any(marker in normalized for marker in allowed_markers):
-        raise SystemExit("只允许清理包含 +auth-auto- 或 +ui-e2e- 的 Gmail 临时测试邮箱。")
+        raise SystemExit("只允许清理包含 +auth-auto-、+ui-e2e- 或 +browser-e2e- 的 Gmail 临时测试邮箱。")
     return normalized
 
 

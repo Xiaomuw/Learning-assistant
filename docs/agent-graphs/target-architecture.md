@@ -53,6 +53,15 @@
 - QuestionGenerationGraph 产生 `question_generated`、`question_reviewed` 等事件。
 - MasteryEvaluationGraph 消费事件并产生 `mastery_updated`、`next_step_recommended` 等事件。
 
+## 轻量 DDD 与扩展模式
+
+- Graph 是应用编排层：负责 state 流转、子 Graph 调用、响应组合和审计，不承载 provider 细节或长期事实写入。
+- Domain 层放纯业务规则：例如 quiz request resolution、QA answer policy、mastery signal 解释、题目质量规则。
+- Services/tooling 层按 capability 暴露工具能力：Graph 请求 `ToolCapability`，provider adapter 和 registry 决定实际执行方。
+- Persistence 层只暴露 repository Protocol 和 SQL/legacy adapter：Graph 依赖 Protocol，不依赖 SQLAlchemy session 或具体表实现。
+- 高分支决策优先使用责任链、决策表、adapter、factory：Orchestrator intent、child graph invocation、tool policy 不再继续堆叠中心化 `if/else`。
+- 局部 `if/else` 可以保留在单条规则内部表达简单条件；跨业务路由、权限裁决和 provider 选择应通过可注册规则或 factory 扩展。
+
 ## 持久化边界
 
 - PostgreSQL domain tables 是长期业务事实来源。

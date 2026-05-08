@@ -18,7 +18,7 @@ os.environ.setdefault(
 from app.services.tooling.executor import ToolExecutor
 from app.services.tooling.policy import ToolPolicyResolver
 from app.services.tooling.registry import build_default_tool_registry
-from app.services.tooling.schemas import ToolExecutionRequest, ToolRiskLevel
+from app.services.tooling.schemas import ToolExecutionRequest, ToolPolicyDecision, ToolRiskLevel
 from app.shared.schemas.agent_graphs import SourcePolicy, ToolCapability, ToolStatus
 from app.shared.schemas.contracts import RetrievalDiagnostics, RetrievedDocument
 
@@ -84,6 +84,76 @@ class ToolingContractsTest(unittest.TestCase):
 
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.reason, "test_mode_blocks_high_risk_tool")
+
+    def test_policy_blocks_tenant_scope_mismatch(self) -> None:
+        decision = ToolPolicyResolver().resolve(
+            source_policy=SourcePolicy.OPEN_TOOLS,
+            capability=ToolCapability.NOTEBOOK_RETRIEVE,
+            tenant_scope="tenant-a",
+            tenant_id="tenant-b",
+        )
+
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "tenant_scope_mismatch")
+
+    def test_policy_blocks_write_tools_by_default(self) -> None:
+        decision = ToolPolicyResolver().resolve(
+            source_policy=SourcePolicy.OPEN_TOOLS,
+            capability=ToolCapability.CODE_EXECUTE,
+            risk_level=ToolRiskLevel.WRITE,
+        )
+
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "write_tools_disabled")
+
+    def test_policy_allows_open_tool_capability_after_rule_chain_passes(self) -> None:
+        decision = ToolPolicyResolver().resolve(
+            source_policy=SourcePolicy.OPEN_TOOLS,
+            capability=ToolCapability.CODE_EXECUTE,
+            risk_level=ToolRiskLevel.MEDIUM,
+        )
+
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.reason, "allowed")
+
+    def test_policy_blocks_invalid_source_policy(self) -> None:
+        decision = ToolPolicyResolver().resolve(
+            source_policy="unknown_policy",
+            capability=ToolCapability.NOTEBOOK_RETRIEVE,
+        )
+
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "invalid_source_policy")
+
+    def test_custom_policy_rule_short_circuits_default_chain(self) -> None:
+        class CustomBlockRule:
+            def decide(self, context):
+                return ToolPolicyDecision(allowed=False, reason="custom_block")
+
+        decision = ToolPolicyResolver(rules=(CustomBlockRule(),)).resolve(
+            source_policy=SourcePolicy.OPEN_TOOLS,
+            capability=ToolCapability.NOTEBOOK_RETRIEVE,
+        )
+
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "custom_block")
+
+    def test_custom_policy_rule_order_is_respected(self) -> None:
+        class FirstRule:
+            def decide(self, context):
+                return ToolPolicyDecision(allowed=False, reason="first_rule")
+
+        class SecondRule:
+            def decide(self, context):
+                return ToolPolicyDecision(allowed=False, reason="second_rule")
+
+        decision = ToolPolicyResolver(rules=(FirstRule(), SecondRule())).resolve(
+            source_policy=SourcePolicy.OPEN_TOOLS,
+            capability=ToolCapability.NOTEBOOK_RETRIEVE,
+        )
+
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "first_rule")
 
     def test_executor_blocks_before_provider_execution(self) -> None:
         executor = ToolExecutor(

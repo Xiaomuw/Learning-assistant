@@ -75,6 +75,19 @@ function practicePackFailureMessage(result: {
   return "AI 补题暂时没有生成题目，请稍后重试。";
 }
 
+function safePracticeHint(hint: string | undefined) {
+  const raw = (hint ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  const cleaned = raw
+    .replace(/正确答案是\s*[A-D]/gi, "")
+    .replace(/选择\s*[A-D]\s*(?:并|，|,|。|\.)?/gi, "")
+    .replace(/答案\s*[A-D]/gi, "")
+    .trim();
+  return cleaned || "先根据题干关键条件排除明显不符合的选项，再提交作答。";
+}
+
 export default function PracticePage() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
@@ -680,7 +693,7 @@ export default function PracticePage() {
                     <div className="neo-card-secondary mt-3 p-4">
                       <p className="neo-label">Hint</p>
                       <p className="mt-2 text-sm font-bold leading-relaxed">
-                        {currentQuiz.hint}
+                        {safePracticeHint(currentQuiz.hint)}
                       </p>
                     </div>
                   ) : null}

@@ -3,6 +3,8 @@
 test-graphs:
 	LANGSMITH_TRACING=false GRAPH_EVAL_LANGSMITH=false backend/.venv313/bin/python -m unittest \
 		backend.tests.test_agent_graph_contracts \
+		backend.tests.test_orchestrator_intent_rules \
+		backend.tests.test_child_invokers \
 		backend.tests.test_tooling_contracts \
 		backend.tests.test_learning_orchestrator_graph \
 		backend.tests.test_quiz_request_resolver \

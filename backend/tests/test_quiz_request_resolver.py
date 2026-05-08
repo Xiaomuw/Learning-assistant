@@ -184,6 +184,21 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.topic, "栈")
         self.assertEqual(result.source, "last_topic")
 
+    def test_explicit_http_quiz_request_overrides_stale_dns_context(self) -> None:
+        result = resolve_quiz_request(
+            "给我出两道 HTTP 单选题\n请只给题目和选项",
+            {"last_topic": "DNS", "active_topic": "DNS"},
+        )
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "HTTP")
+        self.assertEqual(result.requested_topic, "HTTP")
+        self.assertEqual(result.previous_topic, "DNS")
+        self.assertEqual(result.active_topic, "HTTP")
+        self.assertEqual(result.count, 2)
+        self.assertEqual(result.subject_id, "computer-network")
+        self.assertTrue(result.should_switch_topic)
+
     def test_normal_question_does_not_enter_quiz_flow(self) -> None:
         result = resolve_quiz_request("HashMap 为什么线程不安全", {})
 

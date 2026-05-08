@@ -254,6 +254,41 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         self.assertEqual(matches[0]["id"], "qitem-1")
         self.assertEqual(matches[0]["primary_concept_id"], "HTTP")
 
+    def test_question_item_similarity_scopes_by_user_and_subject_when_provided(self) -> None:
+        repo = SqlQuestionItemRepository(session_factory=self.session_scope)
+        repo.create_question_item(
+            {
+                "id": "qitem-u1",
+                "user_id": "u1",
+                "subject_id": "data-structure",
+                "primary_concept_id": "stack",
+                "stem": "栈这种数据结构最典型的访问规则是什么？",
+                "options": [{"key": "A", "text": "后进先出"}],
+                "answer_key": {"correct_option": "A"},
+                "rubric": {"criteria": ["single_correct_option"]},
+            }
+        )
+
+        same_user_matches = repo.find_similar(
+            {
+                "user_id": "u1",
+                "subject_id": "data-structure",
+                "stem": "栈这种数据结构最典型的访问规则是什么？",
+            },
+            limit=5,
+        )
+        other_user_matches = repo.find_similar(
+            {
+                "user_id": "u2",
+                "subject_id": "data-structure",
+                "stem": "栈这种数据结构最典型的访问规则是什么？",
+            },
+            limit=5,
+        )
+
+        self.assertEqual([item["id"] for item in same_user_matches], ["qitem-u1"])
+        self.assertEqual(other_user_matches, [])
+
     def test_concept_repository_upserts_and_resolves_concept(self) -> None:
         repo = SqlConceptRepository(session_factory=self.session_scope)
         concept_id = repo.upsert_concept(

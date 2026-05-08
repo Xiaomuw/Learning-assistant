@@ -99,6 +99,27 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
         self.assertEqual(result["notebook_id"], "computer-network")
 
+    def test_explicit_http_quiz_request_overrides_session_dns_topic(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "user_id": "u1",
+                "thread_id": "t1",
+                "notebook_id": "computer-network",
+                "user_message": "给我出两道 HTTP 单选题\n请只给题目和选项",
+                "chat_runtime_context": {
+                    "session_memory": {"active_topic": "DNS"},
+                    "memory": {"recent_topics": ["DNS"]},
+                },
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
+        self.assertEqual(result["quiz_request"]["topic"], "HTTP")
+        self.assertEqual(result["quiz_request"]["requested_topic"], "HTTP")
+        self.assertEqual(result["quiz_request"]["active_topic"], "HTTP")
+        self.assertTrue(result["quiz_request"]["should_switch_topic"])
+        self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
+
     def test_clarifies_quiz_request_without_topic_or_context(self) -> None:
         result = build_graph().compile().invoke(
             {"user_id": "u1", "thread_id": "t1", "user_message": "帮我出点题"}

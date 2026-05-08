@@ -5,7 +5,7 @@ from typing import Any
 from app.infrastructure.llm.provider import get_embeddings, validate_embedding_model_access
 
 
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+DEFAULT_EMBEDDING_MODEL = "models/gemini-embedding-2"
 
 
 def get_embedding_function(default_model: str = DEFAULT_EMBEDDING_MODEL) -> Any:
@@ -15,5 +15,4 @@ def get_embedding_function(default_model: str = DEFAULT_EMBEDDING_MODEL) -> Any:
 
 def check_embedding_ready(default_model: str = DEFAULT_EMBEDDING_MODEL) -> dict[str, Any]:
     """Run the non-sensitive embedding access check used by health diagnostics."""
-    return validate_embedding_model_access(default_model=default_model)
-
+    return validate_embedding_model_access(model_id=default_model)

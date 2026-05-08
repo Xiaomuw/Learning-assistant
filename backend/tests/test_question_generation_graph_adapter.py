@@ -23,6 +23,7 @@ from app.orchestration.graphs.question_generation.adapter import (
     LegacyPracticeQuestionCandidateGenerator,
 )
 from app.orchestration.graphs.question_generation.graph import build_graph
+from app.orchestration.graphs.question_generation.nodes import _topic_alignment_issue
 from app.orchestration.graphs.question_generation.schemas import (
     AnswerKey,
     ItemBlueprint,
@@ -378,6 +379,120 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertFalse(any("学习方法" in stem for stem in stems))
         self.assertTrue(any("数组" in stem or "链表" in stem for stem in stems))
 
+    def test_english_stack_topic_generates_specific_aligned_questions(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-stack",
+                "user_id": "u1",
+                "user_message": "Generate two stack practice questions",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "stack",
+                    "requested_topic": "stack",
+                    "active_topic": "stack",
+                    "subject_id": "data-structure",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 2,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        stems = "\n".join(str(item["stem"]) for item in question_repo.created)
+        saved_payload = json.dumps(question_repo.created, ensure_ascii=False)
+        self.assertTrue(report.passed)
+        self.assertEqual(report.reviewer["topic_alignment_reason"], "alias_match")
+        self.assertEqual(len(question_repo.created), 2)
+        self.assertIn("栈", stems)
+        self.assertIn("LIFO", saved_payload)
+        self.assertNotIn("HTTP", saved_payload)
+        self.assertFalse(any("学习方法" in str(item["stem"]) for item in question_repo.created))
+
+    def test_database_index_topic_generates_specific_aligned_questions(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-database-index",
+                "user_id": "u1",
+                "user_message": "给我出两道数据库索引练习题",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "数据库索引",
+                    "requested_topic": "数据库索引",
+                    "active_topic": "数据库索引",
+                    "subject_id": "data-structure",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 2,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        saved_payload = json.dumps(question_repo.created, ensure_ascii=False)
+        self.assertTrue(report.passed)
+        self.assertEqual(len(question_repo.created), 2)
+        self.assertIn("索引", saved_payload)
+        self.assertTrue(any(term in saved_payload for term in ("B+树", "联合索引", "最左前缀")))
+        self.assertNotIn("HTTP", saved_payload)
+        self.assertFalse(any("学习方法" in str(item["stem"]) for item in question_repo.created))
+
+    def test_topic_alignment_aliases_accept_common_related_terms(self) -> None:
+        cases = [
+            ("stack", "栈是 LIFO 后进先出结构，push 后通常由 pop 弹出。", "data-structure"),
+            ("栈", "LIFO 后进先出的访问规则是这个知识点的核心。", "data-structure"),
+            ("HashMap", "散列表通过哈希函数定位桶，并需要处理哈希冲突。", "data-structure"),
+            ("TCP", "可靠传输、三次握手和拥塞控制都是传输层 TCP 的关键内容。", "computer-network"),
+        ]
+
+        for topic, text, subject_id in cases:
+            with self.subTest(topic=topic):
+                blueprint = ItemBlueprint(
+                    primary_concept_id=topic.lower(),
+                    concept_name=topic,
+                    constraints={"subject_id": subject_id},
+                )
+                candidate = QuestionCandidate(
+                    stem=f"{text} 以下哪项理解最准确？",
+                    options=[
+                        {"key": "A", "text": "说法正确"},
+                        {"key": "B", "text": "说法错误"},
+                        {"key": "C", "text": "与主题无关"},
+                        {"key": "D", "text": "无法判断"},
+                    ],
+                    primary_concept_id=blueprint.primary_concept_id,
+                    source_refs=[SourceRef(source_type="generator", source_id="test")],
+                    answer_key=AnswerKey(
+                        correct_option="A",
+                        correct_option_text="说法正确",
+                        explanation=text,
+                        option_rationales={
+                            "A": "解释体现了主题别名。",
+                            "B": "与题干解释相反。",
+                            "C": "题干明确围绕目标主题。",
+                            "D": "题干信息足以判断。",
+                        },
+                    ),
+                    rubric=Rubric(criteria=["topic_alignment"], full_credit=text),
+                )
+                self.assertEqual(_topic_alignment_issue(blueprint, candidate, 1), "")
+
     def test_question_repository_failure_does_not_drop_valid_practice_pack(self) -> None:
         result = build_graph(
             question_item_repository=FailingQuestionItemRepository(),
@@ -596,6 +711,7 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
 
         report = QualityReport.model_validate(result["quality_report"])
         self.assertFalse(report.passed)
+        self.assertEqual(report.reviewer["topic_alignment_reason"], "blocked_subject_mismatch")
         self.assertEqual(generator.calls, 2)
         self.assertEqual(question_repo.created, [])
         self.assertTrue(any("主题不一致" in issue for issue in report.issues))
@@ -634,6 +750,148 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertEqual(len(question_repo.created), 5)
         self.assertIn("数组", stems)
         self.assertNotIn("HTTP", stems)
+
+    def test_requested_topic_precedes_stale_active_topic(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-requested-topic",
+                "user_id": "u1",
+                "user_message": "给我出两道 HTTP 单选题",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "DNS",
+                    "requested_topic": "HTTP",
+                    "previous_topic": "DNS",
+                    "active_topic": "DNS",
+                    "should_switch_topic": True,
+                    "subject_id": "computer-network",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 2,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertTrue(report.passed)
+        self.assertEqual(result["generation_status"]["active_topic"], "HTTP")
+        self.assertIn("HTTP", response.answer)
+        self.assertEqual(len(question_repo.created), 2)
+        self.assertTrue(all("HTTP" in item["stem"] or "http" in item["stem"].lower() for item in question_repo.created))
+
+    def test_in_pack_duplicate_questions_are_blocked_before_persist(self) -> None:
+        class DuplicateGenerator:
+            def generate_with_status(self, *, blueprint: ItemBlueprint, source_refs: list[SourceRef]):
+                candidate = QuestionCandidate(
+                    stem="DNS 的核心作用是什么？",
+                    options=[
+                        {"key": "A", "text": "把域名解析为 IP 地址"},
+                        {"key": "B", "text": "加密 HTTP 报文"},
+                        {"key": "C", "text": "建立 TCP 连接"},
+                        {"key": "D", "text": "分配进程时间片"},
+                    ],
+                    primary_concept_id=blueprint.primary_concept_id,
+                    difficulty=blueprint.difficulty,
+                    source_refs=source_refs,
+                    answer_key=AnswerKey(
+                        correct_option="A",
+                        correct_option_text="把域名解析为 IP 地址",
+                        explanation="DNS 的核心作用是把域名解析为网络通信需要的 IP 地址。",
+                        option_rationales={
+                            "A": "这是 DNS 的核心职责。",
+                            "B": "加密是 HTTPS/TLS 的职责。",
+                            "C": "建立连接属于传输层 TCP 行为。",
+                            "D": "进程调度属于操作系统。",
+                        },
+                    ),
+                    rubric=Rubric(criteria=["topic_alignment"], full_credit="先判断 DNS 的核心职责，再排除其他协议或系统职责。"),
+                )
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "candidates": [candidate, candidate],
+                        "status": {"generation_source": "duplicate", "generated_count": 2},
+                    },
+                )()
+
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(
+            candidate_generator=DuplicateGenerator(),
+            question_item_repository=question_repo,
+        ).compile().invoke(
+            {
+                "run_id": "run-qgen-duplicate-pack",
+                "user_id": "u1",
+                "user_message": "给我出两道 DNS 单选题",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "DNS",
+                    "requested_topic": "DNS",
+                    "active_topic": "DNS",
+                    "subject_id": "computer-network",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 2,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        self.assertFalse(report.passed)
+        self.assertTrue(any("重复" in issue for issue in report.issues))
+        self.assertEqual(question_repo.created, [])
+
+    def test_generic_fallback_generates_distinct_questions_for_same_topic(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-generic-distinct",
+                "user_id": "u1",
+                "user_message": "给我出两道 DNS 单选题",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "DNS",
+                    "requested_topic": "DNS",
+                    "active_topic": "DNS",
+                    "subject_id": "computer-network",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 2,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        stems = [item["stem"] for item in question_repo.created]
+        hints = [item["rubric"]["full_credit"] for item in question_repo.created]
+        self.assertTrue(report.passed)
+        self.assertEqual(len(stems), 2)
+        self.assertEqual(len(set(stems)), 2)
+        self.assertFalse(any("选择 A" in hint or "正确答案是" in hint for hint in hints))
 
     def test_empty_generation_records_graph_error_and_does_not_persist_question_item(self) -> None:
         question_repo = MockQuestionItemRepository()

@@ -181,9 +181,9 @@ def _pick_active_topic(
     requested_topic = ""
     if isinstance(quiz_request, dict):
         requested_topic = str(
-            quiz_request.get("active_topic") or quiz_request.get("requested_topic") or quiz_request.get("topic") or ""
+            quiz_request.get("requested_topic") or quiz_request.get("active_topic") or quiz_request.get("topic") or ""
         ).strip()
-    if is_failed_practice_generation and requested_topic:
+    if requested_topic:
         return requested_topic
     if is_failed_practice_generation and previous_topic:
         return previous_topic
