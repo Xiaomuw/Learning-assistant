@@ -1705,12 +1705,13 @@ export default function ChatPage() {
     );
   }
 
-  const selectedNotebook = notebooks.find(
+  const visibleNotebooks = notebookListOrFallback(notebooks);
+  const selectedNotebook = visibleNotebooks.find(
     (notebook) => notebook.id === selectedNotebookId
   );
   const currentSession = sessions.find((session) => session.id === currentSessionId);
   const currentSessionNotebook = currentSession
-    ? notebooks.find((notebook) => notebook.id === currentSession.notebookId) ?? null
+    ? visibleNotebooks.find((notebook) => notebook.id === currentSession.notebookId) ?? null
     : selectedNotebook ?? null;
   const modelDisplay = currentModelDisplay(modelConfig);
   const shouldShowKnowledgeHint =
@@ -1765,7 +1766,7 @@ export default function ChatPage() {
           <div className="flex items-center gap-2">
             <div className="flex-1">
               <NotebookSelector
-                notebooks={notebooks}
+                notebooks={visibleNotebooks}
                 selectedId={selectedNotebookId}
                 onSelect={handleNotebookSelect}
               />
@@ -1851,18 +1852,20 @@ export default function ChatPage() {
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
         sessions={sessions}
-        notebooks={notebooks}
+        notebooks={visibleNotebooks}
         currentSessionId={currentSessionId}
         onSelectSession={(session) => {
           activeStreamRef.current?.abort();
           activeStreamRef.current = null;
           setIsStreaming(false);
-          const sessionNotebookId = notebooks.some((item) => item.id === session.notebookId)
-            ? session.notebookId
-            : notebooks[0]?.id ?? DEFAULT_NOTEBOOK_ID;
+          const sessionNotebookId = resolveNotebookId(
+            visibleNotebooks,
+            session.notebookId
+          );
           setSelectedNotebookId(sessionNotebookId);
           persistStoredNotebookId(sessionNotebookId);
           setCurrentSessionId(session.id);
+          activeDraftSessionRef.current = session.id;
           setMessages(session.messages);
           setShowHistory(false);
         }}
