@@ -327,6 +327,7 @@ def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
         candidates = _candidate_list(state)
         report = QualityReport.model_validate(state.get("quality_report") or {})
         duplicate_ids: list[str] = []
+        reuse_by_signature: dict[str, str] = {}
         status = dict(state.get("generation_status") or {})
         errors = list(state.get("errors") or [])
         for candidate in candidates:
@@ -351,17 +352,29 @@ def make_dedupe_checker_node(question_item_repository: QuestionItemRepository):
                     ).model_dump(mode="json")
                 )
                 matches = []
-            duplicate_ids.extend(str(item.get("id") or item.get("question_id")) for item in matches if item)
+            match_ids = [
+                str(item.get("id") or item.get("question_id"))
+                for item in matches
+                if item and str(item.get("id") or item.get("question_id") or "").strip()
+            ]
+            duplicate_ids.extend(match_ids)
+            if match_ids:
+                reuse_by_signature[_candidate_signature(candidate)] = match_ids[0]
 
         duplicate_ids = sorted({item for item in duplicate_ids if item})
-        dedupe = DedupeReport(passed=not duplicate_ids, duplicate_question_ids=duplicate_ids)
-        issues = list(report.issues)
+        dedupe = DedupeReport(passed=True, duplicate_question_ids=duplicate_ids)
         if duplicate_ids:
-            issues.append(f"发现重复题目: {','.join(duplicate_ids)}")
+            status.update(
+                {
+                    "external_duplicate_count": len(duplicate_ids),
+                    "dedupe_reused_question_ids": duplicate_ids,
+                    "dedupe_reuse_by_signature": reuse_by_signature,
+                }
+            )
         updated = report.model_copy(
             update={
-                "passed": report.passed and dedupe.passed,
-                "issues": issues,
+                "passed": report.passed,
+                "issues": list(report.issues),
                 "dedupe_checker": dedupe,
             }
         )
@@ -412,6 +425,11 @@ def make_persist_question_items_node(
         items: list[QuestionItem] = []
         events: list[LearningEvent] = []
         status = dict(state.get("generation_status") or {})
+        reuse_by_signature = (
+            status.get("dedupe_reuse_by_signature")
+            if isinstance(status.get("dedupe_reuse_by_signature"), dict)
+            else {}
+        )
         errors = list(state.get("errors") or [])
 
         review_event = _learning_event(
@@ -445,8 +463,9 @@ def make_persist_question_items_node(
                     )
                 )
             for candidate in candidates:
+                reused_item_id = str(reuse_by_signature.get(_candidate_signature(candidate)) or "").strip()
                 item = QuestionItem(
-                    id=f"qitem-{uuid4()}",
+                    id=reused_item_id or f"qitem-{uuid4()}",
                     stem=candidate.stem,
                     options=candidate.options,
                     primary_concept_id=candidate.primary_concept_id,
@@ -457,22 +476,24 @@ def make_persist_question_items_node(
                     quality_report=report,
                     generation_source=candidate.generation_source,
                 )
-                payload = _question_item_payload_with_context(item, state)
-                try:
-                    item_id = question_item_repository.create_question_item(payload)
-                except Exception as exc:
-                    item_id = item.id
-                    status["persist_degraded"] = True
-                    status["persist_error_type"] = exc.__class__.__name__
-                    errors.append(
-                        GraphError(
-                            code="question_item_persist_unavailable",
-                            message=exc.__class__.__name__,
-                            node="persist_question_items",
-                            severity=GraphErrorSeverity.WARNING,
-                        ).model_dump(mode="json")
-                    )
-                item = item.model_copy(update={"id": item_id})
+                item_id = reused_item_id
+                if not item_id:
+                    payload = _question_item_payload_with_context(item, state)
+                    try:
+                        item_id = question_item_repository.create_question_item(payload)
+                    except Exception as exc:
+                        item_id = item.id
+                        status["persist_degraded"] = True
+                        status["persist_error_type"] = exc.__class__.__name__
+                        errors.append(
+                            GraphError(
+                                code="question_item_persist_unavailable",
+                                message=exc.__class__.__name__,
+                                node="persist_question_items",
+                                severity=GraphErrorSeverity.WARNING,
+                            ).model_dump(mode="json")
+                        )
+                    item = item.model_copy(update={"id": item_id})
                 item_ids.append(item_id)
                 items.append(item)
                 events.append(
@@ -486,6 +507,7 @@ def make_persist_question_items_node(
                             "difficulty": item.difficulty,
                             "source_refs": [ref.model_dump(mode="json") for ref in item.source_refs],
                             "generation_source": item.generation_source,
+                            "reused_existing": bool(reused_item_id),
                         },
                     )
                 )

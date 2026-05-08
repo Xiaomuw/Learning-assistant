@@ -362,14 +362,7 @@ def _practice_item_to_candidate(
         options=options,
         primary_concept_id=blueprint.primary_concept_id,
         difficulty=item.difficulty or blueprint.difficulty,
-        source_refs=source_refs
-        or [
-            SourceRef(
-                source_type=item.source_type or "practice_generation",
-                source_id=item.question_id,
-                title=item.source_name or "",
-            )
-        ],
+        source_refs=_practice_item_source_refs(item=item, source_refs=source_refs),
         answer_key=AnswerKey(
             correct_option=item.correct_option,  # type: ignore[arg-type]
             correct_option_text=correct_text,
@@ -387,6 +380,25 @@ def _practice_item_to_candidate(
         ),
         generation_source="practice_generation",
     )
+
+
+def _practice_item_source_refs(
+    *,
+    item: PracticeRecommendation,
+    source_refs: list[SourceRef],
+) -> list[SourceRef]:
+    refs: list[SourceRef] = list(source_refs)
+    seen = {(ref.source_type, ref.source_id) for ref in refs}
+    if item.question_id:
+        candidate = SourceRef(
+            source_type=item.source_type or "practice_generation",
+            source_id=item.question_id,
+            title=item.source_name or "",
+        )
+        if (candidate.source_type, candidate.source_id) not in seen:
+            refs.append(candidate)
+
+    return refs
 
 
 def _specific_topic_candidate_variant(

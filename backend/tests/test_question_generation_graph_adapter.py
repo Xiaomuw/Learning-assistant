@@ -202,7 +202,7 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertEqual(question_repo.created, [])
         self.assertEqual([event.event_type for event in event_repo.events], ["question_reviewed", "question_generation_failed"])
 
-    def test_dedupe_checker_blocks_persisting_duplicate_items(self) -> None:
+    def test_dedupe_checker_reuses_external_duplicate_items(self) -> None:
         question_repo = MockQuestionItemRepository(similar=[{"id": "existing-q-1"}])
         result = build_graph(question_item_repository=question_repo).compile().invoke(
             {
@@ -216,9 +216,19 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         )
 
         report = QualityReport.model_validate(result["quality_report"])
-        self.assertFalse(report.passed)
+        self.assertTrue(report.passed)
         self.assertEqual(report.dedupe_checker.duplicate_question_ids, ["existing-q-1"])
+        self.assertEqual(result["question_item_ids"], ["existing-q-1"])
         self.assertEqual(question_repo.created, [])
+        self.assertEqual(
+            result["generation_status"]["dedupe_reused_question_ids"],
+            ["existing-q-1"],
+        )
+        generated_events = [
+            event for event in result["learning_events"] if event["event_type"] == "question_generated"
+        ]
+        self.assertEqual(generated_events[0]["payload"]["question_item_id"], "existing-q-1")
+        self.assertTrue(generated_events[0]["payload"]["reused_existing"])
 
     def test_question_generation_graph_does_not_write_mastery_or_attempts(self) -> None:
         graph_root = REPO_ROOT / "backend" / "app" / "orchestration" / "graphs" / "question_generation"
