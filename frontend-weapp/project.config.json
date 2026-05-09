@@ -1,0 +1,20 @@
+{
+  "description": "Learning Assistant Taro WeChat Mini Program",
+  "miniprogramRoot": "dist/",
+  "compileType": "miniprogram",
+  "projectname": "learning-assistant-weapp",
+  "appid": "touristappid",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "newFeature": true,
+    "nodeModules": true,
+    "useCompilerPlugins": false,
+    "ignoreUploadUnusedFiles": true
+  },
+  "libVersion": "3.5.0",
+  "condition": {}
+}

@@ -16,6 +16,7 @@ def build_initial_state(
     question: str,
     subject_id: str,
     request_mode: str,
+    thinking_mode: bool = False,
 ) -> AgentState:
     """Build the LangGraph state for a chat turn."""
     context = build_request_context(user_id, session_id)
@@ -33,6 +34,7 @@ def build_initial_state(
         "subject_description": subject_description,
         "question": question,
         "request_mode": request_mode,
+        "thinking_mode": thinking_mode,
         "memory": context["memory"],
         "user_style_name": "",
         "user_style_prompt": "",

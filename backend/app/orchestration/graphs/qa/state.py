@@ -11,6 +11,7 @@ class QAGraphState(BaseLearningState, total=False):
     context_dependency: dict[str, Any]
     intent_result: dict[str, Any]
     resolved_question: str
+    concept_linking: dict[str, Any]
     knowledge_routes: list[dict[str, Any]]
     retrieval_skipped_reason: str
     notebook_evidence: list[dict[str, Any]]

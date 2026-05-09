@@ -20,11 +20,12 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.infrastructure.llm.config import get_fallback_chat_model
 from app.infrastructure.llm.provider import DEFAULT_CHAT_MODEL, get_chat_llm
 from app.infrastructure.llm.structured import invoke_with_schema
+from app.shared.markdown_cleaning import strip_markdown_artifacts, strip_markdown_list
 
 
 # ============================================================
@@ -51,6 +52,51 @@ class ExplanationOutput(BaseModel):
         max_length=3,
         description="2-3 个相关的知识点或题型名称，帮助学生建立知识网络",
     )
+
+    @field_validator("topic", "thinking", "mistakes", mode="before")
+    @classmethod
+    def _coerce_text_field(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return strip_markdown_artifacts(value)
+        if isinstance(value, list):
+            return "；".join(strip_markdown_list([str(item) for item in value]))
+        if isinstance(value, dict):
+            return strip_markdown_artifacts("；".join(f"{key}: {item}" for key, item in value.items()))
+        return strip_markdown_artifacts(str(value))
+
+    @field_validator("steps", mode="before")
+    @classmethod
+    def _coerce_steps(cls, value: Any) -> list[str]:
+        return _coerce_string_list(value, fallback=["围绕当前问题梳理核心概念"])
+
+    @field_validator("similar", mode="before")
+    @classmethod
+    def _coerce_similar(cls, value: Any) -> list[str]:
+        items = _coerce_string_list(value, fallback=["概念定义", "应用场景"])
+        while len(items) < 2:
+            items.append("应用场景")
+        return items[:3]
+
+
+def _coerce_string_list(value: Any, *, fallback: list[str]) -> list[str]:
+    if value is None:
+        return list(fallback)
+    if isinstance(value, list):
+        items = strip_markdown_list([str(item) for item in value])
+        return items or list(fallback)
+    if isinstance(value, str):
+        stripped = strip_markdown_artifacts(value)
+        if not stripped:
+            return list(fallback)
+        for separator in ("\n", "；", ";"):
+            if separator in stripped:
+                items = [part.strip(" -\t") for part in stripped.split(separator)]
+                return [item for item in items if item] or [stripped]
+        return [stripped]
+    text = strip_markdown_artifacts(str(value))
+    return [text] if text else list(fallback)
 
 
 # ============================================================
@@ -173,6 +219,7 @@ SYSTEM_PROMPT = """\
 {fact_answer_instruction}
 请严格以 JSON 格式输出讲解内容，不包含任何其他文字，格式如下：
 {{"topic": "知识点名称", "thinking": "解题思路", "steps": ["步骤1", "步骤2"], "mistakes": "易错点", "similar": ["相关知识1", "相关知识2"]}}
+所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、- 列表符号或引用符号。
 """
 
 HUMAN_PROMPT = "学生的问题：{question}"
@@ -187,14 +234,15 @@ EXPLAINER_PROMPT = ChatPromptTemplate.from_messages([
 # 辅助函数
 # ============================================================
 
-def _get_llm(model_name: str | None = None) -> ChatOpenAI:
+def _get_llm(model_name: str | None = None, *, thinking_mode: bool = False) -> ChatOpenAI:
     """获取当前激活聊天模型实例。"""
     return get_chat_llm(
         default_model=DEFAULT_CHAT_MODEL,
         temperature=0.3,       # 略带创造性，但保持准确
         model_override=model_name,
-        timeout_seconds=18.0,
+        timeout_seconds=None,
         max_retries=0,
+        thinking_mode=thinking_mode,
     )
 
 
@@ -412,12 +460,17 @@ def _format_user_style_instruction(style_name: str, style_prompt: str) -> str:
     )
 
 
-def _invoke_explainer_chain(payload: dict[str, Any], *, model_name: str | None = None) -> ExplanationOutput:
+def _invoke_explainer_chain(
+    payload: dict[str, Any],
+    *,
+    model_name: str | None = None,
+    thinking_mode: bool = False,
+) -> ExplanationOutput:
     """使用真正的 structured output 生成讲解结果。"""
     try:
         return invoke_with_schema(
             EXPLAINER_PROMPT,
-            _get_llm(model_name),
+            _get_llm(model_name, thinking_mode=thinking_mode),
             ExplanationOutput,
             payload,
             model_name=model_name,
@@ -429,7 +482,7 @@ def _invoke_explainer_chain(payload: dict[str, Any], *, model_name: str | None =
         logger.warning(f"⚠️ 主讲解模型调用失败，尝试备用模型 {fallback_model}: {exc}")
         return invoke_with_schema(
             EXPLAINER_PROMPT,
-            _get_llm(fallback_model),
+            _get_llm(fallback_model, thinking_mode=thinking_mode),
             ExplanationOutput,
             payload,
             model_name=fallback_model,
@@ -682,6 +735,7 @@ def explain_for_qa_fallback(state: dict[str, Any]) -> dict[str, Any]:
     question = str(state.get("contextual_question") or state["question"])
     question_type = state.get("question_type", "concept")
     model_name = str(state.get("model_name", "") or "").strip() or None
+    thinking_mode = bool(state.get("thinking_mode", False))
     if "verified_context" in state:
         docs = list(state.get("verified_context") or [])
     else:
@@ -819,7 +873,7 @@ def explain_for_qa_fallback(state: dict[str, Any]) -> dict[str, Any]:
             "session_memory_context": session_memory_context,
             "long_term_context": long_term_context,
             "question": question,
-        }, model_name=model_name)
+        }, model_name=model_name, thinking_mode=thinking_mode)
         explanation = result.model_dump()
         if not docs and can_use_general_knowledge and _is_no_context_template(explanation):
             logger.info("📖 模型返回资料不足模板，已替换为通用知识兜底回答")

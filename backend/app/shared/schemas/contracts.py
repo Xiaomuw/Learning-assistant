@@ -51,6 +51,10 @@ class NotebookKnowledgeStatus(BaseModel):
     personal_url_count: int = 0
     personal_ready: bool = False
     embedding_ready: bool = False
+    schema_ready: bool = False
+    index_ready: bool = False
+    schema_issues: list[str] = Field(default_factory=list)
+    embedding_profile: dict[str, Any] = Field(default_factory=dict)
     coverage_score: int = 0
     coverage_level: Literal["empty", "sparse", "partial", "ready"] = "empty"
     missing_doc_types: list[str] = Field(default_factory=list)
@@ -70,6 +74,8 @@ class IngestResult(BaseModel):
     subject_id: str
     total_chunks: int
     message: str
+    mapped_chunks: int = 0
+    unmapped_chunks: int = 0
     filename: str = ""
     total_pages: int = 0
     total_urls: int = 0
@@ -88,6 +94,13 @@ class RetrievalDiagnostics(BaseModel):
     query: str = ""
     hit_count: int = 0
     top_score: float = 0.0
+    raw_hit_count: int = 0
+    raw_top_score: float = 0.0
+    verified_count: int = 0
+    filter_reason: str = ""
+    retrieval_stage: str = ""
+    used_keyword_fallback: bool = False
+    filters: dict[str, Any] = Field(default_factory=dict)
     doc_type_counts: dict[str, int] = Field(default_factory=dict)
     diagnosis: Literal[
         "empty_knowledge_base",
@@ -162,6 +175,11 @@ class KnowledgeMasteryRecord(BaseModel):
     user_id: str
     subject_id: str = DEFAULT_SUBJECT_ID
     knowledge_point: str
+    chapter_id: str = ""
+    topic_id: str = ""
+    concept_id: str = ""
+    concept_name: str = ""
+    concept_mapping_status: str = ""
     exposure_count: int = 0
     attempt_count: int = 0
     correct_count: int = 0
@@ -177,6 +195,103 @@ class KnowledgeMasteryResult(BaseModel):
     user_id: str
     subject_id: str | None = None
     items: list[KnowledgeMasteryRecord] = Field(default_factory=list)
+
+
+class LearningCenterConcept(BaseModel):
+    concept_id: str
+    concept_name: str
+    subject_id: str
+    chapter_id: str = ""
+    topic_id: str = ""
+    aliases: list[str] = Field(default_factory=list)
+    importance: Literal["high", "medium", "low"] = "medium"
+    exam_frequency: Literal["high", "medium", "low"] = "medium"
+    prerequisites: list[str] = Field(default_factory=list)
+    p_mastery: float = 0.0
+    mastery_score: float = 0.0
+    coverage_ratio: float = 0.0
+    status: Literal["unstarted", "weak", "learning", "mastered"] = "unstarted"
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    weak_count: int = 0
+    tested: bool = False
+    test_status: Literal["untested", "tested"] = "untested"
+    attempt_count: int = 0
+    correct_count: int = 0
+    wrong_count: int = 0
+    question_count: int = 0
+    last_practiced_at: str = ""
+    updated_at: str = ""
+
+
+class LearningCenterTopic(BaseModel):
+    topic_id: str
+    topic_name: str
+    subject_id: str
+    chapter_id: str
+    mastery_score: float = 0.0
+    coverage_ratio: float = 0.0
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    weak_count: int = 0
+    tested_count: int = 0
+    untested_count: int = 0
+    tested_ratio: float = 0.0
+    attempt_count: int = 0
+    correct_count: int = 0
+    wrong_count: int = 0
+    updated_at: str = ""
+    concepts: list[LearningCenterConcept] = Field(default_factory=list)
+
+
+class LearningCenterChapter(BaseModel):
+    chapter_id: str
+    chapter_name: str
+    subject_id: str
+    mastery_score: float = 0.0
+    coverage_ratio: float = 0.0
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    weak_count: int = 0
+    tested_count: int = 0
+    untested_count: int = 0
+    tested_ratio: float = 0.0
+    attempt_count: int = 0
+    correct_count: int = 0
+    wrong_count: int = 0
+    updated_at: str = ""
+    topics: list[LearningCenterTopic] = Field(default_factory=list)
+
+
+class LearningCenterSubject(BaseModel):
+    subject_id: str
+    subject_name: str
+    mastery_score: float = 0.0
+    coverage_ratio: float = 0.0
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    weak_count: int = 0
+    tested_count: int = 0
+    untested_count: int = 0
+    tested_ratio: float = 0.0
+    attempt_count: int = 0
+    correct_count: int = 0
+    wrong_count: int = 0
+    updated_at: str = ""
+    chapters: list[LearningCenterChapter] = Field(default_factory=list)
+
+
+class LearningCenterNextMove(BaseModel):
+    concept_id: str = ""
+    concept_name: str = ""
+    subject_id: str = ""
+    chapter_id: str = ""
+    topic_id: str = ""
+    action: Literal["review_weak", "practice_learning", "start_high_value", "none"] = "none"
+    reason: str = ""
+
+
+class LearningCenterResponse(BaseModel):
+    user_id: str
+    subject_id: str | None = None
+    subjects: list[LearningCenterSubject] = Field(default_factory=list)
+    next_move: LearningCenterNextMove | None = None
 
 
 class AnswerNormalizationResult(BaseModel):
@@ -199,6 +314,11 @@ class MasteryScoreBreakdown(BaseModel):
 class MasteryEvaluationResult(BaseModel):
     subject_id: str = DEFAULT_SUBJECT_ID
     knowledge_point: str = "综合"
+    chapter_id: str = ""
+    topic_id: str = ""
+    concept_id: str = ""
+    concept_name: str = ""
+    concept_mapping_status: str = ""
     answer_type: Literal["mcq", "blank", "short_answer"] = "mcq"
     normalized_answer: str = ""
     is_correct: bool = False
@@ -295,6 +415,11 @@ class QuestionBankItemRecord(BaseModel):
     question_id: str
     subject_id: str = DEFAULT_SUBJECT_ID
     knowledge_point: str = ""
+    chapter_id: str = ""
+    topic_id: str = ""
+    concept_id: str = ""
+    concept_name: str = ""
+    concept_mapping_status: str = ""
     question: str = ""
     options: list[dict[str, str]] = Field(default_factory=list)
     correct_option: str = "A"
@@ -316,6 +441,11 @@ class PracticeRecommendation(BaseModel):
     explanation: str = ""
     option_rationales: dict[str, str] = Field(default_factory=dict)
     knowledge_point: str = ""
+    chapter_id: str = ""
+    topic_id: str = ""
+    concept_id: str = ""
+    concept_name: str = ""
+    concept_mapping_status: str = ""
     difficulty: str = "基础"
     source_type: str = "ai_generated"
     source_name: str = ""
@@ -433,6 +563,11 @@ class PracticeAttemptRecord(BaseModel):
     selected_option: str = ""
     is_correct: bool = False
     knowledge_point: str = ""
+    chapter_id: str = ""
+    topic_id: str = ""
+    concept_id: str = ""
+    concept_name: str = ""
+    concept_mapping_status: str = ""
     source_type: str = "ai_generated"
     created_at: str = ""
 

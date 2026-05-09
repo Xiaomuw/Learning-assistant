@@ -20,6 +20,7 @@ const QUIZ_KEY = "learning_quiz";
 const QUIZ_META_KEY = "learning_quiz_meta";
 const PRACTICE_STATE_KEY = "learning_practice_state";
 const CHAT_DRAFTS_KEY = "learning_chat_drafts";
+const ACTIVE_CHAT_SESSION_KEY = "learning_active_chat_session";
 const LEGACY_SUBJECT_KEY = "learning_subject_id";
 const NOTEBOOK_KEY = "learning_notebook_id";
 const SESSIONS_KEY = "learning_chat_sessions";
@@ -225,8 +226,11 @@ export function loadStoredQuiz(): QuizItem[] {
 
 export interface StoredQuizMeta {
   topic?: string;
+  topics?: string[];
   subjectId?: string;
+  subjectIds?: string[];
   sessionId?: string;
+  sessionIds?: string[];
   quizSignature?: string;
   createdAt?: number;
   updatedAt?: number;
@@ -240,10 +244,125 @@ export interface StoredChatDraft {
   updatedAt: number;
 }
 
+export interface StoredActiveChatSession {
+  userId: string;
+  sessionId: string;
+  notebookId: string;
+  updatedAt: number;
+}
+
 export function buildQuizSignature(quizList: QuizItem[]) {
   return quizList
     .map((item, index) => `${item.question_id || index}:${item.question}:${item.correct_option}`)
     .join("|");
+}
+
+function uniqueNonEmpty(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function compactQuizIdentityText(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function quizItemIdentity(item: QuizItem) {
+  const questionId = compactQuizIdentityText(item.question_id);
+  if (questionId) {
+    return `id:${questionId}`;
+  }
+
+  const optionText = Array.isArray(item.options)
+    ? item.options.map((option) => compactQuizIdentityText(option.text)).join("|")
+    : "";
+  const question = compactQuizIdentityText(item.question);
+  if (!question && !optionText) {
+    return "";
+  }
+  return `sig:${question}|${optionText}|${compactQuizIdentityText(item.correct_option)}`;
+}
+
+export function getQuizItemNotebookId(
+  item: QuizItem | null | undefined,
+  fallbackId = DEFAULT_NOTEBOOK_ID
+) {
+  return normalizeStoredNotebookId(item?.notebook_id || item?.subject_id || fallbackId);
+}
+
+function quizItemWithContext(
+  item: QuizItem,
+  fallbackSubjectId?: string,
+  sourceSessionId?: string
+): QuizItem {
+  const subjectId = getQuizItemNotebookId(item, fallbackSubjectId || DEFAULT_NOTEBOOK_ID);
+  const itemSourceSessionId =
+    typeof item.source_session_id === "string" ? item.source_session_id.trim() : "";
+  const nextSourceSessionId = itemSourceSessionId || sourceSessionId?.trim() || "";
+  return {
+    ...item,
+    subject_id: item.subject_id || subjectId,
+    notebook_id: item.notebook_id || subjectId,
+    ...(nextSourceSessionId ? { source_session_id: nextSourceSessionId } : {}),
+  };
+}
+
+function quizItemWithOptionalContext(
+  item: QuizItem,
+  fallbackSubjectId?: string,
+  sourceSessionId?: string
+): QuizItem {
+  if (
+    !fallbackSubjectId &&
+    !sourceSessionId &&
+    !item.subject_id &&
+    !item.notebook_id &&
+    !item.source_session_id
+  ) {
+    return item;
+  }
+  return quizItemWithContext(item, fallbackSubjectId, sourceSessionId);
+}
+
+function mergeQuizLists(
+  existingQuiz: QuizItem[],
+  incomingQuiz: QuizItem[],
+  existingSubjectId?: string,
+  incomingSubjectId?: string,
+  incomingSessionId?: string
+) {
+  const merged: QuizItem[] = [];
+  const seen = new Set<string>();
+
+  function appendItems(
+    items: QuizItem[],
+    fallbackSubjectId?: string,
+    sourceSessionId?: string
+  ) {
+    for (const rawItem of items) {
+      const item = quizItemWithContext(rawItem, fallbackSubjectId, sourceSessionId);
+      const identity = quizItemIdentity(item);
+      if (identity && seen.has(identity)) {
+        continue;
+      }
+      if (identity) {
+        seen.add(identity);
+      }
+      merged.push(item);
+    }
+  }
+
+  appendItems(existingQuiz, existingSubjectId);
+  appendItems(incomingQuiz, incomingSubjectId || existingSubjectId, incomingSessionId);
+  return merged;
 }
 
 export function loadStoredQuizMeta(): StoredQuizMeta | null {
@@ -261,8 +380,25 @@ export function loadStoredQuizMeta(): StoredQuizMeta | null {
 
   return {
     topic: typeof stored.topic === "string" ? stored.topic : undefined,
+    topics: Array.isArray(stored.topics)
+      ? uniqueNonEmpty(stored.topics.filter((topic): topic is string => typeof topic === "string"))
+      : undefined,
     subjectId: typeof stored.subjectId === "string" ? normalizeStoredNotebookId(stored.subjectId) : undefined,
+    subjectIds: Array.isArray(stored.subjectIds)
+      ? uniqueNonEmpty(
+          stored.subjectIds
+            .filter((subjectId): subjectId is string => typeof subjectId === "string")
+            .map((subjectId) => normalizeStoredNotebookId(subjectId))
+        )
+      : undefined,
     sessionId: typeof stored.sessionId === "string" ? stored.sessionId : undefined,
+    sessionIds: Array.isArray(stored.sessionIds)
+      ? uniqueNonEmpty(
+          stored.sessionIds.filter(
+            (sessionId): sessionId is string => typeof sessionId === "string"
+          )
+        )
+      : undefined,
     quizSignature: typeof stored.quizSignature === "string" ? stored.quizSignature : undefined,
     createdAt: Number.isFinite(stored.createdAt) ? Number(stored.createdAt) : undefined,
     updatedAt: Number.isFinite(stored.updatedAt) ? Number(stored.updatedAt) : undefined,
@@ -275,20 +411,105 @@ export function persistQuiz(quiz: QuizItem[], meta?: StoredQuizMeta) {
     return;
   }
 
-  writeStoreItem(QUIZ_KEY, JSON.stringify(quiz));
+  const normalizedQuiz = quiz.map((item) =>
+    quizItemWithOptionalContext(item, meta?.subjectId, meta?.sessionId)
+  );
+  writeStoreItem(QUIZ_KEY, JSON.stringify(normalizedQuiz));
   if (meta) {
     const now = Date.now();
+    const topics = uniqueNonEmpty([
+      ...(meta.topics || []),
+      meta.topic,
+      normalizedQuiz[0]?.knowledge_point,
+    ]);
+    const subjectIds = uniqueNonEmpty([
+      ...(meta.subjectIds || []),
+      meta.subjectId ? normalizeStoredNotebookId(meta.subjectId) : undefined,
+      ...normalizedQuiz.map((item) => getQuizItemNotebookId(item)),
+    ]);
+    const sessionIds = uniqueNonEmpty([
+      ...(meta.sessionIds || []),
+      meta.sessionId,
+      ...normalizedQuiz.map((item) => item.source_session_id),
+    ]);
     writeStoreItem(
       QUIZ_META_KEY,
       JSON.stringify({
         ...meta,
         subjectId: normalizeStoredNotebookId(meta.subjectId),
-        quizSignature: meta.quizSignature || buildQuizSignature(quiz),
+        subjectIds,
+        sessionIds,
+        topic: meta.topic || topics[0],
+        topics,
+        quizSignature: meta.quizSignature || buildQuizSignature(normalizedQuiz),
         createdAt: meta.createdAt || now,
         updatedAt: now,
       })
     );
+  } else {
+    removeStoreItem(QUIZ_META_KEY);
   }
+}
+
+export function appendStoredQuiz(quiz: QuizItem[], meta?: StoredQuizMeta) {
+  if (!isBrowser()) {
+    return quiz;
+  }
+
+  const existingMeta = loadStoredQuizMeta();
+  const existingQuiz = loadStoredQuiz();
+
+  const incomingSubjectId = meta?.subjectId
+    ? normalizeStoredNotebookId(meta.subjectId)
+    : existingMeta?.subjectId || DEFAULT_NOTEBOOK_ID;
+  const incomingSessionId = meta?.sessionId?.trim();
+  const mergedQuiz = mergeQuizLists(
+    existingQuiz,
+    quiz,
+    existingMeta?.subjectId,
+    incomingSubjectId,
+    incomingSessionId
+  );
+  const now = Date.now();
+  const topics = uniqueNonEmpty([
+    ...(existingMeta?.topics || []),
+    existingMeta?.topic,
+    ...(meta?.topics || []),
+    meta?.topic,
+    quiz[0]?.knowledge_point,
+  ]);
+  const subjectIds = uniqueNonEmpty([
+    ...(existingMeta?.subjectIds || []),
+    existingMeta?.subjectId,
+    ...(meta?.subjectIds || []),
+    incomingSubjectId,
+    ...mergedQuiz.map((item) => getQuizItemNotebookId(item, incomingSubjectId)),
+  ]);
+  const sessionIds = uniqueNonEmpty([
+    ...(existingMeta?.sessionIds || []),
+    existingMeta?.sessionId,
+    ...(meta?.sessionIds || []),
+    incomingSessionId,
+    ...mergedQuiz.map((item) => item.source_session_id),
+  ]);
+  const nextMeta: StoredQuizMeta = {
+    ...existingMeta,
+    ...meta,
+    topic: topics.length > 1 ? "混合练习" : topics[0] || meta?.topic || existingMeta?.topic,
+    topics,
+    subjectId: incomingSubjectId,
+    subjectIds,
+    sessionIds,
+    sessionId: meta?.sessionId || existingMeta?.sessionId,
+    quizSignature: buildQuizSignature(mergedQuiz),
+    createdAt: existingMeta?.createdAt || meta?.createdAt || now,
+    updatedAt: now,
+    shouldSwitchTopic: Boolean(meta?.shouldSwitchTopic),
+  };
+
+  writeStoreItem(QUIZ_KEY, JSON.stringify(mergedQuiz));
+  writeStoreItem(QUIZ_META_KEY, JSON.stringify(nextMeta));
+  return mergedQuiz;
 }
 
 export function clearStoredQuiz() {
@@ -312,6 +533,7 @@ export interface StoredPracticeFeedback {
 
 export interface StoredPracticeState {
   quizSignature: string;
+  quizItemCount?: number;
   topic?: string;
   subjectId?: string;
   currentIndex: number;
@@ -368,6 +590,7 @@ export function loadStoredPracticeState(): StoredPracticeState | null {
 
   return {
     quizSignature: stored.quizSignature,
+    quizItemCount: Number.isFinite(stored.quizItemCount) ? Number(stored.quizItemCount) : undefined,
     currentIndex: Number.isFinite(stored.currentIndex) ? Number(stored.currentIndex) : 0,
     topic: typeof stored.topic === "string" ? stored.topic : undefined,
     subjectId: typeof stored.subjectId === "string" ? normalizeStoredNotebookId(stored.subjectId) : undefined,
@@ -566,6 +789,14 @@ export function persistStoredChatDraft(draft: StoredChatDraft) {
     return;
   }
 
+  const draftSessionId =
+    typeof draft.sessionId === "string" ? draft.sessionId.trim() : "";
+  const draftMessages = Array.isArray(draft.messages) ? draft.messages : [];
+  if (draftSessionId && draftMessages.length === 0) {
+    clearStoredChatDraft(draftSessionId);
+    return;
+  }
+
   const normalized = normalizeDraft({
     ...draft,
     notebookId: normalizeStoredNotebookId(draft.notebookId),
@@ -594,6 +825,86 @@ export function loadLatestStoredChatDraft(): StoredChatDraft | null {
     (a, b) => b.updatedAt - a.updatedAt
   );
   return drafts[0] ?? null;
+}
+
+function normalizeActiveChatSession(
+  rawSession: unknown,
+  expectedUserId?: string
+): StoredActiveChatSession | null {
+  if (!rawSession || typeof rawSession !== "object") {
+    return null;
+  }
+
+  const session = rawSession as Partial<StoredActiveChatSession>;
+  const userId = typeof session.userId === "string" ? session.userId.trim() : "";
+  const sessionId =
+    typeof session.sessionId === "string" ? session.sessionId.trim() : "";
+  const notebookId =
+    typeof session.notebookId === "string"
+      ? normalizeStoredNotebookId(session.notebookId)
+      : DEFAULT_NOTEBOOK_ID;
+  const updatedAt = Number(session.updatedAt);
+
+  if (!userId || !sessionId || !Number.isFinite(updatedAt)) {
+    return null;
+  }
+
+  if (expectedUserId && userId !== expectedUserId) {
+    return null;
+  }
+
+  return {
+    userId,
+    sessionId,
+    notebookId,
+    updatedAt,
+  };
+}
+
+export function persistStoredActiveChatSession(
+  session: StoredActiveChatSession
+) {
+  if (!isBrowser()) {
+    return;
+  }
+
+  const normalized = normalizeActiveChatSession({
+    ...session,
+    notebookId: normalizeStoredNotebookId(session.notebookId),
+    updatedAt: session.updatedAt || Date.now(),
+  });
+  if (!normalized) {
+    return;
+  }
+
+  writeStoreItem(ACTIVE_CHAT_SESSION_KEY, JSON.stringify(normalized));
+}
+
+export function loadStoredActiveChatSession(
+  userId?: string
+): StoredActiveChatSession | null {
+  if (!isBrowser()) {
+    return null;
+  }
+
+  const stored = safeParse<Partial<StoredActiveChatSession> | null>(
+    readStoreItem(ACTIVE_CHAT_SESSION_KEY),
+    null
+  );
+  return normalizeActiveChatSession(stored, userId);
+}
+
+export function clearStoredActiveChatSession(userId?: string) {
+  if (!isBrowser()) {
+    return;
+  }
+
+  const existing = loadStoredActiveChatSession();
+  if (userId && existing && existing.userId !== userId) {
+    return;
+  }
+
+  removeStoreItem(ACTIVE_CHAT_SESSION_KEY, userId);
 }
 
 export function clearStoredChatDraft(sessionId: string) {
@@ -666,6 +977,11 @@ export function deleteStoredSession(sessionId: string) {
   let sessions = loadStoredSessions();
   sessions = sessions.filter((s) => s.id !== sessionId);
   writeStoreItem(SESSIONS_KEY, JSON.stringify(sessions));
+
+  const activeSession = loadStoredActiveChatSession();
+  if (activeSession?.sessionId === sessionId) {
+    clearStoredActiveChatSession(activeSession.userId);
+  }
 }
 
 export function loadStoredModelConfig(): ModelConfig | null {

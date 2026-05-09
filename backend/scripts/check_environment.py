@@ -21,6 +21,7 @@ from app.infrastructure.config.validation import (  # noqa: E402
     collect_environment_warnings,
     validate_startup_environment,
 )
+from app.infrastructure.llm.langsmith import get_langsmith_health_status  # noqa: E402
 
 
 def main() -> int:
@@ -35,6 +36,22 @@ def main() -> int:
     print("✅ 启动级环境检查通过")
     for warning in collect_environment_warnings():
         print(f"⚠️  {warning}")
+    langsmith_health = get_langsmith_health_status()
+    langsmith_status = langsmith_health.get("status", "unknown")
+    langsmith_project = langsmith_health.get("project", "")
+    langsmith_endpoint = langsmith_health.get("endpoint", "")
+    print(
+        "ℹ️  LangSmith 状态: "
+        f"{langsmith_status}"
+        f" | project={langsmith_project or '-'}"
+        f" | endpoint={langsmith_endpoint or '-'}"
+    )
+    if langsmith_status == "dns_unreachable":
+        print(
+            "⚠️  LangSmith DNS 不可达: "
+            f"host={langsmith_health.get('host', '-')}, "
+            f"error_type={langsmith_health.get('error_type', '-')}"
+        )
     return 0
 
 

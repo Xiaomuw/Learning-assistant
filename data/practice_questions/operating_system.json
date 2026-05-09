@@ -1,0 +1,2822 @@
+[
+  {
+    "question_id": "pq-os-process-thread-001",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "basic",
+    "stem": "关于进程和线程的关系，下列说法正确的是哪一项？",
+    "options": {
+      "A": "进程是资源分配的基本单位，线程是处理机调度的基本单位",
+      "B": "线程是资源分配的基本单位，进程是处理机调度的基本单位",
+      "C": "同一进程内线程拥有相互独立的地址空间",
+      "D": "线程切换一定比进程切换涉及更多地址空间切换"
+    },
+    "answer": "A",
+    "explanation": "进程通常是资源分配和保护的基本单位，线程是处理机调度和执行的基本单位；同一进程内线程共享进程地址空间。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "把“资源分配单位”和“调度执行单位”说反。"
+  },
+  {
+    "question_id": "pq-os-process-thread-002",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "basic",
+    "stem": "操作系统为描述和管理进程而设置的数据结构通常称为哪一项？",
+    "options": {
+      "A": "页表",
+      "B": "PCB",
+      "C": "文件控制块 FCB",
+      "D": "缓冲区描述符"
+    },
+    "answer": "B",
+    "explanation": "PCB 保存进程标识、状态、现场、调度信息和资源清单等，是进程存在的唯一标志。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "把文件系统中的 FCB 与进程管理中的 PCB 混淆。"
+  },
+  {
+    "question_id": "pq-os-process-thread-003",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "basic",
+    "stem": "同一进程中的多个线程通常不会共享下列哪一项？",
+    "options": {
+      "A": "代码段",
+      "B": "打开文件表项",
+      "C": "各自的寄存器现场和栈",
+      "D": "堆空间"
+    },
+    "answer": "C",
+    "explanation": "线程共享所属进程的地址空间和大部分资源，但每个线程有独立的程序计数器、寄存器现场和栈。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "误以为线程共享一切运行现场。"
+  },
+  {
+    "question_id": "pq-os-process-thread-004",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "medium",
+    "stem": "一次从进程 P 切换到进程 Q 的上下文切换，最核心的工作是哪一项？",
+    "options": {
+      "A": "只修改 P 的优先级，不保存寄存器",
+      "B": "清空磁盘高速缓存",
+      "C": "复制 P 的全部内存到 Q",
+      "D": "保存 P 的 CPU 现场并恢复 Q 的 CPU 现场"
+    },
+    "answer": "D",
+    "explanation": "上下文切换的关键是保存当前执行实体的寄存器、PC、栈指针等现场，并装入下一个执行实体的现场。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "把上下文切换理解成完整复制进程地址空间。"
+  },
+  {
+    "question_id": "pq-os-process-thread-005",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "medium",
+    "stem": "在支持内核级线程的系统中，某进程内一个线程因磁盘 I/O 阻塞时，最可能发生的是哪一项？",
+    "options": {
+      "A": "内核可调度同进程或其他进程的其他就绪线程运行",
+      "B": "整个进程的所有线程必然都阻塞",
+      "C": "CPU 必须空转直到该 I/O 完成",
+      "D": "该线程自动变成另一个进程"
+    },
+    "answer": "A",
+    "explanation": "内核级线程由内核感知和调度，一个线程阻塞不必导致整个进程阻塞。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "把用户级线程“一阻塞可能全阻塞”的特点套到内核级线程。"
+  },
+  {
+    "question_id": "pq-os-process-thread-006",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "medium",
+    "stem": "用户级线程相对内核级线程的一个典型优点是下列哪一项？",
+    "options": {
+      "A": "阻塞系统调用一定不会影响同进程其他线程",
+      "B": "线程创建和切换可在用户态完成，开销较小",
+      "C": "内核一定能把同一进程线程并行调度到多个 CPU",
+      "D": "每个线程自动拥有独立地址空间"
+    },
+    "answer": "B",
+    "explanation": "用户级线程的管理主要由用户态线程库完成，创建、撤销和切换通常无需陷入内核，开销较小。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "忽略用户级线程对内核不可见，不能天然利用多处理器并行。"
+  },
+  {
+    "question_id": "pq-os-process-thread-007",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "medium",
+    "stem": "下列哪种情况最能体现“并发”而不是“并行”？",
+    "options": {
+      "A": "DMA 控制器和 CPU 永远执行同一条指令",
+      "B": "两个 CPU 核同时执行两个线程",
+      "C": "单核 CPU 通过时间片交替运行多个进程",
+      "D": "一个进程没有任何中断地独占 CPU"
+    },
+    "answer": "C",
+    "explanation": "并发强调宏观上同时推进，单核通过快速切换形成并发；并行强调多个执行体在物理时刻同时运行。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "把宏观并发和物理同时执行混为一谈。"
+  },
+  {
+    "question_id": "pq-os-process-thread-008",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "medium",
+    "stem": "若一个多线程进程中的线程 T1 修改了进程堆上的全局链表，T2 随后读取该链表。若无同步机制，主要风险是什么？",
+    "options": {
+      "A": "T2 一定读取不到该链表，因为线程不共享堆",
+      "B": "该链表会自动复制为 T2 的私有副本",
+      "C": "T1 会自动被操作系统撤销",
+      "D": "可能出现竞态条件，读到不一致状态"
+    },
+    "answer": "D",
+    "explanation": "同一进程线程共享堆和全局数据；并发读写共享数据若缺少互斥或同步，可能出现竞态条件。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "误认为线程间共享数据会被系统自动加锁。"
+  },
+  {
+    "question_id": "pq-os-process-thread-009",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "hard",
+    "stem": "某 Web 服务器希望每个连接处理单元之间共享缓存，同时一个连接阻塞时不影响其他连接被内核调度。较合适的实现是？",
+    "options": {
+      "A": "每个连接一个内核级线程",
+      "B": "所有连接放入一个不可抢占的单循环且不使用异步 I/O",
+      "C": "每个连接一个独立进程且禁止共享内存",
+      "D": "只使用一个用户级线程并执行阻塞 read"
+    },
+    "answer": "A",
+    "explanation": "内核级线程可共享进程内缓存，又能被内核独立调度；某线程阻塞不必阻塞其他线程。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "只看到进程隔离性，忽略共享缓存和阻塞隔离的共同要求。"
+  },
+  {
+    "question_id": "pq-os-process-thread-010",
+    "concept_id": "operating-system.process.process-thread",
+    "difficulty": "hard",
+    "stem": "下列关于 fork 后父子进程的说法，在常见操作系统语义下正确的是哪一项？",
+    "options": {
+      "A": "父子进程共用同一个 PCB",
+      "B": "子进程获得独立 PCB，逻辑上拥有独立地址空间",
+      "C": "子进程与父进程必然共享同一用户栈且无需保护",
+      "D": "fork 不会复制或继承任何打开文件相关信息"
+    },
+    "answer": "B",
+    "explanation": "fork 后父子进程是两个进程，各有 PCB；地址空间逻辑独立，现代系统常用写时复制优化物理复制。打开文件描述符通常会继承。",
+    "knowledge_points": [
+      "进程与线程",
+      "PCB/TCB",
+      "资源分配与调度单位"
+    ],
+    "common_trap": "把写时复制优化误解为父子进程没有独立地址空间。"
+  },
+  {
+    "question_id": "pq-os-state-transition-001",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "basic",
+    "stem": "在三态模型中，进程已获得除 CPU 外的所有运行条件，此时该进程处于什么状态？",
+    "options": {
+      "A": "就绪态",
+      "B": "运行态",
+      "C": "阻塞态",
+      "D": "终止态"
+    },
+    "answer": "A",
+    "explanation": "就绪态表示进程具备运行条件，只等待处理机调度。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "把等待 CPU 与等待 I/O 都归为阻塞。"
+  },
+  {
+    "question_id": "pq-os-state-transition-002",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "basic",
+    "stem": "运行态进程因等待键盘输入而不能继续执行时，通常发生的状态转换是？",
+    "options": {
+      "A": "运行态到就绪态",
+      "B": "运行态到阻塞态",
+      "C": "阻塞态到就绪态",
+      "D": "就绪态到阻塞态"
+    },
+    "answer": "B",
+    "explanation": "等待外部事件或 I/O 完成会使运行进程进入阻塞态。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "把主动等待事件误判为时间片用完。"
+  },
+  {
+    "question_id": "pq-os-state-transition-003",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "basic",
+    "stem": "阻塞态进程等待的 I/O 完成后，通常首先转入哪种状态？",
+    "options": {
+      "A": "运行态",
+      "B": "创建态",
+      "C": "就绪态",
+      "D": "终止态"
+    },
+    "answer": "C",
+    "explanation": "I/O 完成只说明进程具备运行条件，还必须等待调度程序分配 CPU，因此先转为就绪态。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "误以为 I/O 完成立即占有 CPU。"
+  },
+  {
+    "question_id": "pq-os-state-transition-004",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "medium",
+    "stem": "单处理机系统中，运行态进程时间片用完但仍未结束，它通常转换为哪一状态？",
+    "options": {
+      "A": "终止态",
+      "B": "阻塞态",
+      "C": "创建态",
+      "D": "就绪态"
+    },
+    "answer": "D",
+    "explanation": "时间片用完属于被抢占，进程仍可运行，只是让出 CPU，回到就绪队列。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "把时间片用完与等待事件混淆。"
+  },
+  {
+    "question_id": "pq-os-state-transition-005",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "medium",
+    "stem": "下列哪种状态转换一般不能由进程自身直接引起？",
+    "options": {
+      "A": "阻塞态到就绪态",
+      "B": "运行态到终止态",
+      "C": "运行态到就绪态",
+      "D": "运行态到阻塞态"
+    },
+    "answer": "A",
+    "explanation": "阻塞态到就绪态通常由外部事件完成、中断或内核唤醒触发，不是阻塞进程自身运行代码触发。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "忽略阻塞进程没有占用 CPU，不能主动执行唤醒代码。"
+  },
+  {
+    "question_id": "pq-os-state-transition-006",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "medium",
+    "stem": "在抢占式优先级调度中，高优先级进程进入就绪队列，当前低优先级运行进程可能发生什么转换？",
+    "options": {
+      "A": "运行态到阻塞态",
+      "B": "运行态到就绪态",
+      "C": "就绪态到阻塞态",
+      "D": "阻塞态到运行态"
+    },
+    "answer": "B",
+    "explanation": "抢占使当前进程让出 CPU，但它仍满足运行条件，因此从运行态回到就绪态。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "把抢占错误理解为阻塞。"
+  },
+  {
+    "question_id": "pq-os-state-transition-007",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "medium",
+    "stem": "新建进程完成必要的 PCB 初始化并获得内存等资源后，下一步通常进入哪一状态？",
+    "options": {
+      "A": "运行态且不经调度",
+      "B": "阻塞态",
+      "C": "就绪态",
+      "D": "挂起阻塞态且不可唤醒"
+    },
+    "answer": "C",
+    "explanation": "创建完成后进程具备参与调度的条件，进入就绪队列等待 CPU。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "认为创建完成就一定立即运行。"
+  },
+  {
+    "question_id": "pq-os-state-transition-008",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "medium",
+    "stem": "某进程 P 正在运行，执行 V 操作唤醒了等待同一信号量的进程 Q。若不考虑立即抢占，Q 的状态变化通常是？",
+    "options": {
+      "A": "运行态到阻塞态",
+      "B": "阻塞态到运行态并立刻占用 CPU",
+      "C": "就绪态到阻塞态",
+      "D": "阻塞态到就绪态"
+    },
+    "answer": "D",
+    "explanation": "被 V 操作唤醒的等待进程进入就绪队列；是否立即运行取决于调度策略。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "把“被唤醒”和“获得 CPU”合并为一步。"
+  },
+  {
+    "question_id": "pq-os-state-transition-009",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "hard",
+    "stem": "某系统采用五态模型。进程 P 发出异步磁盘读请求后被阻塞；随后用户暂时换出 P 的内存映像；磁盘读完成。P 最合理的状态序列是？",
+    "options": {
+      "A": "运行态->阻塞态->挂起阻塞态->挂起就绪态",
+      "B": "运行态->就绪态->挂起就绪态->运行态",
+      "C": "运行态->挂起就绪态->阻塞态->终止态",
+      "D": "就绪态->运行态->阻塞态->创建态"
+    },
+    "answer": "A",
+    "explanation": "发出 I/O 后 P 阻塞；被换出后为挂起阻塞；I/O 完成后事件已满足但仍在外存，转为挂起就绪。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "漏掉“挂起”维度，把外存中的进程直接放回就绪态。"
+  },
+  {
+    "question_id": "pq-os-state-transition-010",
+    "concept_id": "operating-system.process.state-transition",
+    "difficulty": "hard",
+    "stem": "单 CPU 上，P1 正在运行，P2 阻塞等待磁盘，P3 就绪。若 P2 的磁盘中断到达且调度程序选择 P3 运行，下列描述正确的是？",
+    "options": {
+      "A": "P2 阻塞态->运行态，P3 保持就绪态",
+      "B": "P2 阻塞态->就绪态，P1 可能运行态->就绪态，P3 就绪态->运行态",
+      "C": "P1 运行态->阻塞态，因为发生了磁盘中断",
+      "D": "P2 阻塞态->终止态，P3 就绪态->阻塞态"
+    },
+    "answer": "B",
+    "explanation": "磁盘完成使 P2 就绪；中断和调度可使 P1 被抢占回就绪态，P3 被选中后从就绪态到运行态。",
+    "knowledge_points": [
+      "进程状态",
+      "就绪/运行/阻塞",
+      "状态转换"
+    ],
+    "common_trap": "认为哪个进程等待的 I/O 完成，哪个进程就必然立即运行。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-001",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "basic",
+    "stem": "先来先服务 FCFS 调度算法的主要特点是？",
+    "options": {
+      "A": "按进程到达就绪队列的先后顺序调度",
+      "B": "总是选择估计运行时间最短的进程",
+      "C": "每次选择优先级最低的进程",
+      "D": "一定能避免长作业等待"
+    },
+    "answer": "A",
+    "explanation": "FCFS 按到达顺序服务，实现简单但可能产生短作业等待长作业的护航效应。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "把 FCFS 与短作业优先混淆。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-002",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "basic",
+    "stem": "短作业优先 SJF 算法在所有作业同时到达且运行时间已知时，通常优化的指标是？",
+    "options": {
+      "A": "最大响应时间",
+      "B": "平均等待时间",
+      "C": "CPU 主频",
+      "D": "磁盘寻道时间"
+    },
+    "answer": "B",
+    "explanation": "在非抢占、所有作业同时到达且服务时间已知的理想条件下，SJF 可使平均等待时间最小。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "忽略 SJF 依赖运行时间估计，且可能造成长作业饥饿。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-003",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "basic",
+    "stem": "时间片轮转 RR 调度最直接改善的是哪类系统体验？",
+    "options": {
+      "A": "批处理系统的磁盘吞吐率",
+      "B": "文件连续分配的外部碎片",
+      "C": "分时系统的交互响应",
+      "D": "银行家算法的安全性"
+    },
+    "answer": "C",
+    "explanation": "RR 让就绪进程轮流获得小时间片，适合分时交互系统。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "把处理机调度目标和存储管理目标混在一起。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-004",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "medium",
+    "stem": "单 CPU，进程到达/运行时间为 P1(0,5)、P2(1,3)、P3(2,2)。采用非抢占 FCFS，调度次序和平均周转时间为？",
+    "options": {
+      "A": "P2,P3,P1；7",
+      "B": "P3,P2,P1；10/3",
+      "C": "P1,P3,P2；6",
+      "D": "P1,P2,P3；20/3"
+    },
+    "answer": "D",
+    "explanation": "FCFS 按到达顺序：P1 0-5，P2 5-8，P3 8-10。周转时间分别为 5、7、8，平均为 20/3。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "用短作业优先重新排序，忽略 FCFS 的到达顺序。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-005",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "medium",
+    "stem": "单 CPU，P1(到达0,运行7)、P2(2,4)、P3(4,1)、P4(5,4)。采用非抢占 SJF，平均等待时间为？",
+    "options": {
+      "A": "4",
+      "B": "3",
+      "C": "5",
+      "D": "6"
+    },
+    "answer": "A",
+    "explanation": "0 时只有 P1，先运行 0-7；之后选 P3 7-8，再 P2 8-12，P4 12-16。等待时间为 0、6、3、7，平均 4。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "在非抢占 SJF 中错误地让 P1 在 P3 到达后被抢占。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-006",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "medium",
+    "stem": "单 CPU，P1(0,8)、P2(1,4)、P3(2,2)，采用抢占式最短剩余时间优先 SRTF。完成顺序为？",
+    "options": {
+      "A": "P1,P2,P3",
+      "B": "P3,P2,P1",
+      "C": "P2,P3,P1",
+      "D": "P3,P1,P2"
+    },
+    "answer": "B",
+    "explanation": "t0 P1 运行；t1 P2 到达，P1 剩 7，切到 P2；t2 P3 到达，P2 剩 3，切到 P3，P3 于4完成；P2 4-7完成；P1 7-14完成。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "只按初始运行时间排序，忽略“剩余时间”动态变化。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-007",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "medium",
+    "stem": "单 CPU，P1、P2、P3 均在 0 时到达，运行时间分别为 5、3、1，RR 时间片 q=2，进程按 P1,P2,P3 入队，时间片用完未完成则排到队尾。完成顺序为？",
+    "options": {
+      "A": "P2,P3,P1",
+      "B": "P1,P2,P3",
+      "C": "P3,P2,P1",
+      "D": "P3,P1,P2"
+    },
+    "answer": "C",
+    "explanation": "甘特图：P1 0-2，P2 2-4，P3 4-5 完成，P1 5-7，P2 7-8 完成，P1 8-9 完成。完成顺序 P3,P2,P1。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "把 RR 当成按运行时间一次性排序的 SJF。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-008",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "medium",
+    "stem": "多级反馈队列调度中，短交互作业通常能较快响应的原因是？",
+    "options": {
+      "A": "所有作业固定在最低优先级队列",
+      "B": "调度器不发生抢占",
+      "C": "长作业永远不允许运行",
+      "D": "新到达作业通常先进入高优先级短时间片队列"
+    },
+    "answer": "D",
+    "explanation": "多级反馈队列常让新进程先进入高优先级队列，用较短时间片快速试探；CPU 使用过多再逐级降低优先级。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "认为多级反馈队列只服务短作业，长作业完全饥饿。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-009",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "hard",
+    "stem": "单 CPU，P1(0,6)、P2(1,2)、P3(2,4)。采用抢占式优先级调度，数值越小优先级越高，优先级分别 P1=3、P2=1、P3=2；同优先级 FCFS。平均周转时间为？",
+    "options": {
+      "A": "19/3",
+      "B": "5",
+      "C": "22/3",
+      "D": "8"
+    },
+    "answer": "A",
+    "explanation": "t0 P1 运行；t1 P2 到达且优先级最高，P2 1-3 完成；t3 选 P3 3-7 完成；P1 7-12 完成。周转时间 P1=12、P2=2、P3=5，平均 19/3。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "把完成时刻平均值当成周转时间，或把优先级数值方向看反。"
+  },
+  {
+    "question_id": "pq-os-scheduling-algorithms-010",
+    "concept_id": "operating-system.scheduling.algorithms",
+    "difficulty": "hard",
+    "stem": "单 CPU，P1(0,5)、P2(1,2)、P3(2,1)，采用抢占式优先级调度，数值越大优先级越高，优先级 P1=1、P2=3、P3=2；同优先级 FCFS。平均周转时间为？",
+    "options": {
+      "A": "3",
+      "B": "4",
+      "C": "5",
+      "D": "6"
+    },
+    "answer": "B",
+    "explanation": "t0 P1 运行；t1 P2 到达并抢占，P2 1-3 完成；P3 已到达且优先级高于 P1，P3 3-4 完成；P1 4-8 完成。周转时间 P1=8、P2=2、P3=2，平均 4。",
+    "knowledge_points": [
+      "调度算法",
+      "FCFS/SJF/RR/优先级",
+      "甘特图"
+    ],
+    "common_trap": "把优先级数值方向看反，或忘记抢占。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-001",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "basic",
+    "stem": "作业周转时间的定义是？",
+    "options": {
+      "A": "完成时刻-到达时刻",
+      "B": "开始运行时刻-到达时刻",
+      "C": "等待时间/运行时间",
+      "D": "CPU 空闲时间+I/O 时间"
+    },
+    "answer": "A",
+    "explanation": "周转时间表示作业从提交或到达到完成经历的总时间，即完成时刻减到达时刻。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "把响应时间或等待时间当成周转时间。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-002",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "basic",
+    "stem": "带权周转时间的定义是？",
+    "options": {
+      "A": "实际运行时间/周转时间",
+      "B": "周转时间/实际运行时间",
+      "C": "等待时间+响应时间",
+      "D": "完成时刻/到达时刻"
+    },
+    "answer": "B",
+    "explanation": "带权周转时间反映相对等待程度，等于周转时间除以服务时间。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "把分子和分母颠倒。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-003",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "basic",
+    "stem": "对于一个无 I/O 阻塞的非抢占作业，其等待时间通常等于？",
+    "options": {
+      "A": "完成时刻-开始运行时刻",
+      "B": "响应时间+服务时间",
+      "C": "周转时间-服务时间",
+      "D": "服务时间-周转时间"
+    },
+    "answer": "C",
+    "explanation": "无 I/O 阻塞时，周转时间由等待时间和服务时间组成，因此等待时间=周转时间-服务时间。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "把 CPU 执行时间也算入等待时间。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-004",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "medium",
+    "stem": "P1(到达0,运行4)、P2(1,3)、P3(2,2) 采用 FCFS。P2 的周转时间是多少？",
+    "options": {
+      "A": "3",
+      "B": "4",
+      "C": "7",
+      "D": "6"
+    },
+    "answer": "D",
+    "explanation": "FCFS 甘特图 P1 0-4，P2 4-7，P3 7-9。P2 完成时刻 7，到达 1，周转时间 6。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "直接把运行时间 3 当作周转时间。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-005",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "medium",
+    "stem": "P1(0,3)、P2(2,6)、P3(4,4) 采用 FCFS。平均等待时间为？",
+    "options": {
+      "A": "2",
+      "B": "1",
+      "C": "3",
+      "D": "4"
+    },
+    "answer": "A",
+    "explanation": "甘特图 P1 0-3，P2 3-9，P3 9-13。等待时间 P1=0，P2=1，P3=5，平均 (0+1+5)/3=2。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "P3 到达前 CPU 没有等待 P3，等待时间从到达后才开始算。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-006",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "medium",
+    "stem": "P1(0,5)、P2(1,1)、P3(2,1) 采用非抢占 FCFS。P2 的带权周转时间为？",
+    "options": {
+      "A": "1",
+      "B": "5",
+      "C": "3",
+      "D": "6"
+    },
+    "answer": "B",
+    "explanation": "FCFS：P1 0-5，P2 5-6。P2 周转时间=6-1=5，服务时间=1，带权周转时间=5。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "只用 P2 的运行时间计算，忽略前面长作业造成的等待。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-007",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "medium",
+    "stem": "P1(0,4)、P2(1,4)、P3(2,4) 采用 RR，时间片 q=2，初始队列按到达顺序，时间片末新到达进程先入队，未完成进程再入队。P3 首次响应时间为？",
+    "options": {
+      "A": "1",
+      "B": "4",
+      "C": "2",
+      "D": "6"
+    },
+    "answer": "C",
+    "explanation": "P1 0-2；t=2 时 P2、P3 已在队列，P1 回队尾，之后 P2 2-4，P3 4-6。P3 首次运行时刻 4，到达 2，响应时间为 2。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "响应时间是首次获得 CPU 前的等待，不是完成前总等待。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-008",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "medium",
+    "stem": "某作业到达时刻 3，首次获得 CPU 时刻 8，完成时刻 20，实际 CPU 服务时间 10。它的等待时间为？假定无 I/O 阻塞。",
+    "options": {
+      "A": "5",
+      "B": "17",
+      "C": "10",
+      "D": "7"
+    },
+    "answer": "D",
+    "explanation": "周转时间=20-3=17；无 I/O 阻塞时等待时间=17-10=7。首次响应等待 5 只是第一次等待，不是总等待。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "把响应时间 5 当成总等待时间。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-009",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "hard",
+    "stem": "单 CPU，P1(0,8)、P2(1,4)、P3(2,2)，SRTF 调度。平均等待时间为？",
+    "options": {
+      "A": "8/3",
+      "B": "2",
+      "C": "4",
+      "D": "14/3"
+    },
+    "answer": "A",
+    "explanation": "SRTF：P1 0-1，P2 1-2，P3 2-4 完成，P2 4-7 完成，P1 7-14 完成。等待时间=周转-服务：P1 14-0-8=6，P2 7-1-4=2，P3 4-2-2=0，平均 8/3。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "抢占式调度中一个进程可能多次等待，不能只算首次等待。"
+  },
+  {
+    "question_id": "pq-os-scheduling-metrics-010",
+    "concept_id": "operating-system.scheduling.metrics",
+    "difficulty": "hard",
+    "stem": "单 CPU，P1(0,3)、P2(1,5)、P3(2,2)、P4(3,1)，非抢占 SJF。平均带权周转时间为？",
+    "options": {
+      "A": "1.85",
+      "B": "1.50",
+      "C": "2.30",
+      "D": "3.00"
+    },
+    "answer": "B",
+    "explanation": "t0 只有 P1，0-3；之后选 P4 3-4，P3 4-6，P2 6-11。带权周转：P1=3/3=1，P2=(11-1)/5=2，P3=(6-2)/2=2，P4=(4-3)/1=1，平均 1.50。",
+    "knowledge_points": [
+      "周转时间",
+      "等待时间",
+      "带权周转时间",
+      "响应时间"
+    ],
+    "common_trap": "非抢占 SJF 中已运行的 P1 不会因短作业到达而让出 CPU。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-001",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "basic",
+    "stem": "对计数信号量 S 执行 P(S) 操作的标准语义是？",
+    "options": {
+      "A": "S 减 1，若结果小于 0 则执行进程阻塞",
+      "B": "S 加 1，若有等待进程则唤醒一个",
+      "C": "只检查 S，不修改 S",
+      "D": "清空等待队列"
+    },
+    "answer": "A",
+    "explanation": "P 又称 wait，通常先将 S 减 1；若 S<0，说明资源不足，当前进程进入该信号量等待队列。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "把 P 和 V 的加减方向记反。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-002",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "basic",
+    "stem": "用二元信号量 mutex 实现互斥进入临界区时，mutex 初值通常应为？",
+    "options": {
+      "A": "0",
+      "B": "1",
+      "C": "-1",
+      "D": "进程数的相反数"
+    },
+    "answer": "B",
+    "explanation": "二元信号量表示临界区空闲/占用，初值 1 表示可进入一个进程；进入前 P，退出后 V。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "把同步信号量初值 0 套到互斥场景。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-003",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "basic",
+    "stem": "若信号量 S 初值为 0，进程 P1 执行 P(S) 后未被唤醒，则 P1 会处于什么状态？",
+    "options": {
+      "A": "运行态",
+      "B": "就绪态",
+      "C": "阻塞态",
+      "D": "终止态"
+    },
+    "answer": "C",
+    "explanation": "S 从 0 减为 -1，表示无可用资源，执行 P 操作的进程进入阻塞队列。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "认为 P 操作失败后进程会忙等占用 CPU。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-004",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "medium",
+    "stem": "两个进程 P1、P2 需保证语句 a 在语句 b 之前执行。若 a 在 P1 中，b 在 P2 中，应如何设置信号量 S？",
+    "options": {
+      "A": "S 初值 1；P1:a;P(S)，P2:V(S);b",
+      "B": "S 初值 0；P1:V(S);a，P2:b;P(S)",
+      "C": "S 初值 1；P1:P(S);a，P2:b;V(S)",
+      "D": "S 初值 0；P1:a;V(S)，P2:P(S);b"
+    },
+    "answer": "D",
+    "explanation": "同步关系“a 先于 b”可令 S 初值 0；P2 在 b 前 P(S) 等待，P1 执行 a 后 V(S) 放行。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "把互斥初值 1 用到先后同步，导致 b 可能先执行。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-005",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "medium",
+    "stem": "有 5 个相同资源，用计数信号量 R 管理，R 初值为 5。若已有 3 个进程各成功执行一次 P(R) 且尚未 V(R)，此时 R 的值为？",
+    "options": {
+      "A": "2",
+      "B": "0",
+      "C": "-3",
+      "D": "5"
+    },
+    "answer": "A",
+    "explanation": "每次成功 P 操作使 R 减 1，5 次资源中已占 3 个，R=5-3=2。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "把 R 的值误认为等待进程数。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-006",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "medium",
+    "stem": "生产者-消费者问题中，缓冲区容量为 N，empty 表示空缓冲区数量，full 表示满缓冲区数量。初值应为？",
+    "options": {
+      "A": "empty=0, full=N",
+      "B": "empty=N, full=0",
+      "C": "empty=1, full=1",
+      "D": "empty=N, full=N"
+    },
+    "answer": "B",
+    "explanation": "开始时缓冲区全空，空槽 N 个、满槽 0 个；生产者先 P(empty)，消费者先 P(full)。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "把 empty/full 的含义按变量名反向理解。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-007",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "medium",
+    "stem": "某代码片段进入临界区前执行 P(mutex)，退出临界区后忘记执行 V(mutex)。最可能的后果是？",
+    "options": {
+      "A": "互斥被破坏，多个进程同时进入",
+      "B": "临界区自动扩容",
+      "C": "其他进程以后可能永久阻塞在 P(mutex)",
+      "D": "信号量自动恢复初值"
+    },
+    "answer": "C",
+    "explanation": "忘记 V 会使 mutex 长期保持不可用，后续进程在 P 操作处阻塞，形成饥饿或死锁风险。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "只关注同时进入，忽略少 V 会导致无法进入。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-008",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "medium",
+    "stem": "有界缓冲区中生产者的正确操作顺序通常是？",
+    "options": {
+      "A": "V(full); P(empty); P(mutex); 放入产品; V(mutex)",
+      "B": "P(full); P(mutex); 放入产品; V(mutex); V(empty)",
+      "C": "P(mutex); P(full); 放入产品; V(empty); V(mutex)",
+      "D": "P(empty); P(mutex); 放入产品; V(mutex); V(full)"
+    },
+    "answer": "D",
+    "explanation": "生产者先等待空槽 empty，再进入互斥区放入产品，退出后增加 full。该顺序避免满缓冲区写入和互斥冲突。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "把生产者等待 full 或先 V(full)，会让消费者看到不存在的产品。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-009",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "hard",
+    "stem": "两个进程 P1、P2 循环使用两个互斥信号量 A、B，A=B=1。P1 执行 P(A);P(B);临界区;V(B);V(A)，P2 执行 P(B);P(A);临界区;V(A);V(B)。可能出现什么问题？",
+    "options": {
+      "A": "可能死锁：P1 持有 A 等 B，P2 持有 B 等 A",
+      "B": "不会有问题，因为每个信号量初值都是 1",
+      "C": "只会破坏互斥，不会阻塞",
+      "D": "两个进程一定按 P1 后 P2 顺序运行"
+    },
+    "answer": "A",
+    "explanation": "若 P1 先获得 A、P2 先获得 B，二者再分别请求对方持有的信号量，会形成循环等待。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "只看到单个信号量互斥正确，忽略多个资源获取顺序不一致。"
+  },
+  {
+    "question_id": "pq-os-sync-semaphore-010",
+    "concept_id": "operating-system.sync.semaphore",
+    "difficulty": "hard",
+    "stem": "读者-写者问题中，若要求“读者优先”，常见方案允许什么情况发生？",
+    "options": {
+      "A": "多个写者可同时写，只要没有读者",
+      "B": "多个读者可同时读，写者与任一读者互斥",
+      "C": "读者和写者可同时访问同一数据",
+      "D": "写者进入后还允许新读者进入写临界区"
+    },
+    "answer": "B",
+    "explanation": "读者优先允许多个读者并发读，但写操作必须与所有读者和其他写者互斥；持续到来的读者可能使写者饥饿。",
+    "knowledge_points": [
+      "信号量",
+      "P/V 操作",
+      "同步与互斥"
+    ],
+    "common_trap": "把读读共享误扩展为读写共享。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-001",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "basic",
+    "stem": "临界区是指哪一类程序段？",
+    "options": {
+      "A": "访问临界资源的程序段",
+      "B": "只能在用户态执行的程序段",
+      "C": "只包含 I/O 指令的程序段",
+      "D": "永远不会被中断的程序段"
+    },
+    "answer": "A",
+    "explanation": "临界区是进程中访问共享临界资源的代码段，需要互斥进入。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "把临界区理解成不可中断代码，而不是访问共享资源的代码。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-002",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "basic",
+    "stem": "实现互斥的基本要求不包括哪一项？",
+    "options": {
+      "A": "空闲让进",
+      "B": "让权等待必须由硬件自动完成",
+      "C": "有限等待",
+      "D": "忙则等待"
+    },
+    "answer": "B",
+    "explanation": "互斥准则包括空闲让进、忙则等待、有限等待、让权等待；但“必须由硬件自动完成”不是基本要求。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "把实现方式当成互斥准则本身。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-003",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "basic",
+    "stem": "管程 monitor 的一个核心特征是？",
+    "options": {
+      "A": "任意数量进程可同时在管程内执行",
+      "B": "管程只能用于磁盘调度",
+      "C": "管程把共享数据及其操作封装，并保证互斥进入",
+      "D": "管程不允许使用条件变量"
+    },
+    "answer": "C",
+    "explanation": "管程封装共享数据和操作，入口过程通常天然互斥，并配合条件变量完成同步。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "只记得条件变量，忘记管程的封装和互斥。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-004",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "medium",
+    "stem": "条件变量的 wait 操作在管程中的典型语义是？",
+    "options": {
+      "A": "只修改普通整型变量",
+      "B": "占有管程后忙等，不释放互斥权",
+      "C": "永久删除条件变量",
+      "D": "释放管程互斥权并阻塞当前进程"
+    },
+    "answer": "D",
+    "explanation": "wait 使当前进程在条件队列等待，并释放管程互斥权，使其他进程可进入管程改变条件。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "若 wait 不释放互斥权，其他进程无法进入管程唤醒它。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-005",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "medium",
+    "stem": "下列哪种硬件机制常用于构造自旋锁等底层互斥原语？",
+    "options": {
+      "A": "Test-and-Set 指令",
+      "B": "目录项查找",
+      "C": "页面置换 OPT",
+      "D": "磁盘 SCAN"
+    },
+    "answer": "A",
+    "explanation": "Test-and-Set、Compare-and-Swap 等原子指令可在多处理机上实现底层锁。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "把同步互斥原语和存储/I/O 算法混淆。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-006",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "medium",
+    "stem": "单处理机上用“关中断”实现内核临界区互斥的主要限制是？",
+    "options": {
+      "A": "会自动解决所有用户进程同步问题",
+      "B": "不能阻止其他 CPU 核并发访问",
+      "C": "会增加磁盘容量",
+      "D": "只能用于文件连续分配"
+    },
+    "answer": "B",
+    "explanation": "关中断可防止本 CPU 被中断切换，但在多处理机上不能阻止其他 CPU 同时执行，需要锁总线或原子指令等机制。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "把单处理机技巧直接推广到多处理机。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-007",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "medium",
+    "stem": "使用忙等自旋锁保护很长的临界区时，主要问题是？",
+    "options": {
+      "A": "一定比阻塞锁节省 CPU",
+      "B": "一定无法保证互斥",
+      "C": "等待者占用 CPU 空转，浪费处理机时间",
+      "D": "会改变虚拟地址格式"
+    },
+    "answer": "C",
+    "explanation": "自旋锁适合等待时间很短的场景；临界区很长时，等待进程持续占用 CPU 检查锁，开销大。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "只看到自旋避免睡眠唤醒开销，忽略长等待下的 CPU 浪费。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-008",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "medium",
+    "stem": "在 Hoare 管程语义中，signal 条件变量后通常发生什么？",
+    "options": {
+      "A": "发信号者继续执行，被唤醒者只进入就绪队列",
+      "B": "signal 等价于永久增加一个信号量计数",
+      "C": "所有等待进程同时进入管程",
+      "D": "被唤醒进程立即获得管程执行权，发信号者等待"
+    },
+    "answer": "D",
+    "explanation": "Hoare 语义强调 signal 后立即把管程控制权交给被唤醒者；Mesa 语义则通常只是使其就绪。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "混淆 Hoare 与 Mesa 条件变量语义。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-009",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "hard",
+    "stem": "某管程中条件变量 c 对应条件 count>0。进程从 wait(c) 返回后，为什么常建议用 while 而不是 if 再检查条件？",
+    "options": {
+      "A": "Mesa 语义下被唤醒到重新获得管程期间条件可能被其他进程改变",
+      "B": "while 可避免编译器优化",
+      "C": "if 语句不能出现在管程中",
+      "D": "条件变量会保存历史 signal 次数"
+    },
+    "answer": "A",
+    "explanation": "Mesa 语义下 signal 只唤醒等待者，等待者之后才竞争管程；重新进入时条件可能已不成立，需 while 重检。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "把条件变量当作会累计许可的信号量。"
+  },
+  {
+    "question_id": "pq-os-mutex-monitor-010",
+    "concept_id": "operating-system.sync.mutex-monitor",
+    "difficulty": "hard",
+    "stem": "两个进程的软件互斥算法若满足“忙则等待”但不满足“有限等待”，可能导致什么？",
+    "options": {
+      "A": "临界区内一定同时进入两个进程",
+      "B": "某进程可能长期得不到进入临界区的机会",
+      "C": "所有进程必然立即终止",
+      "D": "无法访问任何共享变量"
+    },
+    "answer": "B",
+    "explanation": "忙则等待保证已有进程在临界区时其他进程不能进入；有限等待缺失则可能出现饥饿。",
+    "knowledge_points": [
+      "临界区",
+      "互斥",
+      "管程与条件变量"
+    ],
+    "common_trap": "把互斥性和无饥饿性视为同一个性质。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-001",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "basic",
+    "stem": "死锁的四个必要条件不包括哪一项？",
+    "options": {
+      "A": "高响应比优先",
+      "B": "占有并等待",
+      "C": "不可剥夺",
+      "D": "互斥"
+    },
+    "answer": "A",
+    "explanation": "死锁四个必要条件是互斥、占有并等待、不可剥夺、循环等待。高响应比优先是调度算法。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "把处理机调度算法混入死锁条件。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-002",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "basic",
+    "stem": "破坏“占有并等待”条件的典型死锁预防方法是？",
+    "options": {
+      "A": "允许形成资源环路",
+      "B": "进程一次性申请所需全部资源",
+      "C": "禁止释放任何资源",
+      "D": "提高 CPU 主频"
+    },
+    "answer": "B",
+    "explanation": "一次性申请全部资源或申请新资源前释放已占资源，可避免进程持有资源同时等待新资源。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "把预防死锁和提高性能手段混淆。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-003",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "basic",
+    "stem": "资源有序分配法主要破坏死锁的哪个必要条件？",
+    "options": {
+      "A": "互斥",
+      "B": "请求资源",
+      "C": "循环等待",
+      "D": "进程并发"
+    },
+    "answer": "C",
+    "explanation": "给资源编号并要求按序申请，可使资源等待图不形成环，从而破坏循环等待条件。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "误以为按序申请能破坏互斥条件。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-004",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "medium",
+    "stem": "若系统中每类资源只有一个实例，资源分配图出现环路意味着什么？",
+    "options": {
+      "A": "只能说明发生缺页",
+      "B": "一定不存在死锁",
+      "C": "只表示 CPU 利用率高",
+      "D": "一定存在死锁"
+    },
+    "answer": "D",
+    "explanation": "每类资源单实例时，资源分配图有环是死锁的充分必要条件。多实例时有环不一定死锁。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "忘记“单实例”和“多实例”结论不同。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-005",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "medium",
+    "stem": "银行家算法属于哪一种死锁处理策略？",
+    "options": {
+      "A": "死锁避免",
+      "B": "死锁预防",
+      "C": "死锁检测后解除",
+      "D": "完全不处理"
+    },
+    "answer": "A",
+    "explanation": "银行家算法在资源分配前判断分配后是否仍处于安全状态，从而避免进入不安全状态。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "把“避免”和“预防”混为一谈。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-006",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "medium",
+    "stem": "下列哪项属于死锁解除方法而不是死锁预防方法？",
+    "options": {
+      "A": "资源按序申请",
+      "B": "撤销一个或多个死锁进程",
+      "C": "一次性申请所有资源",
+      "D": "申请新资源前释放已占资源"
+    },
+    "answer": "B",
+    "explanation": "检测到死锁后可撤销进程或剥夺资源来解除；其他选项是在运行前或申请规则上破坏必要条件。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "没有区分事前预防和事后解除。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-007",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "medium",
+    "stem": "某系统允许抢占打印机资源，即可强制收回被进程占有的打印机。该策略试图破坏哪一条件？",
+    "options": {
+      "A": "循环等待",
+      "B": "互斥",
+      "C": "不可剥夺",
+      "D": "请求保持"
+    },
+    "answer": "C",
+    "explanation": "允许抢占资源就是破坏“资源不可剥夺”条件。不过对打印机这类资源实际抢占常不合理。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "看到打印机是互斥资源就误选互斥。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-008",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "medium",
+    "stem": "安全状态与死锁状态的关系，正确的是？",
+    "options": {
+      "A": "安全状态表示资源永远不会被申请",
+      "B": "不安全状态一定已经死锁",
+      "C": "死锁状态一定安全",
+      "D": "安全状态一定不是死锁状态"
+    },
+    "answer": "D",
+    "explanation": "安全状态存在某个安全序列，因此一定无死锁；不安全状态只是可能导致死锁，不等于已经死锁。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "把“不安全”直接等同于“已死锁”。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-009",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "hard",
+    "stem": "系统有 3 个同类资源，进程 P1、P2、P3 各最多需要 2 个。若当前每个进程已占有 1 个且都再请求 1 个，会发生什么？",
+    "options": {
+      "A": "可能死锁，因为每个进程占有并等待且无可用资源",
+      "B": "一定无死锁，因为总需求只有 6",
+      "C": "一定安全，因为每个进程只差 1 个",
+      "D": "只要采用 FCFS 调度就能解除"
+    },
+    "answer": "A",
+    "explanation": "3 个资源已被三个进程各占 1 个，Available=0；若都等待再获得 1 个且不可剥夺，就形成所有进程等待资源释放的死锁。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "只看每个进程还差 1 个，忽略系统没有剩余资源。"
+  },
+  {
+    "question_id": "pq-os-deadlock-conditions-010",
+    "concept_id": "operating-system.deadlock.conditions",
+    "difficulty": "hard",
+    "stem": "某系统资源分配图中存在环 P1->R1->P2->R2->P1，且 R1、R2 都各有 2 个实例。下列判断正确的是？",
+    "options": {
+      "A": "一定死锁",
+      "B": "有环但不能仅凭该环断定死锁",
+      "C": "一定不死锁",
+      "D": "只要有两个资源类就不可能死锁"
+    },
+    "answer": "B",
+    "explanation": "资源类有多个实例时，分配图存在环只是死锁的必要条件，不是充分条件，还需结合可用实例和请求情况分析。",
+    "knowledge_points": [
+      "死锁四条件",
+      "死锁预防",
+      "死锁避免/检测"
+    ],
+    "common_trap": "把单实例资源图的判定规则直接套用到多实例。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-001",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "basic",
+    "stem": "银行家算法中 Need 矩阵的含义是？",
+    "options": {
+      "A": "进程最多还可能需要的资源数",
+      "B": "进程已经占有的资源数",
+      "C": "系统总资源数",
+      "D": "当前空闲资源数"
+    },
+    "answer": "A",
+    "explanation": "Need = Max - Allocation，表示每个进程为完成运行还可能请求的最大资源量。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "把 Need 与 Allocation 或 Available 混淆。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-002",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "basic",
+    "stem": "银行家算法判断请求 Request_i 能否立即分配时，首先必须满足哪一项？",
+    "options": {
+      "A": "Request_i > Max_i",
+      "B": "Request_i <= Need_i 且 Request_i <= Available",
+      "C": "Available 全为 0",
+      "D": "Allocation_i 全为 0"
+    },
+    "answer": "B",
+    "explanation": "请求不能超过该进程声明的剩余最大需求，也不能超过当前可用资源；之后还要试分配并做安全性检查。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "只检查 Available，忘记请求不能超过 Need。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-003",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "basic",
+    "stem": "系统处于安全状态的含义是？",
+    "options": {
+      "A": "所有进程都已经完成",
+      "B": "Available 必须大于每个 Max",
+      "C": "存在一个进程序列，使每个进程最终都能获得所需资源并完成",
+      "D": "没有任何进程申请资源"
+    },
+    "answer": "C",
+    "explanation": "安全状态要求存在安全序列，按该序列每个进程都能在前面进程释放资源后完成。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "把安全状态误解为当前资源足够同时满足所有最大需求。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-004",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "medium",
+    "stem": "资源 A,B,C 的 Available=(3,3,2)。Need：P0(7,4,3)、P1(1,2,2)、P2(6,0,0)、P3(0,1,1)、P4(4,3,1)。Allocation：P0(0,1,0)、P1(2,0,0)、P2(3,0,2)、P3(2,1,1)、P4(0,0,2)。下列哪一个是安全序列？",
+    "options": {
+      "A": "P4,P0,P1,P2,P3",
+      "B": "P2,P0,P1,P3,P4",
+      "C": "P0,P2,P1,P3,P4",
+      "D": "P1,P3,P4,P0,P2"
+    },
+    "answer": "D",
+    "explanation": "Work=(3,3,2)。P1 可完成后 Work=(5,3,2)；P3 完成后 (7,4,3)；P4 完成后 (7,4,5)；P0 完成后 (7,5,5)；P2 可完成。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "只看某个进程 Need 小，未逐步把 Allocation 释放回 Work。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-005",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "medium",
+    "stem": "在上一题同一状态下，若 P1 请求 Request=(1,0,2)，是否可立即分配？",
+    "options": {
+      "A": "可分配，试分配后仍有安全序列 P1,P3,P4,P0,P2",
+      "B": "不可分配，因为 Request 超过 Need",
+      "C": "不可分配，因为 Request 超过 Available",
+      "D": "可分配，但一定导致死锁"
+    },
+    "answer": "A",
+    "explanation": "Request=(1,0,2) <= Need1=(1,2,2)，也 <= Available=(3,3,2)。试分配后 Available=(2,3,0)，P1 Need 变 (0,2,0)，可按 P1,P3,P4,P0,P2 完成。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "通过前两个条件后忘记还要做安全性检查，或误算 P1 新 Need。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-006",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "medium",
+    "stem": "系统有资源 A,B，Available=(1,1)。P0 Allocation=(1,0), Need=(0,1)；P1 Allocation=(0,1), Need=(1,0)。当前状态是否安全？",
+    "options": {
+      "A": "不安全，因为每个进程都有 Need",
+      "B": "安全，序列 P0,P1 或 P1,P0 均可",
+      "C": "死锁，因为 Available 不为 0",
+      "D": "安全只在 Need 全为 0 时成立"
+    },
+    "answer": "B",
+    "explanation": "Work=(1,1) 可满足 P0 Need=(0,1)，P0 完成释放 (1,0) 后 Work=(2,1)，再满足 P1；反过来也可。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "看到进程仍有需求就认为不安全。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-007",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "medium",
+    "stem": "资源 A,B，Available=(1,0)。P0 Allocation=(1,0), Need=(0,1)；P1 Allocation=(0,1), Need=(1,0)。当前状态如何？",
+    "options": {
+      "A": "不安全且当前已无可完成进程",
+      "B": "安全，P0 完成后 P1 完成",
+      "C": "安全，P1 完成后 P0 完成",
+      "D": "一定安全，因为总资源数为 2"
+    },
+    "answer": "C",
+    "explanation": "Work=(1,0) 满足 P1 Need=(1,0)，P1 完成释放 (0,1) 得 Work=(1,1)，再满足 P0 Need=(0,1)。安全序列 P1,P0。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "只看 P0 不能先完成就断定不安全。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-008",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "medium",
+    "stem": "资源 A,B，Available=(0,0)。P0 Allocation=(1,0), Need=(0,1)；P1 Allocation=(0,1), Need=(1,0)。当前状态如何？",
+    "options": {
+      "A": "安全，P0,P1",
+      "B": "安全，P1,P0",
+      "C": "因 Need 不为 0 但 Available 为 0，所以自动完成",
+      "D": "不安全，且若两进程继续等待对方资源会死锁"
+    },
+    "answer": "D",
+    "explanation": "Work=(0,0) 不能满足 P0 的 (0,1)，也不能满足 P1 的 (1,0)，没有可完成进程；若请求保持且不可剥夺，会形成死锁。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "认为 Allocation 中已有资源可被银行家算法随意收回。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-009",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "hard",
+    "stem": "资源 A,B,C，Available=(2,1,0)。P0 Allocation=(0,1,0), Need=(1,0,1)；P1 Allocation=(2,0,0), Need=(0,1,0)；P2 Allocation=(1,0,1), Need=(2,1,0)。若 P2 请求 (1,0,0)，下列判断正确的是？",
+    "options": {
+      "A": "可立即分配，安全序列 P1,P2,P0",
+      "B": "不可分配，因为请求超过 Need",
+      "C": "不可分配，因为试分配后不存在安全序列",
+      "D": "不可分配，因为请求超过 Available"
+    },
+    "answer": "A",
+    "explanation": "Request=(1,0,0) <= Need2=(2,1,0)，且 <= Available=(2,1,0)。试分配后 Work=(1,1,0)，P1 可完成释放 (2,0,0) 得 (3,1,0)，P2 Need 剩 (1,1,0) 可完成释放 (2,0,1) 得 (5,1,1)，P0 可完成，故可分配。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "没有试分配就直接凭 Available 判断。"
+  },
+  {
+    "question_id": "pq-os-deadlock-banker-010",
+    "concept_id": "operating-system.deadlock.banker",
+    "difficulty": "hard",
+    "stem": "资源 A,B，Available=(2,0)。P0 Allocation=(0,1), Need=(2,0)；P1 Allocation=(1,0), Need=(1,1)；P2 Allocation=(1,0), Need=(1,1)。若 P1 请求 (1,0)，下列判断正确的是？",
+    "options": {
+      "A": "可分配，因为 Request <= Available，且安全序列 P1,P0,P2",
+      "B": "不可分配，因为试分配后只有 P0 能完成，之后仍无法使 P1 或 P2 满足 Need",
+      "C": "不可分配，因为 Request 超过 Need",
+      "D": "可分配，因为 Available 中 A 足够"
+    },
+    "answer": "B",
+    "explanation": "试分配给 P1 后 Available=(1,0)，P1 Need 变 (0,1)，P1 Allocation=(2,0)。Work=(1,0) 不能满足 P1 的 (0,1)、P2 的 (1,1)，也不能满足 P0 的 (2,0)，没有任何进程可完成，因此不安全，不能分配。",
+    "knowledge_points": [
+      "银行家算法",
+      "Need 矩阵",
+      "安全序列"
+    ],
+    "common_trap": "只做 Request<=Available 检查，没有安全性检查。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-001",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "basic",
+    "stem": "分页存储管理中，逻辑地址通常由哪两部分组成？",
+    "options": {
+      "A": "页号和页内偏移",
+      "B": "段号和段内偏移",
+      "C": "柱面号和磁头号",
+      "D": "文件号和目录号"
+    },
+    "answer": "A",
+    "explanation": "分页系统把逻辑地址划分为页号 p 和页内偏移 d，通过页表将页号映射到页框号。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "把分页和分段地址结构混淆。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-002",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "basic",
+    "stem": "页表项的主要作用是记录什么映射？",
+    "options": {
+      "A": "文件名到 inode 名称字符串",
+      "B": "逻辑页号到物理页框号",
+      "C": "进程号到 CPU 主频",
+      "D": "磁道号到扇区大小"
+    },
+    "answer": "B",
+    "explanation": "地址转换时根据页号查页表得到物理页框号，再与页内偏移拼接成物理地址。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "把页表和文件目录或磁盘分配表混淆。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-003",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "basic",
+    "stem": "若页面大小为 4KB，则页内偏移需要多少位？",
+    "options": {
+      "A": "10 位",
+      "B": "11 位",
+      "C": "12 位",
+      "D": "13 位"
+    },
+    "answer": "C",
+    "explanation": "4KB=4096=2^12 字节，因此页内偏移为 12 位。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "把 KB 当成 1000 或忘记按字节编址。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-004",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "medium",
+    "stem": "某系统页面大小 1KB，逻辑地址 2500（十进制，按字节编址）的页号和页内偏移为？",
+    "options": {
+      "A": "页号 1，偏移 1476",
+      "B": "页号 2，偏移 500",
+      "C": "页号 3，偏移 452",
+      "D": "页号 2，偏移 452"
+    },
+    "answer": "D",
+    "explanation": "1KB=1024，2500 div 1024=2，2500 mod 1024=452。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "用 1000 代替 1024 计算页大小。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-005",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "medium",
+    "stem": "页面大小 1KB，页表：页0->框5，页1->框2，页2->框7。逻辑地址 2050 的物理地址为？",
+    "options": {
+      "A": "7170",
+      "B": "7172",
+      "C": "2050",
+      "D": "5122"
+    },
+    "answer": "A",
+    "explanation": "2050 div 1024=2，偏移 2；页2 对应页框7，物理地址=7*1024+2=7168+2=7170。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "忘记页内偏移保持不变，或乘错页大小。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-006",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "medium",
+    "stem": "32 位逻辑地址、页面大小 4KB、页表项 4B，单级页表最多需要多大空间？",
+    "options": {
+      "A": "4KB",
+      "B": "4MB",
+      "C": "1MB",
+      "D": "16MB"
+    },
+    "answer": "B",
+    "explanation": "页内偏移 12 位，页号 20 位，最多 2^20 个页表项；每项 4B，总大小 2^22B=4MB。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "把虚拟地址空间大小 4GB 直接当成页表大小。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-007",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "medium",
+    "stem": "页式管理相对连续分配，最主要能避免哪类碎片？",
+    "options": {
+      "A": "页内碎片",
+      "B": "内部碎片",
+      "C": "外部碎片",
+      "D": "TLB 碎片"
+    },
+    "answer": "C",
+    "explanation": "分页以固定大小页框分配物理内存，不要求进程占用连续物理空间，因此消除外部碎片，但最后一页可能有内部碎片。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "误以为分页没有任何碎片。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-008",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "medium",
+    "stem": "页面大小 2KB，逻辑地址 13 位。页号位数最多为？",
+    "options": {
+      "A": "11 位",
+      "B": "3 位",
+      "C": "4 位",
+      "D": "2 位"
+    },
+    "answer": "D",
+    "explanation": "2KB=2^11，偏移 11 位；逻辑地址 13 位，所以页号位数为 13-11=2 位。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "把页面大小位数当作页号位数。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-009",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "hard",
+    "stem": "某二级页表系统，32 位虚拟地址，页面大小 4KB，每个页表页大小 4KB，页表项 4B。虚拟地址划分最合理的是？",
+    "options": {
+      "A": "10 位页目录号、10 位页表号、12 位偏移",
+      "B": "12 位页目录号、10 位页表号、10 位偏移",
+      "C": "8 位页目录号、12 位页表号、12 位偏移",
+      "D": "20 位页目录号、0 位页表号、12 位偏移"
+    },
+    "answer": "A",
+    "explanation": "偏移 12 位。一个页表页可放 4KB/4B=1024=2^10 个页表项，因此二级页表索引 10 位，剩余页目录索引也是 10 位。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "忘记页表页可容纳的 PTE 数决定二级索引位数。"
+  },
+  {
+    "question_id": "pq-os-memory-paging-010",
+    "concept_id": "operating-system.memory.paging",
+    "difficulty": "hard",
+    "stem": "某进程逻辑空间 10 页，页面大小 4KB，分配 10 个页框后，最后一页只使用 1000B。该进程因分页产生的内部碎片为？",
+    "options": {
+      "A": "0B",
+      "B": "3096B",
+      "C": "1000B",
+      "D": "4096B"
+    },
+    "answer": "B",
+    "explanation": "只有最后一页未用满，内部碎片=4096-1000=3096B。已分配页框内部未使用空间不能被其他进程使用。",
+    "knowledge_points": [
+      "分页",
+      "页号与页内偏移",
+      "地址转换"
+    ],
+    "common_trap": "把已使用字节 1000B 当作碎片，或认为分页完全无内部碎片。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-001",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "basic",
+    "stem": "TLB（快表）的作用是？",
+    "options": {
+      "A": "缓存最近使用的页表项以加快地址转换",
+      "B": "替代所有物理内存保存用户数据",
+      "C": "保存磁盘目录项",
+      "D": "执行磁盘寻道调度"
+    },
+    "answer": "A",
+    "explanation": "TLB 是页表项的高速缓存，命中时可减少访问内存页表的次数。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "把 TLB 当成普通数据缓存或磁盘缓存。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-002",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "basic",
+    "stem": "若一次内存访问时间为 100ns，TLB 查询时间为 10ns，TLB 命中且查询与内存访问不重叠，则访问一个数据字的时间为？",
+    "options": {
+      "A": "10ns",
+      "B": "110ns",
+      "C": "100ns",
+      "D": "210ns"
+    },
+    "answer": "B",
+    "explanation": "命中时先查 TLB 10ns，再访问物理内存 100ns，共 110ns。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "命中后仍额外访问页表，或忽略 TLB 查询时间。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-003",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "basic",
+    "stem": "单级页表、无 TLB 时，访问一个逻辑地址通常需要几次内存访问？",
+    "options": {
+      "A": "0 次",
+      "B": "1 次",
+      "C": "2 次",
+      "D": "3 次"
+    },
+    "answer": "C",
+    "explanation": "一次访问页表项完成地址转换，一次访问目标数据或指令，共两次内存访问。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "只计算访问数据本身，漏掉访问页表。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-004",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "medium",
+    "stem": "TLB 查询 10ns，内存访问 100ns，单级页表，TLB 命中率 90%，查询与内存访问不重叠。EAT 为？",
+    "options": {
+      "A": "110ns",
+      "B": "210ns",
+      "C": "200ns",
+      "D": "120ns"
+    },
+    "answer": "D",
+    "explanation": "命中代价 10+100=110ns；未命中代价 10+100(页表)+100(数据)=210ns。EAT=0.9*110+0.1*210=120ns。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "未命中时漏算最终数据访问，或命中时漏算 TLB 查询。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-005",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "medium",
+    "stem": "TLB 查询时间忽略不计，内存访问 80ns，单级页表，TLB 命中率 75%。EAT 为？",
+    "options": {
+      "A": "100ns",
+      "B": "80ns",
+      "C": "120ns",
+      "D": "160ns"
+    },
+    "answer": "A",
+    "explanation": "命中 80ns，未命中 160ns，EAT=0.75*80+0.25*160=100ns。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "把未命中代价仍按一次内存访问计算。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-006",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "medium",
+    "stem": "二级页表、无 TLB，内存访问时间 100ns。访问一个数据字需要多少时间？",
+    "options": {
+      "A": "100ns",
+      "B": "300ns",
+      "C": "200ns",
+      "D": "400ns"
+    },
+    "answer": "B",
+    "explanation": "二级页表需先访问页目录项、再访问页表项、最后访问数据，共 3 次内存访问，300ns。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "把二级页表和单级页表都算成两次内存访问。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-007",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "medium",
+    "stem": "二级页表，有 TLB。TLB 查询 5ns，内存访问 100ns，命中率 80%，查询不重叠。EAT 为？",
+    "options": {
+      "A": "105ns",
+      "B": "165ns",
+      "C": "145ns",
+      "D": "305ns"
+    },
+    "answer": "C",
+    "explanation": "命中：5+100=105ns；未命中：5+100+100+100=305ns。EAT=0.8*105+0.2*305=145ns。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "未命中二级页表时只算一次页表访问。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-008",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "medium",
+    "stem": "某系统单级页表，内存访问 100ns，TLB 查询 20ns，要求 EAT 不超过 130ns，查询不重叠。TLB 命中率至少为？",
+    "options": {
+      "A": "0.70",
+      "B": "0.80",
+      "C": "0.95",
+      "D": "0.90"
+    },
+    "answer": "D",
+    "explanation": "命中 120ns，未命中 220ns。EAT=h*120+(1-h)*220=220-100h <=130，得 h>=0.90。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "把命中代价误写成 100ns，导致命中率低估。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-009",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "hard",
+    "stem": "单级页表，内存访问 100ns，TLB 查询 10ns。若 TLB 查询可与内存访问完全并行，且命中时不增加额外时间；未命中需再访问页表和数据。命中率 95%，EAT 为？",
+    "options": {
+      "A": "105ns",
+      "B": "110ns",
+      "C": "115ns",
+      "D": "200ns"
+    },
+    "answer": "A",
+    "explanation": "并行查询下命中代价为 100ns；未命中先发现未命中后访问页表和数据，可按 200ns 计。EAT=0.95*100+0.05*200=105ns。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "没有注意题目说明“TLB 查询与内存访问完全并行”，仍把 10ns 加到每次访问上。"
+  },
+  {
+    "question_id": "pq-os-tlb-eat-010",
+    "concept_id": "operating-system.memory.tlb-eat",
+    "difficulty": "hard",
+    "stem": "某系统访问内存 100ns，TLB 查询 10ns，缺页率 1%，缺页处理平均 8ms。TLB 命中率 90%，单级页表，查询不重叠，且缺页只在地址转换后发现。近似 EAT 为？",
+    "options": {
+      "A": "约 120ns",
+      "B": "约 80.12us",
+      "C": "约 8.00012us",
+      "D": "约 8ms"
+    },
+    "answer": "B",
+    "explanation": "不缺页时 TLB 平均代价为 120ns。缺页率 1% 时额外平均代价约 0.01*8ms=0.08ms=80us，所以 EAT 约为 80.12us。",
+    "knowledge_points": [
+      "TLB",
+      "有效访问时间 EAT",
+      "命中率"
+    ],
+    "common_trap": "忽略缺页处理时间相对 ns 级访问时间大很多。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-001",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "basic",
+    "stem": "OPT 页面置换算法选择淘汰的页面是？",
+    "options": {
+      "A": "未来最长时间不再使用的页面",
+      "B": "最近最久未使用的页面",
+      "C": "最早进入内存的页面",
+      "D": "访问位为 1 的页面"
+    },
+    "answer": "A",
+    "explanation": "OPT 淘汰未来最长时间不会被访问的页面，理论最优但实际运行时无法准确预知未来。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "把 OPT 和 LRU/FIFO 的选择依据混淆。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-002",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "basic",
+    "stem": "FIFO 页面置换算法可能出现的著名异常是？",
+    "options": {
+      "A": "死锁避免",
+      "B": "Belady 异常",
+      "C": "中断嵌套",
+      "D": "磁盘抖动消失"
+    },
+    "answer": "B",
+    "explanation": "FIFO 在某些访问串下增加页框数反而可能增加缺页次数，称为 Belady 异常。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "误以为页框数增加对任何算法都必然减少缺页。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-003",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "basic",
+    "stem": "LRU 算法淘汰的页面是？",
+    "options": {
+      "A": "最早装入内存的页面",
+      "B": "编号最大的页面",
+      "C": "最长时间没有被访问的页面",
+      "D": "下一次最晚访问的页面"
+    },
+    "answer": "C",
+    "explanation": "LRU 基于过去访问历史，淘汰最近最久未使用的页面。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "把“最早装入”与“最近最久未访问”混同。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-004",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "medium",
+    "stem": "访问串 7,0,1,2,0,3,0,4,2,3,0,3,2，页框数 3，初始为空，采用 FIFO。缺页次数为？",
+    "options": {
+      "A": "7",
+      "B": "8",
+      "C": "9",
+      "D": "10"
+    },
+    "answer": "D",
+    "explanation": "FIFO 依装入先后淘汰。逐步模拟：7,0,1 缺页；2 淘汰7；0 命中；3 淘汰0；0 淘汰1；4 淘汰2；2 淘汰3；3 淘汰0；0 淘汰4；后续 3、2 命中，共 10 次。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "命中时错误地调整 FIFO 队列顺序。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-005",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "medium",
+    "stem": "同一访问串 7,0,1,2,0,3,0,4,2,3,0,3,2，页框数 3，初始为空，采用 LRU。缺页次数为？",
+    "options": {
+      "A": "9",
+      "B": "8",
+      "C": "7",
+      "D": "10"
+    },
+    "answer": "A",
+    "explanation": "LRU 模拟：前三个 7,0,1 缺页；2 淘汰7；0 命中；3 淘汰1；0 命中；4 淘汰2；2 淘汰3；3 淘汰0；0 淘汰4；最后 3、2 命中，共 9 次。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "命中后忘记更新最近使用时间。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-006",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "medium",
+    "stem": "访问串 1,2,3,4,1,2,5,1,2,3,4,5，页框数 3，FIFO 缺页次数为？",
+    "options": {
+      "A": "7",
+      "B": "9",
+      "C": "8",
+      "D": "10"
+    },
+    "answer": "B",
+    "explanation": "FIFO：1,2,3 缺页；4 淘汰1；1 淘汰2；2 淘汰3；5 淘汰4；1、2 命中；3 淘汰1；4 淘汰2；5 命中，共 9 次。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "这组串常用于观察 Belady 异常，不能凭直觉估计。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-007",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "medium",
+    "stem": "访问串 1,2,3,4,1,2,5,1,2,3,4,5，页框数 4，FIFO 缺页次数为？",
+    "options": {
+      "A": "7",
+      "B": "8",
+      "C": "10",
+      "D": "9"
+    },
+    "answer": "C",
+    "explanation": "FIFO：1,2,3,4 缺页；1,2 命中；5 淘汰1；1 淘汰2；2 淘汰3；3 淘汰4；4 淘汰5；5 淘汰1，共 10 次，体现 Belady 异常。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "认为页框从 3 增到 4 后 FIFO 缺页一定下降。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-008",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "medium",
+    "stem": "Clock 置换中，某页被访问后访问位通常会被置为？",
+    "options": {
+      "A": "0",
+      "B": "进程号",
+      "C": "页框号",
+      "D": "1"
+    },
+    "answer": "D",
+    "explanation": "Clock 使用访问位近似 LRU；页面被访问时访问位置 1，扫描淘汰时遇到 1 则清 0 并给第二次机会。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "把访问位和修改位的含义混淆。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-009",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "hard",
+    "stem": "页框数 3，初始为空，访问串 1,2,3,2,4,1,5，采用 OPT。缺页次数为？",
+    "options": {
+      "A": "5",
+      "B": "4",
+      "C": "6",
+      "D": "7"
+    },
+    "answer": "A",
+    "explanation": "1,2,3 先缺页装入；访问2命中；访问4时，未来 3 不再用、1 在后面用、2 不再用，淘汰 3 或 2 均可，缺页；访问1命中；访问5缺页，共 5 次。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "OPT 看未来而不是过去；若多个页面未来都不再用，任选其一不影响缺页数。"
+  },
+  {
+    "question_id": "pq-os-page-replacement-010",
+    "concept_id": "operating-system.memory.page-replacement",
+    "difficulty": "hard",
+    "stem": "页框数 3，初始为空，访问串 1,2,3,4,2,1,5,2,4,5，采用 LRU。缺页次数为？",
+    "options": {
+      "A": "6",
+      "B": "7",
+      "C": "8",
+      "D": "9"
+    },
+    "answer": "B",
+    "explanation": "1,2,3 缺页；4 淘汰1；2 命中；1 淘汰3；5 淘汰4；2 命中；4 淘汰1；5 命中，共 7 次。",
+    "knowledge_points": [
+      "页面置换",
+      "FIFO/LRU/OPT/Clock",
+      "缺页率"
+    ],
+    "common_trap": "LRU 每次命中也要刷新最近使用顺序。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-001",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "basic",
+    "stem": "连续分配方式的主要优点是？",
+    "options": {
+      "A": "顺序访问和直接访问效率高",
+      "B": "完全没有外部碎片",
+      "C": "文件增长永远不需移动",
+      "D": "不需要记录起始块"
+    },
+    "answer": "A",
+    "explanation": "连续分配中文件占用连续磁盘块，定位简单，顺序和随机访问性能好，但有外部碎片和扩展困难。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "只看到连续分配性能好，忘记外部碎片。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-002",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "basic",
+    "stem": "链式分配方式相对连续分配的主要优点是？",
+    "options": {
+      "A": "随机访问第 n 块总是 O(1)",
+      "B": "便于文件动态增长，减少外部碎片问题",
+      "C": "不需要任何指针或 FAT",
+      "D": "磁盘块必须连续"
+    },
+    "answer": "B",
+    "explanation": "链式分配可把文件块分散存放，通过指针或 FAT 串联，便于扩展，不要求连续空间。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "误以为链式分配也能高效随机访问。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-003",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "basic",
+    "stem": "索引分配中，索引块主要保存什么？",
+    "options": {
+      "A": "CPU 寄存器现场",
+      "B": "文件所有字符内容",
+      "C": "文件各数据块的地址",
+      "D": "进程调度队列"
+    },
+    "answer": "C",
+    "explanation": "索引分配为每个文件建立索引块，索引项记录该文件各逻辑块对应的物理块号。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "把索引块当作数据块本身。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-004",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "medium",
+    "stem": "块大小 1KB，块号占 4B，一个单级索引块最多能索引多大的文件？",
+    "options": {
+      "A": "64KB",
+      "B": "128KB",
+      "C": "1MB",
+      "D": "256KB"
+    },
+    "answer": "D",
+    "explanation": "一个索引块可放 1024/4=256 个块号，每个块号指向 1KB 数据块，最大文件 256KB。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "只算索引项个数，忘记乘以数据块大小。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-005",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "medium",
+    "stem": "某文件采用连续分配，起始块号 100，文件第 8 个逻辑块（从 0 开始编号）的物理块号是？",
+    "options": {
+      "A": "108",
+      "B": "107",
+      "C": "800",
+      "D": "1008"
+    },
+    "answer": "A",
+    "explanation": "连续分配中物理块号=起始块号+逻辑块号=100+8=108。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "把逻辑块从 1 开始或乘以块大小。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-006",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "medium",
+    "stem": "FAT 文件系统用表保存链式关系。相对于每个数据块内保存下一块指针，FAT 的一个优点是？",
+    "options": {
+      "A": "完全不占用磁盘空间",
+      "B": "可在内存中查 FAT，减少遍历时的数据块读入",
+      "C": "使所有文件都必须连续",
+      "D": "消除目录项"
+    },
+    "answer": "B",
+    "explanation": "FAT 把链指针集中在文件分配表中，常驻内存或缓存后可更快跟踪链，且数据块不被指针占用。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "认为 FAT 不需要任何元数据空间。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-007",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "medium",
+    "stem": "Unix inode 中设置直接地址、一级间接、二级间接的主要目的是什么？",
+    "options": {
+      "A": "避免使用目录",
+      "B": "只支持连续分配",
+      "C": "兼顾小文件访问效率和大文件容量",
+      "D": "保证文件名长度固定为 8"
+    },
+    "answer": "C",
+    "explanation": "直接块让小文件少访问索引块，多级间接块扩展大文件可寻址范围。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "把 inode 的多级索引看成只为小文件服务。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-008",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "medium",
+    "stem": "位示图管理空闲磁盘块时，若每个磁盘块用 1 bit 表示，管理 8192 个磁盘块需要多少字节位示图？",
+    "options": {
+      "A": "512B",
+      "B": "65536B",
+      "C": "8192B",
+      "D": "1024B"
+    },
+    "answer": "D",
+    "explanation": "8192 bit = 8192/8 = 1024B。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "把 bit 和 byte 混淆。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-009",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "hard",
+    "stem": "块大小 4KB，块号 4B，inode 有 10 个直接地址、1 个一级间接地址、1 个二级间接地址。最大可表示数据大小约为？",
+    "options": {
+      "A": "约 4GB",
+      "B": "约 4MB",
+      "C": "约 4KB",
+      "D": "约 40KB"
+    },
+    "answer": "A",
+    "explanation": "每个索引块可放 4096/4=1024 个块号。可寻址数据块数=10+1024+1024^2，容量约为 1024^2*4KB=4GB，另加少量直接和一级间接块。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "漏算二级间接带来的平方级容量。"
+  },
+  {
+    "question_id": "pq-os-file-allocation-010",
+    "concept_id": "operating-system.file-system.allocation",
+    "difficulty": "hard",
+    "stem": "某文件采用链式分配且未使用 FAT。若要访问第 1000 个逻辑块，通常需要什么代价？",
+    "options": {
+      "A": "可直接由起始块号加 1000 得到",
+      "B": "必须从首块沿指针顺序查找，随机访问效率低",
+      "C": "只需读取 inode 的第 1000 个直接地址",
+      "D": "一定比索引分配更适合随机访问"
+    },
+    "answer": "B",
+    "explanation": "普通链式分配只知道首块，每块指向下一块；定位第 1000 块需沿链逐块追踪，随机访问差。",
+    "knowledge_points": [
+      "文件分配方式",
+      "连续/链式/索引分配",
+      "inode"
+    ],
+    "common_trap": "把连续分配的地址计算方式套到链式分配。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-001",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "basic",
+    "stem": "磁盘调度算法主要优化的指标通常是？",
+    "options": {
+      "A": "磁头移动距离或寻道时间",
+      "B": "页表项长度",
+      "C": "信号量初值",
+      "D": "进程地址空间大小"
+    },
+    "answer": "A",
+    "explanation": "磁盘调度通过安排请求访问顺序减少磁头移动，从而降低平均寻道时间。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "把 I/O 调度和内存管理指标混淆。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-002",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "basic",
+    "stem": "SSTF 磁盘调度每次选择什么请求？",
+    "options": {
+      "A": "最早到达的请求",
+      "B": "距离当前磁头位置最近的请求",
+      "C": "柱面号最大的请求",
+      "D": "永远向一个方向扫描到边界"
+    },
+    "answer": "B",
+    "explanation": "SSTF 是最短寻道时间优先，每次服务距离当前磁头最近的柱面请求。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "把 SSTF 与 FCFS 或 SCAN 混淆。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-003",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "basic",
+    "stem": "SCAN 算法常被称为电梯算法，是因为它？",
+    "options": {
+      "A": "随机选择请求服务",
+      "B": "完全按请求到达顺序服务",
+      "C": "沿一个方向服务请求，到端点后再反向",
+      "D": "只服务当前柱面请求"
+    },
+    "answer": "C",
+    "explanation": "SCAN 类似电梯沿一个方向移动并服务沿途请求，到达端点后改变方向。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "把 LOOK 与 SCAN 的端点规则混淆。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-004",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "medium",
+    "stem": "请求队列为 98,183,37,122,14,124,65,67，初始磁头 53，采用 FCFS。总磁头移动距离为？",
+    "options": {
+      "A": "236",
+      "B": "299",
+      "C": "331",
+      "D": "640"
+    },
+    "answer": "D",
+    "explanation": "按队列顺序移动：|98-53|45 +85 +146 +85 +108 +110 +59 +2 =640。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "按距离重排请求，变成 SSTF。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-005",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "medium",
+    "stem": "同一请求队列 98,183,37,122,14,124,65,67，初始磁头 53，采用 SSTF。总磁头移动距离为？",
+    "options": {
+      "A": "236",
+      "B": "299",
+      "C": "331",
+      "D": "640"
+    },
+    "answer": "A",
+    "explanation": "SSTF 顺序：53->65(12)->67(2)->37(30)->14(23)->98(84)->122(24)->124(2)->183(59)，合计 236。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "每一步都要基于当前位置重新选择最近请求。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-006",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "medium",
+    "stem": "磁道范围 0-199，请求队列 98,183,37,122,14,124,65,67，初始磁头 53。SCAN 当前方向向大号柱面，服务到 199 后反向，端点移动计入。总移动距离为？",
+    "options": {
+      "A": "236",
+      "B": "331",
+      "C": "299",
+      "D": "382"
+    },
+    "answer": "B",
+    "explanation": "向上服务 65,67,98,122,124,183，再到端点199，移动 199-53=146；反向服务 37,14，移动 199-14=185；合计 331。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "忘记 SCAN 要到磁盘端点再反向，或把 LOOK 当成 SCAN。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-007",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "medium",
+    "stem": "同一条件下采用 LOOK，当前方向向大号柱面，到该方向最后一个请求 183 后立即反向，不到端点。总移动距离为？",
+    "options": {
+      "A": "236",
+      "B": "331",
+      "C": "299",
+      "D": "382"
+    },
+    "answer": "C",
+    "explanation": "LOOK 向上到最大请求 183，移动 183-53=130；再反向到最小请求 14，移动 183-14=169；总计 299。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "把 LOOK 误算为必须移动到 199 的 SCAN。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-008",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "medium",
+    "stem": "磁道范围 0-199，同一请求队列和初始磁头 53。C-SCAN 当前方向向大号柱面，服务到 199 后直接回到 0，回跳移动计入，再继续向大号服务。总移动距离为？",
+    "options": {
+      "A": "299",
+      "B": "331",
+      "C": "640",
+      "D": "382"
+    },
+    "answer": "D",
+    "explanation": "从 53 向上到 199 移动 146；从 199 回到 0 移动 199；再从 0 服务 14、37，最终到 37 移动 37；总计 146+199+37=382。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "题目规定回跳计入，不能忽略 199->0 的移动。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-009",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "hard",
+    "stem": "请求队列 10,22,20,2,40,6,38，初始磁头 20，采用 SSTF；若当前位置已有请求 20，应先服务该请求。总磁头移动距离为？",
+    "options": {
+      "A": "60",
+      "B": "40",
+      "C": "58",
+      "D": "38"
+    },
+    "answer": "A",
+    "explanation": "先服务柱面20的请求，移动 0；之后最近为22(2)，再10(12)，6(4)，2(4)，38(36)，40(2)，总移动 0+2+12+4+4+36+2=60。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "当前位置请求的移动距离为 0，但仍要从服务后的当前位置继续选择最近。"
+  },
+  {
+    "question_id": "pq-os-disk-scheduling-010",
+    "concept_id": "operating-system.file-system.disk-scheduling",
+    "difficulty": "hard",
+    "stem": "磁道范围 0-99，请求 10,20,35,70,90，初始磁头 50。采用 C-LOOK，方向向大号柱面，服务到该方向最大请求后直接跳到最小请求，跳转移动计入。总移动距离为？",
+    "options": {
+      "A": "105",
+      "B": "145",
+      "C": "120",
+      "D": "180"
+    },
+    "answer": "B",
+    "explanation": "向上服务 70、90，移动 50->90 为 40；从 90 跳到最小请求 10，跳转计入 80；再向上服务 20、35，移动 25；总计 40+80+25=145。",
+    "knowledge_points": [
+      "磁盘调度",
+      "FCFS/SSTF/SCAN/LOOK",
+      "磁头移动距离"
+    ],
+    "common_trap": "C-LOOK 到最后一个请求后跳到另一端请求，不到磁盘物理端点。"
+  },
+  {
+    "question_id": "pq-os-io-methods-001",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "basic",
+    "stem": "程序查询 I/O 方式的主要缺点是？",
+    "options": {
+      "A": "CPU 需要不断轮询设备状态，浪费处理机时间",
+      "B": "完全不能访问外设",
+      "C": "必须使用页表",
+      "D": "只能用于虚拟内存"
+    },
+    "answer": "A",
+    "explanation": "程序查询方式由 CPU 反复检查设备状态，设备慢时 CPU 大量时间用于等待。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "把简单实现误认为没有 CPU 开销。"
+  },
+  {
+    "question_id": "pq-os-io-methods-002",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "basic",
+    "stem": "中断驱动 I/O 相对程序查询 I/O 的主要优点是？",
+    "options": {
+      "A": "不需要设备控制器",
+      "B": "CPU 不必持续轮询，可在设备完成时由中断通知",
+      "C": "所有数据都不经过内存",
+      "D": "一定比 DMA 更适合大块数据传输"
+    },
+    "answer": "B",
+    "explanation": "中断方式让 CPU 发出 I/O 命令后执行其他任务，设备就绪或完成时中断通知 CPU。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "认为中断方式不需要任何 CPU 参与。"
+  },
+  {
+    "question_id": "pq-os-io-methods-003",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "basic",
+    "stem": "DMA 方式最适合哪类场景？",
+    "options": {
+      "A": "键盘单字符输入",
+      "B": "进程状态转换判断",
+      "C": "磁盘到内存的大块数据传输",
+      "D": "银行家算法安全性检查"
+    },
+    "answer": "C",
+    "explanation": "DMA 由控制器直接在设备和内存之间传送数据，CPU 只在开始和结束时参与，适合大块高速 I/O。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "把 DMA 用于所有极小粒度 I/O，忽略建立 DMA 的固定开销。"
+  },
+  {
+    "question_id": "pq-os-io-methods-004",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "medium",
+    "stem": "DMA 传输过程中，CPU 通常需要提供给 DMA 控制器的信息不包括哪一项？",
+    "options": {
+      "A": "内存起始地址",
+      "B": "传输字节数",
+      "C": "传输方向或设备地址",
+      "D": "进程的所有未来页面访问串"
+    },
+    "answer": "D",
+    "explanation": "DMA 启动前需设置内存地址、计数、方向/设备等寄存器，不需要页面置换算法的未来访问串。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "混淆 DMA 控制参数和内存页面置换信息。"
+  },
+  {
+    "question_id": "pq-os-io-methods-005",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "medium",
+    "stem": "通道 I/O 方式相对 DMA 的进一步增强主要体现在？",
+    "options": {
+      "A": "通道可执行通道程序，组织更复杂的 I/O 操作",
+      "B": "通道完全取消主存",
+      "C": "通道只用于 CPU 算术运算",
+      "D": "通道使所有设备都变成临界资源"
+    },
+    "answer": "A",
+    "explanation": "通道是专门的 I/O 处理机，可执行通道程序，管理一组设备和更复杂的传输流程。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "把通道简单等同于一根数据线。"
+  },
+  {
+    "question_id": "pq-os-io-methods-006",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "medium",
+    "stem": "单缓冲区用于输入时，CPU 处理一块数据与设备读入下一块数据之间的关系通常是？",
+    "options": {
+      "A": "完全不能重叠",
+      "B": "可在一定程度上重叠，但受单缓冲区交替使用限制",
+      "C": "一定无限并行",
+      "D": "必须先完成全部输入再处理"
+    },
+    "answer": "B",
+    "explanation": "缓冲可使设备输入和 CPU 处理相邻数据块部分重叠；单缓冲区仍有交替等待限制。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "把有缓冲理解为任何阶段都可完全并行。"
+  },
+  {
+    "question_id": "pq-os-io-methods-007",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "medium",
+    "stem": "SPOOLing 技术的核心思想是？",
+    "options": {
+      "A": "删除输入输出队列",
+      "B": "让所有进程直接同时写打印机硬件端口",
+      "C": "用磁盘等高速共享设备模拟独占设备，提高设备利用率",
+      "D": "只用于页面置换"
+    },
+    "answer": "C",
+    "explanation": "SPOOLing 将作业输出先放入磁盘缓冲队列，由守护进程顺序送独占设备，如打印机，实现虚拟设备效果。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "误以为 SPOOLing 允许多个进程同时物理占用独占设备。"
+  },
+  {
+    "question_id": "pq-os-io-methods-008",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "medium",
+    "stem": "设备独立性的含义更接近哪一项？",
+    "options": {
+      "A": "一个设备只能被一个进程打开",
+      "B": "设备不需要驱动程序",
+      "C": "所有设备速度相同",
+      "D": "用户程序使用逻辑设备名，由系统映射到具体物理设备"
+    },
+    "answer": "D",
+    "explanation": "设备独立性使应用不依赖具体物理设备，操作系统完成逻辑设备到物理设备的映射和重定向。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "把设备独立性理解为设备无需管理。"
+  },
+  {
+    "question_id": "pq-os-io-methods-009",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "hard",
+    "stem": "一次磁盘 DMA 读 4KB 到内存。下列事件顺序最合理的是？",
+    "options": {
+      "A": "CPU 设置 DMA 参数并启动设备；DMA 传输；完成后中断 CPU",
+      "B": "DMA 每传 1 字节都中断 CPU；CPU 复制该字节",
+      "C": "CPU 忙等复制完整 4KB；DMA 只负责发中断",
+      "D": "用户进程直接控制磁头并修改内核页表"
+    },
+    "answer": "A",
+    "explanation": "DMA 的典型流程是 CPU 初始化控制器和设备，控制器直接传输数据，完成或出错后通过中断通知 CPU。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "把 DMA 和中断驱动逐字节传输混淆。"
+  },
+  {
+    "question_id": "pq-os-io-methods-010",
+    "concept_id": "operating-system.io.methods",
+    "difficulty": "hard",
+    "stem": "若设备速度远低于 CPU，且每次传输数据量很小但到达时间不可预测，通常比程序查询更合适的是？",
+    "options": {
+      "A": "一直关中断忙等",
+      "B": "中断驱动 I/O",
+      "C": "只使用连续文件分配",
+      "D": "银行家算法"
+    },
+    "answer": "B",
+    "explanation": "小量、不可预测的慢速 I/O 若轮询会浪费 CPU；中断驱动可让 CPU 处理其他任务，设备就绪时再响应。",
+    "knowledge_points": [
+      "I/O 控制方式",
+      "中断",
+      "DMA",
+      "缓冲与通道"
+    ],
+    "common_trap": "看到数据量小就认为必须程序查询，忽略不可预测等待造成的轮询浪费。"
+  }
+]

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from hashlib import sha256
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.db.database import session_scope
 from app.infrastructure.db.models import (
@@ -12,6 +14,7 @@ from app.infrastructure.db.models import (
     UserMemoryModel,
     UserModel,
     UserProfileModel,
+    WechatMiniIdentityModel,
 )
 from app.infrastructure.db.repositories._shared import (
     as_utc_datetime,
@@ -108,6 +111,114 @@ def create_auth_user_record(
         return record
 
 
+def get_or_create_wechat_mini_user_record(
+    *,
+    openid: str,
+    unionid: str = "",
+    password_hash: str,
+    display_name: str | None = None,
+) -> AuthUserView:
+    normalized_openid = openid.strip()
+    normalized_unionid = unionid.strip()
+    if not normalized_openid:
+        raise ValueError("微信 openid 不能为空")
+
+    existing = _get_wechat_mini_user_record(normalized_openid, normalized_unionid)
+    if existing:
+        return existing
+
+    try:
+        return _create_wechat_mini_user_record(
+            openid=normalized_openid,
+            unionid=normalized_unionid,
+            password_hash=password_hash,
+            display_name=display_name,
+        )
+    except IntegrityError:
+        existing = _get_wechat_mini_user_record(normalized_openid, normalized_unionid)
+        if existing:
+            return existing
+        raise ValueError("微信身份创建冲突，请重试")
+
+
+def _get_wechat_mini_user_record(openid: str, unionid: str = "") -> AuthUserView | None:
+    with session_scope() as session:
+        identity = session.scalar(
+            select(WechatMiniIdentityModel).where(
+                WechatMiniIdentityModel.openid == openid
+            )
+        )
+        if not identity:
+            return None
+
+        user = session.get(UserModel, identity.user_id)
+        if not user or user.status != "active":
+            raise ValueError("微信身份已绑定到不可用用户")
+        if unionid and identity.unionid != unionid:
+            identity.unionid = unionid
+        now = utcnow()
+        identity.last_login_at = now
+        identity.updated_at = now
+        profile = session.get(UserProfileModel, user.id)
+        session.flush()
+        record = serialize_user_record(user, profile)
+        if not record:
+            raise RuntimeError("微信用户序列化失败")
+        return record
+
+
+def _create_wechat_mini_user_record(
+    *,
+    openid: str,
+    unionid: str,
+    password_hash: str,
+    display_name: str | None = None,
+) -> AuthUserView:
+    user_id = str(uuid.uuid4())
+    identity_hash = sha256(openid.encode("utf-8")).hexdigest()[:24]
+    email = f"wx_{identity_hash}@wechat.local"
+    profile_name = (display_name or "").strip() or "微信学习者"
+    now = utcnow()
+
+    with session_scope() as session:
+        user = UserModel(
+            id=user_id,
+            email=email,
+            password_hash=password_hash,
+            status="active",
+        )
+        profile = UserProfileModel(
+            user_id=user_id,
+            display_name=profile_name[:120],
+            agent_style_name="",
+            agent_style_prompt="",
+            onboarding_completed=False,
+        )
+        memory = UserMemoryModel(
+            user_id=user_id,
+            weak_points=[],
+            error_count={},
+            recent_topics=[],
+            last_session="",
+        )
+        identity = WechatMiniIdentityModel(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            openid=openid,
+            unionid=unionid,
+            last_login_at=now,
+        )
+        session.add(user)
+        session.add(profile)
+        session.add(memory)
+        session.add(identity)
+        session.flush()
+        record = serialize_user_record(user, profile)
+        if not record:
+            raise RuntimeError("创建微信用户后序列化失败")
+        return record
+
+
 def touch_user_last_login(user_id: str) -> None:
     with session_scope() as session:
         row = session.get(UserModel, user_id)
@@ -163,6 +274,32 @@ def touch_refresh_token_last_used_record(token_jti: str) -> RefreshTokenRecord |
         if revoked_at is not None or (expires_at is not None and expires_at <= now):
             return None
         row.last_used_at = now
+        session.flush()
+        return serialize_refresh_token_record(row)
+
+
+def consume_refresh_token_record(
+    *,
+    token_jti: str,
+    token_hash: str,
+) -> RefreshTokenRecord | None:
+    with session_scope() as session:
+        row = session.scalar(
+            select(AuthRefreshTokenModel)
+            .where(AuthRefreshTokenModel.token_jti == token_jti)
+            .with_for_update()
+        )
+        if not row:
+            return None
+        now = utcnow()
+        expires_at = as_utc_datetime(row.expires_at)
+        revoked_at = as_utc_datetime(row.revoked_at)
+        if revoked_at is not None or (expires_at is not None and expires_at <= now):
+            return None
+        if row.token_hash != token_hash:
+            return None
+        row.last_used_at = now
+        row.revoked_at = now
         session.flush()
         return serialize_refresh_token_record(row)
 

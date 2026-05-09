@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.shared.markdown_cleaning import strip_markdown_artifacts, strip_markdown_list
 
 
 class AnswerSchema(BaseModel):
@@ -15,6 +17,57 @@ class AnswerSchema(BaseModel):
     mistakes: str = Field(default="", max_length=500)
     similar: list[str] = Field(default_factory=list, min_length=2, max_length=3)
     final_answer: str = Field(default="", max_length=1200)
+
+    @field_validator("topic", "thinking", "mistakes", "final_answer", mode="before")
+    @classmethod
+    def _coerce_text_field(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return strip_markdown_artifacts(value)
+        if isinstance(value, list):
+            return "；".join(strip_markdown_list([str(item) for item in value]))
+        if isinstance(value, dict):
+            return strip_markdown_artifacts("；".join(f"{key}: {item}" for key, item in value.items()))
+        return strip_markdown_artifacts(str(value))
+
+    @field_validator("steps", mode="before")
+    @classmethod
+    def _coerce_steps(cls, value: Any) -> list[str]:
+        return _coerce_string_list(value, fallback=["继续围绕这个问题拆解核心概念"])
+
+    @field_validator("similar", mode="before")
+    @classmethod
+    def _coerce_similar(cls, value: Any) -> list[str]:
+        items = _coerce_string_list(
+            value,
+            fallback=["继续追问这个主题", "结合你的笔记继续解释"],
+        )
+        while len(items) < 2:
+            items.append("结合你的笔记继续解释")
+        return items[:3]
+
+
+def _coerce_string_list(value: Any, *, fallback: list[str]) -> list[str]:
+    if value is None:
+        return list(fallback)
+    if isinstance(value, list):
+        items = strip_markdown_list([str(item) for item in value])
+        return items or list(fallback)
+    if isinstance(value, str):
+        stripped = strip_markdown_artifacts(value)
+        if not stripped:
+            return list(fallback)
+        separators = ("\n", "；", ";")
+        parts = [stripped]
+        for separator in separators:
+            if separator in stripped:
+                parts = [part.strip(" -\t") for part in stripped.split(separator)]
+                break
+        items = [part for part in parts if part]
+        return items or [stripped]
+    cleaned = strip_markdown_artifacts(str(value))
+    return [cleaned] if cleaned else list(fallback)
 
 
 @dataclass
@@ -83,3 +136,6 @@ class AgentExecutionResult:
     fallback_used: bool = False
     fallback_reason: str = ""
     model_attempts: list[dict[str, Any]] = field(default_factory=list)
+    streaming_mode: str = "node"
+    streaming_token_count: int = 0
+    streaming_degraded_reason: str = ""

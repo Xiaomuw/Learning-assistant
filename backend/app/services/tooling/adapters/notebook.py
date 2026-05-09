@@ -31,6 +31,8 @@ class NotebookRetrieveAdapter:
             or ""
         ).strip() or None
         user_id = str(request.input.get("user_id") or request.user_id or "").strip() or None
+        concept_id = str(request.input.get("concept_id") or request.runtime_context.get("concept_id") or "").strip() or None
+        topic_id = str(request.input.get("topic_id") or request.runtime_context.get("topic_id") or "").strip() or None
         top_k = _bounded_int(request.input.get("top_k"), default=5, low=1, high=10)
         min_score = _bounded_float(request.input.get("min_score"), default=0.65, low=0.0, high=1.0)
         try:
@@ -43,6 +45,8 @@ class NotebookRetrieveAdapter:
                 memory=_dict_or_empty(request.runtime_context.get("memory")),
                 short_term_messages=list(request.runtime_context.get("short_term_messages") or []),
                 session_memory=_dict_or_empty(request.runtime_context.get("session_memory")),
+                concept_id=concept_id,
+                topic_id=topic_id,
             )
             evidence = [
                 EvidenceChunk(
@@ -56,7 +60,7 @@ class NotebookRetrieveAdapter:
                         "contextual_query": result.contextual_query,
                     },
                     score=float(doc.score or 0.0),
-                    concepts=_concepts_from_query(query),
+                    concepts=_concepts_from_document(doc.metadata, query),
                 )
                 for index, doc in enumerate(result.docs, start=1)
             ]
@@ -118,3 +122,18 @@ def _concepts_from_query(query: str) -> list[ConceptRef]:
     if not topic:
         return []
     return [ConceptRef(concept_id=topic.lower().replace(" ", "-")[:64] or topic, name=topic, confidence=0.5, source="query")]
+
+
+def _concepts_from_document(metadata: dict[str, Any], query: str) -> list[ConceptRef]:
+    concept_id = str((metadata or {}).get("concept_id") or "").strip()
+    concept_name = str((metadata or {}).get("concept_name") or "").strip()
+    if concept_id:
+        return [
+            ConceptRef(
+                concept_id=concept_id,
+                name=concept_name or concept_id,
+                confidence=0.9,
+                source="kb_metadata",
+            )
+        ]
+    return _concepts_from_query(query)

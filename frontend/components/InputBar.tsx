@@ -1,13 +1,20 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { LoaderCircle, Paperclip, Send } from "lucide-react";
+import { BrainCircuit, LoaderCircle, Paperclip, Send } from "lucide-react";
 
 interface InputBarProps {
   onSend: (message: string) => void;
   onUpload?: (file: File) => Promise<void> | void;
   disabled?: boolean;
+  inputDisabled?: boolean;
+  sendDisabled?: boolean;
+  uploadDisabled?: boolean;
+  isSending?: boolean;
   isUploading?: boolean;
+  thinkingModeEnabled?: boolean;
+  thinkingModeDisabled?: boolean;
+  onThinkingModeChange?: (enabled: boolean) => void;
   placeholder?: string;
 }
 
@@ -15,12 +22,24 @@ export default function InputBar({
   onSend,
   onUpload,
   disabled = false,
+  inputDisabled,
+  sendDisabled,
+  uploadDisabled,
+  isSending = false,
   isUploading = false,
+  thinkingModeEnabled = false,
+  thinkingModeDisabled = false,
+  onThinkingModeChange,
   placeholder = "输入你的问题...",
 }: InputBarProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resolvedInputDisabled = inputDisabled ?? disabled;
+  const resolvedSendDisabled = sendDisabled ?? disabled;
+  const resolvedUploadDisabled = uploadDisabled ?? disabled;
+  const resolvedThinkingModeDisabled =
+    thinkingModeDisabled || disabled || !onThinkingModeChange;
 
   function resizeTextarea() {
     const element = textareaRef.current;
@@ -34,7 +53,7 @@ export default function InputBar({
 
   function handleSend() {
     const trimmed = value.trim();
-    if (!trimmed || disabled) {
+    if (!trimmed || resolvedSendDisabled) {
       return;
     }
 
@@ -71,7 +90,7 @@ export default function InputBar({
           type="button"
           aria-label="上传 PDF"
           onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || isUploading || !onUpload}
+          disabled={resolvedUploadDisabled || isUploading || !onUpload}
           className="neo-icon-button shrink-0 bg-neo-secondary"
         >
           {isUploading ? (
@@ -79,6 +98,20 @@ export default function InputBar({
           ) : (
             <Paperclip size={22} strokeWidth={2.8} />
           )}
+        </button>
+
+        <button
+          type="button"
+          aria-label={thinkingModeEnabled ? "关闭思考模式" : "开启思考模式"}
+          aria-pressed={thinkingModeEnabled}
+          title={thinkingModeEnabled ? "关闭思考模式" : "开启思考模式"}
+          onClick={() => onThinkingModeChange?.(!thinkingModeEnabled)}
+          disabled={resolvedThinkingModeDisabled}
+          className={`neo-icon-button shrink-0 ${
+            thinkingModeEnabled ? "bg-neo-muted" : "bg-white"
+          }`}
+        >
+          <BrainCircuit size={22} strokeWidth={2.8} />
         </button>
 
         <textarea
@@ -95,19 +128,23 @@ export default function InputBar({
             }
           }}
           placeholder={placeholder}
-          disabled={disabled}
+          disabled={resolvedInputDisabled}
           rows={1}
           className="neo-input min-h-[56px] max-h-40 resize-none leading-snug"
         />
 
         <button
           type="button"
-          aria-label="发送消息"
+          aria-label={isSending ? "正在回答中，暂不能发送" : "发送消息"}
           onClick={handleSend}
-          disabled={!value.trim() || disabled}
+          disabled={!value.trim() || resolvedSendDisabled}
           className="neo-icon-button shrink-0 bg-neo-accent"
         >
-          <Send size={22} strokeWidth={2.8} />
+          {isSending ? (
+            <LoaderCircle size={22} strokeWidth={2.8} className="animate-spin" />
+          ) : (
+            <Send size={22} strokeWidth={2.8} />
+          )}
         </button>
       </div>
 

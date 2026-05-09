@@ -311,6 +311,7 @@ def _runtime_state(
         "question": request.question,
         "question_type": request.question_type,
         "model_name": request.model_name,
+        "thinking_mode": bool(request.runtime_context.get("thinking_mode", False)),
         "memory": dict(request.memory),
         "short_term_messages": list(request.short_term_messages),
         "short_term_context": request.short_term_context,
@@ -372,6 +373,9 @@ def _contract_result_from_runtime_result(
             "fallback_used": result.fallback_used,
             "fallback_reason": result.fallback_reason,
             "model_attempts": list(result.model_attempts),
+            "streaming_mode": result.streaming_mode,
+            "streaming_token_count": result.streaming_token_count,
+            "streaming_degraded_reason": result.streaming_degraded_reason,
             "learner_context_summary_present": bool(result.learner_context_summary),
         }
     return QARuntimeContractResult(
@@ -394,6 +398,11 @@ def _final_response_from_runtime_result(
     evidence_gate: dict[str, Any],
 ) -> FinalResponse:
     answer_text = _answer_text(result)
+    explanation_payload = (
+        result.answer.model_dump(exclude={"final_answer"})
+        if result.answer is not None
+        else {}
+    )
 
     concepts = _concepts_from_question(question=question, question_type=question_type)
     if result.answer is not None and result.answer.topic:
@@ -427,6 +436,7 @@ def _final_response_from_runtime_result(
             "tool_decision_rounds_count": len(result.tool_decision_rounds),
             "retrieved_docs_count": len(result.retrieved_docs),
             "reasoning_summary": result.reasoning_summary,
+            "explanation": explanation_payload,
             "learner_context_summary_present": bool(result.learner_context_summary),
             "selected_model_profile": result.selected_model_profile,
             "primary_model_id": result.primary_model_id,
@@ -434,6 +444,9 @@ def _final_response_from_runtime_result(
             "fallback_used": result.fallback_used,
             "fallback_reason": result.fallback_reason,
             "model_attempts": list(result.model_attempts),
+            "streaming_mode": result.streaming_mode,
+            "streaming_token_count": result.streaming_token_count,
+            "streaming_degraded_reason": result.streaming_degraded_reason,
         },
     )
 

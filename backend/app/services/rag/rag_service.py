@@ -12,10 +12,12 @@ from app.services.rag.retriever import (
     retrieve,
 )
 from app.services.rag.vector_store import (
+    IngestWriteSummary,
     count_collection_documents,
     delete_collection,
     get_collection_document_status,
     upsert_documents,
+    upsert_documents_with_summary,
 )
 from app.shared.schemas.contracts import NotebookKnowledgeStatus, RetrievalDiagnostics, RetrievedDocument
 
@@ -51,6 +53,25 @@ def index_documents(
     )
 
 
+def index_documents_with_summary(
+    *,
+    subject_id: str,
+    user_id: str | None = None,
+    documents: list[RagSourceDocument] | None = None,
+    texts: list[str] | None = None,
+    metadatas: list[dict[str, Any]] | None = None,
+) -> IngestWriteSummary:
+    if documents is not None:
+        texts = [document.content for document in documents]
+        metadatas = [document.metadata for document in documents]
+    return upsert_documents_with_summary(
+        texts=list(texts or []),
+        metadatas=metadatas,
+        subject_id=subject_id,
+        user_id=user_id,
+    )
+
+
 def retrieve_context(
     *,
     question: str,
@@ -62,6 +83,9 @@ def retrieve_context(
     top_k: int = 5,
     min_score: float = DEFAULT_RELEVANCE_THRESHOLD,
     doc_types: list[str] | None = None,
+    metadata_filter: dict[str, Any] | None = None,
+    concept_id: str | None = None,
+    topic_id: str | None = None,
 ) -> RagContextResult:
     contextual_query = get_retrieval_contextual_query(
         question,
@@ -69,12 +93,18 @@ def retrieve_context(
         session_memory or {},
         memory or {},
     )
+    effective_metadata_filter = dict(metadata_filter or {})
+    if concept_id:
+        effective_metadata_filter["concept_id"] = concept_id
+    if topic_id:
+        effective_metadata_filter["topic_id"] = topic_id
     raw_docs = retrieve(
         query=contextual_query,
         top_k=top_k,
         subject_id=subject_id,
         user_id=user_id,
         doc_types=doc_types,
+        metadata_filter=effective_metadata_filter or None,
     )
     filtered_docs, relevance = filter_relevant_documents(
         query=contextual_query,
@@ -84,9 +114,12 @@ def retrieve_context(
     diagnosis = diagnose_retrieval(
         query=contextual_query,
         docs=filtered_docs,
+        raw_docs=raw_docs,
         subject_id=subject_id,
         user_id=user_id,
         min_ready_score=min_score,
+        filter_reason=str(relevance.get("reason") or ""),
+        filters=effective_metadata_filter,
     )
     return RagContextResult(
         raw_docs=raw_docs,

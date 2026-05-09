@@ -207,6 +207,33 @@ class ModelConfigApiTest(unittest.TestCase):
         self.assertFalse(payload["model_switching_enabled"])
         self.assertEqual(mock_validate.call_args.args[0], "llama3.3-70b-instruct")
 
+    def test_langsmith_health_returns_redacted_observability_status(self) -> None:
+        with patch(
+            "app.interfaces.api.model_config.get_langsmith_health_status",
+            return_value={
+                "status": "client_ready",
+                "enabled": True,
+                "project": "Learning- Assistant 学习助理",
+                "endpoint": "https://api.smith.langchain.com",
+                "has_api_key": True,
+                "sdk_available": True,
+                "client_ready": True,
+                "langchain_tracing_v2": True,
+                "langchain_project": "Learning- Assistant 学习助理",
+                "langchain_endpoint": "https://api.smith.langchain.com",
+                "host": "api.smith.langchain.com",
+            },
+        ):
+            response = self.client.get("/api/settings/observability/langsmith/health")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["project"], "Learning- Assistant 学习助理")
+        self.assertTrue(payload["client_ready"])
+        self.assertTrue(payload["has_api_key"])
+        self.assertNotIn("LANGSMITH_API_KEY", str(payload))
+        self.assertNotIn("test-key", str(payload))
+
     def test_get_model_config_falls_back_when_current_model_is_not_available(self) -> None:
         with patch(
             "app.interfaces.api.model_config.build_model_config_response",
@@ -279,20 +306,20 @@ class ModelConfigApiTest(unittest.TestCase):
             ["openai-gpt-oss-20b", "kimi-k2.5"],
         )
 
-    def test_model_switching_lists_gpt41_and_claude_fallback(self) -> None:
+    def test_model_switching_lists_deepseek_v4_models(self) -> None:
         with (
             patch.dict(
                 os.environ,
                 {
                     "MODEL_SWITCHING_ENABLED": "true",
-                    "OPENAI_MODEL": "openai-gpt-4.1",
-                    "FALLBACK_CHAT_MODEL": "anthropic-claude-3-haiku-20240306",
+                    "OPENAI_MODEL": "deepseek-v4-pro",
+                    "FALLBACK_CHAT_MODEL": "deepseek-v4-flash",
                 },
                 clear=False,
             ),
             patch(
                 "app.application.model_config.service.ensure_available_active_chat_model",
-                return_value="openai-gpt-4.1",
+                return_value="deepseek-v4-pro",
             ),
         ):
             response = self.client.get("/api/settings/model")
@@ -301,15 +328,15 @@ class ModelConfigApiTest(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["model_switching_enabled"])
         self.assertEqual(payload["model_switching_status"], "available")
-        self.assertEqual([item["id"] for item in payload["available_models"]], ["openai-gpt-4.1", "anthropic-claude-3-haiku-20240306"])
+        self.assertEqual([item["id"] for item in payload["available_models"]], ["deepseek-v4-pro", "deepseek-v4-flash"])
 
-    def test_update_model_config_accepts_glm47_when_verified(self) -> None:
+    def test_update_model_config_accepts_deepseek_flash_when_verified(self) -> None:
         with (
             patch.dict(
                 os.environ,
                 {
                     "MODEL_SWITCHING_ENABLED": "true",
-                    "FALLBACK_CHAT_MODEL": "anthropic-claude-3-haiku-20240306",
+                    "FALLBACK_CHAT_MODEL": "deepseek-v4-flash",
                 },
                 clear=False,
             ),
@@ -317,15 +344,15 @@ class ModelConfigApiTest(unittest.TestCase):
             patch("app.application.model_config.service.set_app_setting_record"),
             patch(
                 "app.application.model_config.service.ensure_available_active_chat_model",
-                return_value="anthropic-claude-3-haiku-20240306",
+                return_value="deepseek-v4-flash",
             ),
         ):
-            response = self.client.put("/api/settings/model", json={"chat_model": "anthropic-claude-3-haiku-20240306"})
+            response = self.client.put("/api/settings/model", json={"chat_model": "deepseek-v4-flash"})
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["current_model"], "anthropic-claude-3-haiku-20240306")
-        self.assertEqual([item["id"] for item in payload["available_models"]], ["openai-gpt-4.1", "anthropic-claude-3-haiku-20240306"])
+        self.assertEqual(payload["current_model"], "deepseek-v4-flash")
+        self.assertEqual([item["id"] for item in payload["available_models"]], ["deepseek-v4-pro", "deepseek-v4-flash"])
 
 
 if __name__ == "__main__":

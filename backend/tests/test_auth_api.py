@@ -279,6 +279,150 @@ class AuthApiTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
+    def test_wechat_mini_login_bearer_auth_and_refresh(self) -> None:
+        with patch(
+            "app.application.auth.service._exchange_wechat_mini_code",
+            return_value={"openid": "openid-001", "unionid": "unionid-001"},
+        ) as mocked_exchange:
+            login_response = self.client.post(
+                "/api/auth/wechat-mini/login",
+                json={"code": "wx-code-001", "display_name": "微信学习者"},
+            )
+
+        self.assertEqual(login_response.status_code, 200)
+        self.assertTrue(mocked_exchange.called)
+        payload = login_response.json()
+        self.assertEqual(payload["user"]["display_name"], "微信学习者")
+        self.assertTrue(payload["access_token"])
+        self.assertTrue(payload["refresh_token"])
+
+        bearer_me = self.client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {payload['access_token']}"},
+        )
+        self.assertEqual(bearer_me.status_code, 200)
+        self.assertEqual(bearer_me.json()["user"]["id"], payload["user"]["id"])
+
+        refresh_response = self.client.post(
+            "/api/auth/wechat-mini/refresh",
+            json={"refresh_token": payload["refresh_token"]},
+        )
+        self.assertEqual(refresh_response.status_code, 200)
+        refreshed_payload = refresh_response.json()
+        self.assertEqual(refreshed_payload["user"]["id"], payload["user"]["id"])
+        self.assertTrue(refreshed_payload["access_token"])
+        self.assertTrue(refreshed_payload["refresh_token"])
+
+        replay_response = self.client.post(
+            "/api/auth/wechat-mini/refresh",
+            json={"refresh_token": payload["refresh_token"]},
+        )
+        self.assertEqual(replay_response.status_code, 200)
+        replay_payload = replay_response.json()
+        self.assertEqual(replay_payload["user"]["id"], payload["user"]["id"])
+        self.assertEqual(replay_payload["refresh_token"], refreshed_payload["refresh_token"])
+
+        replay_exhausted_response = self.client.post(
+            "/api/auth/wechat-mini/refresh",
+            json={"refresh_token": payload["refresh_token"]},
+        )
+        self.assertEqual(replay_exhausted_response.status_code, 401)
+
+        logout_response = self.client.post(
+            "/api/auth/wechat-mini/logout",
+            json={"refresh_token": refreshed_payload["refresh_token"]},
+        )
+        self.assertEqual(logout_response.status_code, 200)
+        refresh_after_logout = self.client.post(
+            "/api/auth/wechat-mini/refresh",
+            json={"refresh_token": refreshed_payload["refresh_token"]},
+        )
+        self.assertEqual(refresh_after_logout.status_code, 401)
+
+    def test_wechat_mini_login_reuses_existing_openid_identity(self) -> None:
+        with patch(
+            "app.application.auth.service._exchange_wechat_mini_code",
+            return_value={"openid": "openid-repeat", "unionid": "unionid-repeat"},
+        ):
+            first_response = self.client.post(
+                "/api/auth/wechat-mini/login",
+                json={"code": "wx-code-first", "display_name": "首次微信用户"},
+            )
+            second_response = self.client.post(
+                "/api/auth/wechat-mini/login",
+                json={"code": "wx-code-second", "display_name": "不会覆盖名字"},
+            )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            first_response.json()["user"]["id"],
+            second_response.json()["user"]["id"],
+        )
+        self.assertEqual(second_response.json()["user"]["display_name"], "首次微信用户")
+
+    def test_bearer_token_takes_precedence_over_cookie(self) -> None:
+        _, code = self._send_code("cookie-user@example.com")
+        register_response = self.client.post(
+            "/api/auth/register/complete",
+            json={
+                "email": "cookie-user@example.com",
+                "code": code,
+                "password": "password123",
+            },
+        )
+        self.assertEqual(register_response.status_code, 201)
+
+        invalid_bearer_response = self.client.get(
+            "/api/auth/me",
+            headers={"Authorization": "Bearer invalid-token"},
+        )
+        self.assertEqual(invalid_bearer_response.status_code, 401)
+
+    def test_wechat_mini_login_missing_config_returns_stable_reason(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "WECHAT_MINI_APP_ID": "",
+                "WECHAT_MINI_APP_SECRET": "",
+            },
+        ):
+            response = self.client.post(
+                "/api/auth/wechat-mini/login",
+                json={"code": "wx-code-no-config"},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"]["reason"], "missing_config")
+
+    def test_wechat_mini_login_maps_code2session_errors(self) -> None:
+        service_module = importlib.import_module("app.application.auth.service")
+
+        cases = [
+            (40029, 401, "invalid_code"),
+            (40163, 401, "code_used"),
+            (45011, 429, "rate_limited"),
+            (-1, 503, "wechat_unavailable"),
+            (40226, 401, "risk_blocked"),
+        ]
+
+        for errcode, expected_status, expected_reason in cases:
+            with self.subTest(errcode=errcode):
+                with patch.object(
+                    service_module,
+                    "_exchange_wechat_mini_code",
+                    side_effect=lambda _code, errcode=errcode: service_module._raise_wechat_code_error(
+                        {"errcode": errcode, "errmsg": "mocked"}
+                    ),
+                ):
+                    response = self.client.post(
+                        "/api/auth/wechat-mini/login",
+                        json={"code": f"wx-code-{errcode}"},
+                    )
+
+                self.assertEqual(response.status_code, expected_status)
+                self.assertEqual(response.json()["detail"]["reason"], expected_reason)
+
 
 if __name__ == "__main__":
     unittest.main()

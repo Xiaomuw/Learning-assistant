@@ -25,6 +25,7 @@ from app.domains.qa.prompts import (
     build_tool_system_message,
     format_user_style_instruction as format_qa_user_style_instruction,
 )
+from app.domains.qa import runtime as qa_runtime_module
 from app.domains.qa.runtime import QARuntimeAgent
 from app.domains.qa.tracing import build_qa_trace_outputs
 from app.domains.practice.common import format_user_style_instruction as format_practice_user_style_instruction
@@ -82,6 +83,47 @@ class QARuntimeTest(unittest.TestCase):
         self.assertTrue(outputs["fallback_used"])
         self.assertEqual(outputs["primary_model_id"], "llama3.3-70b-instruct")
         self.assertEqual(outputs["fallback_model_id"], "qwen3-coder-flash")
+        self.assertEqual(outputs["final_answer"], "HTTP 缓存可以复用响应。")
+        self.assertEqual(outputs["reasoning_visibility"], "safe_summary_only")
+        self.assertEqual(len(outputs["retrieved_doc_previews"]), 1)
+        self.assertEqual(len(outputs["tool_decision_rounds"]), 2)
+
+    def test_answer_schema_tolerates_common_manual_json_type_drift(self) -> None:
+        answer = AnswerSchema.model_validate(
+            {
+                "topic": "### HTTP",
+                "thinking": "**先从请求响应模型理解。**",
+                "steps": "- 客户端发起请求；- 服务器返回响应",
+                "mistakes": ["**不要把 HTTP 当作传输层协议**"],
+                "similar": "**HTTPS 与 HTTP 的区别**",
+                "final_answer": "### HTTP 是应用层协议。",
+            }
+        )
+
+        self.assertEqual(answer.topic, "HTTP")
+        self.assertEqual(answer.thinking, "先从请求响应模型理解。")
+        self.assertEqual(answer.mistakes, "不要把 HTTP 当作传输层协议")
+        self.assertEqual(answer.steps, ["客户端发起请求", "服务器返回响应"])
+        self.assertEqual(answer.similar[0], "HTTPS 与 HTTP 的区别")
+        self.assertGreaterEqual(len(answer.similar), 2)
+        self.assertEqual(answer.final_answer, "HTTP 是应用层协议。")
+
+    def test_explanation_output_trims_manual_json_related_topics(self) -> None:
+        explanation = ExplanationOutput.model_validate(
+            {
+                "topic": "### HTTP",
+                "thinking": "**先区分应用层和传输层。**",
+                "steps": ["- HTTP 是应用层协议"],
+                "mistakes": ["不要把 HTTP 当作传输层协议"],
+                "similar": ["HTTPS", "状态码", "请求响应模型", "TCP/IP 协议栈"],
+            }
+        )
+
+        self.assertEqual(explanation.topic, "HTTP")
+        self.assertEqual(explanation.thinking, "先区分应用层和传输层。")
+        self.assertEqual(explanation.steps, ["HTTP 是应用层协议"])
+        self.assertEqual(explanation.mistakes, "不要把 HTTP 当作传输层协议")
+        self.assertEqual(explanation.similar, ["HTTPS", "状态码", "请求响应模型"])
 
     def test_digital_ocean_endpoint_disables_native_tool_and_structured_by_default(self) -> None:
         with patch.dict(
@@ -186,6 +228,35 @@ class QARuntimeTest(unittest.TestCase):
         )
         self.assertEqual(select_execution_mode(precomputed_rag_request, profile), "tool_calling")
 
+        deepseek_profile = ModelProfile(
+            model_id="deepseek-v4-pro",
+            provider="DeepSeek",
+            family="V4",
+            supports_tool_calling=True,
+            supports_structured_output=False,
+            context_window=1_000_000,
+            supported_modalities=("text",),
+            max_output_tokens=384_000,
+        )
+        deepseek_request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="general",
+            subject_name="通用知识",
+            subject_description="",
+            question="帮我深入解释 HTTP 缓存",
+            question_type="concept",
+            runtime_context={
+                "route": "agent",
+                "guard": {"allow_tools": True, "allow_search": True},
+                "thinking_mode": False,
+            },
+        )
+        self.assertEqual(
+            select_execution_mode(deepseek_request, deepseek_profile),
+            "deterministic_context",
+        )
+
     def test_user_style_is_silenced_in_prompt_helpers_and_long_term_context(self) -> None:
         qa_instruction = format_qa_user_style_instruction("严格导师", "先批评再回答")
         practice_instruction = format_practice_user_style_instruction("严格导师", "先批评再回答")
@@ -264,6 +335,20 @@ class QARuntimeTest(unittest.TestCase):
         self.assertNotIn("web_search", tool_names)
         self.assertNotIn("tavily_web_search", tool_names)
         self.assertNotIn("search_notebook_context", tool_names)
+
+    def test_stream_delta_filters_reasoning_content_blocks(self) -> None:
+        chunk = type(
+            "_Chunk",
+            (),
+            {
+                "content": [
+                    {"type": "reasoning_content", "text": "hidden chain of thought"},
+                    {"type": "text", "text": "最终回答"},
+                ]
+            },
+        )()
+
+        self.assertEqual(qa_runtime_module._stream_delta_to_text(chunk), "最终回答")
 
     def test_invoke_with_schema_parses_plain_json_fallback(self) -> None:
         from langchain_core.messages import AIMessage
@@ -667,9 +752,10 @@ class QARuntimeTest(unittest.TestCase):
 
         self.assertEqual(result.model_unavailable_reason, "unauthorized_model")
         self.assertIn("HTTP", result.final_answer)
-        self.assertIn("请求", result.final_answer)
-        self.assertIn("易错点", result.final_answer)
-        self.assertIn("结合你的学习记录", result.final_answer)
+        self.assertIsNotNone(result.answer)
+        self.assertIn("请求", " ".join(result.answer.steps) if result.answer else "")
+        self.assertIn("传输层", result.answer.mistakes if result.answer else "")
+        self.assertIn("应用层", result.answer.thinking if result.answer else "")
         self.assertNotIn("401", result.final_answer)
         self.assertNotIn("模型不可用", result.final_answer)
 

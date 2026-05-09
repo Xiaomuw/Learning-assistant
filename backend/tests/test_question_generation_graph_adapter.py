@@ -913,6 +913,42 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertEqual(len(set(stems)), 2)
         self.assertFalse(any("选择 A" in hint or "正确答案是" in hint for hint in hints))
 
+    def test_computer_network_subject_generates_distinct_aligned_questions(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-network-subject-distinct",
+                "user_id": "u1",
+                "user_message": "再出2道计算机网络题",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "计算机网络",
+                    "requested_topic": "计算机网络",
+                    "active_topic": "计算机网络",
+                    "subject_id": "computer-network",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 2,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        stems = [item["stem"] for item in question_repo.created]
+        saved_payload = json.dumps(question_repo.created, ensure_ascii=False)
+        self.assertTrue(report.passed)
+        self.assertEqual(len(stems), 2)
+        self.assertEqual(len(set(stems)), 2)
+        self.assertIn("HTTP", saved_payload)
+        self.assertIn("DNS", saved_payload)
+
     def test_empty_generation_repairs_with_deterministic_fallback(self) -> None:
         question_repo = MockQuestionItemRepository()
         event_repo = MockLearningEventRepository()

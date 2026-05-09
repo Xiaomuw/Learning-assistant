@@ -1,0 +1,151 @@
+subject_id: data-structure
+subject_name: 数据结构与算法
+chapters:
+  - chapter_id: data-structure.linear-structures
+    chapter_name: 线性结构
+    topics:
+      - topic_id: data-structure.linear-list
+        topic_name: 线性表
+        concepts:
+          - concept_id: data-structure.linear-list.definition-storage
+            concept_name: 线性表
+            aliases: [线性表, 顺序表, 单链表, 双链表, 静态链表, 数组和链表, 顺序存储, 链式存储]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [concept, comparison, complexity, coding]
+          - concept_id: data-structure.linear-list.array-linked-list
+            concept_name: 顺序表与链表
+            aliases: [顺序表与链表, 数组与链表, 随机访问, 插入删除, 链表插入, 链表删除]
+            prerequisites: [data-structure.linear-list.definition-storage]
+            importance: high
+            exam_frequency: high
+            question_types: [comparison, complexity, scenario]
+      - topic_id: data-structure.stack-queue
+        topic_name: 栈和队列
+        concepts:
+          - concept_id: data-structure.stack-queue.stack
+            concept_name: 栈
+            aliases: [栈, stack, 后进先出, LIFO, 入栈, 出栈, 递归调用栈, 括号匹配]
+            prerequisites: [data-structure.linear-list.definition-storage]
+            importance: high
+            exam_frequency: high
+            question_types: [concept, simulation, coding]
+          - concept_id: data-structure.stack-queue.queue
+            concept_name: 队列
+            aliases: [队列, queue, 先进先出, FIFO, 循环队列, front, rear, 层序遍历]
+            prerequisites: [data-structure.linear-list.definition-storage]
+            importance: high
+            exam_frequency: high
+            question_types: [concept, simulation, coding]
+  - chapter_id: data-structure.tree
+    chapter_name: 树与二叉树
+    topics:
+      - topic_id: data-structure.binary-tree
+        topic_name: 二叉树
+        concepts:
+          - concept_id: data-structure.binary-tree.traversal
+            concept_name: 二叉树遍历
+            aliases: [二叉树遍历, 前序遍历, 中序遍历, 后序遍历, 层序遍历, 先序遍历, 遍历序列, 还原二叉树]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [traversal, reconstruction, simulation]
+          - concept_id: data-structure.binary-tree.threaded-tree
+            concept_name: 线索二叉树
+            aliases: [线索二叉树, 线索化, 前驱后继, 中序线索]
+            prerequisites: [data-structure.binary-tree.traversal]
+            importance: medium
+            exam_frequency: medium
+            question_types: [concept, traversal]
+  - chapter_id: data-structure.graph
+    chapter_name: 图
+    topics:
+      - topic_id: data-structure.graph.representation-search
+        topic_name: 图的表示与搜索
+        concepts:
+          - concept_id: data-structure.graph.representation
+            concept_name: 图的存储结构
+            aliases: [图的存储, 邻接矩阵, 邻接表, 十字链表, 邻接多重表, 空间复杂度]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [comparison, complexity]
+          - concept_id: data-structure.graph.dfs-bfs
+            concept_name: DFS 与 BFS
+            aliases: [DFS, BFS, 深度优先搜索, 广度优先搜索, 图搜索, 连通性, 无权图最短路径]
+            prerequisites: [data-structure.graph.representation]
+            importance: high
+            exam_frequency: high
+            question_types: [algorithm, simulation, coding]
+      - topic_id: data-structure.graph.shortest-path
+        topic_name: 最短路径与拓扑排序
+        concepts:
+          - concept_id: data-structure.graph.dijkstra-floyd
+            concept_name: 最短路径算法
+            aliases: [Dijkstra, Floyd, 最短路径, 单源最短路径, 多源最短路径, 负权边]
+            prerequisites: [data-structure.graph.representation]
+            importance: high
+            exam_frequency: high
+            question_types: [algorithm, simulation]
+          - concept_id: data-structure.graph.topological-sort
+            concept_name: 拓扑排序
+            aliases: [拓扑排序, AOV 网, DAG, 有向无环图, 入度]
+            prerequisites: [data-structure.graph.dfs-bfs]
+            importance: medium
+            exam_frequency: medium
+            question_types: [algorithm, simulation]
+  - chapter_id: data-structure.search-sort-algorithm
+    chapter_name: 查找、排序与算法设计
+    topics:
+      - topic_id: data-structure.search
+        topic_name: 查找
+        concepts:
+          - concept_id: data-structure.search.hash-table
+            concept_name: 哈希表
+            aliases: [哈希表, 散列表, HashMap, hash table, 哈希冲突, 拉链法, 开放寻址, 平均查找长度]
+            prerequisites: [data-structure.linear-list.definition-storage]
+            importance: high
+            exam_frequency: high
+            question_types: [concept, calculation, collision]
+          - concept_id: data-structure.search.binary-search-tree
+            concept_name: 二叉排序树
+            aliases: [二叉排序树, 二叉搜索树, BST, 平衡二叉树, AVL, 查找树]
+            prerequisites: [data-structure.binary-tree.traversal]
+            importance: medium
+            exam_frequency: medium
+            question_types: [concept, insertion, traversal]
+      - topic_id: data-structure.sort
+        topic_name: 排序
+        concepts:
+          - concept_id: data-structure.sort.complexity-stability
+            concept_name: 排序复杂度与稳定性
+            aliases: [排序算法, 排序稳定性, 稳定排序, 原地排序, 时间复杂度, 空间复杂度]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [comparison, complexity]
+          - concept_id: data-structure.sort.quick-merge-heap
+            concept_name: 快速排序、归并排序与堆排序
+            aliases: [快速排序, quicksort, 归并排序, mergesort, 堆排序, heapsort, 分治, 大根堆, 小根堆]
+            prerequisites: [data-structure.sort.complexity-stability]
+            importance: high
+            exam_frequency: high
+            question_types: [algorithm, complexity, simulation]
+      - topic_id: data-structure.algorithm-design
+        topic_name: 算法设计
+        concepts:
+          - concept_id: data-structure.algorithm-design.dynamic-programming
+            concept_name: 动态规划
+            aliases: [动态规划, DP, 状态转移, 最优子结构, 重叠子问题, 背包问题]
+            prerequisites: []
+            importance: high
+            exam_frequency: medium
+            question_types: [algorithm, coding, proof]
+          - concept_id: data-structure.algorithm-design.greedy-recursion
+            concept_name: 贪心、递归与分治
+            aliases: [贪心, greedy, 递归, recursion, 分治, divide and conquer, 回溯]
+            prerequisites: []
+            importance: medium
+            exam_frequency: medium
+            question_types: [algorithm, coding, proof]

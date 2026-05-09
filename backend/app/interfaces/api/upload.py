@@ -18,12 +18,19 @@ from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
 router = APIRouter()
 
 
+def _payload_int(payload: dict, key: str, default: int = 0) -> int:
+    value = payload[key] if key in payload and payload[key] is not None else default
+    return int(value)
+
+
 # ---------- 响应模型 ----------
 class UploadResponse(BaseModel):
     """上传响应"""
     filename: str
     total_pages: int
     total_chunks: int
+    mapped_chunks: int = 0
+    unmapped_chunks: int = 0
     subject_id: str
     message: str
 
@@ -50,8 +57,10 @@ async def upload_pdf(
     payload = result.model_dump()
     return UploadResponse(
         filename=payload["filename"],
-        total_pages=payload["total_pages"],
-        total_chunks=payload["total_chunks"],
+        total_pages=_payload_int(payload, "total_pages"),
+        total_chunks=_payload_int(payload, "total_chunks"),
+        mapped_chunks=_payload_int(payload, "mapped_chunks", _payload_int(payload, "total_chunks")),
+        unmapped_chunks=_payload_int(payload, "unmapped_chunks"),
         subject_id=payload["subject_id"],
         message=payload["message"],
     )
@@ -66,6 +75,8 @@ class UrlIngestResponse(BaseModel):
     total_urls: int
     successful_urls: int
     total_chunks: int
+    mapped_chunks: int = 0
+    unmapped_chunks: int = 0
     subject_id: str
     message: str
 
@@ -88,8 +99,10 @@ async def ingest_urls(
     payload = result.model_dump()
     return UrlIngestResponse(
         total_urls=payload["total_urls"],
-        successful_urls=payload["successful_urls"],
-        total_chunks=payload["total_chunks"],
+        successful_urls=_payload_int(payload, "successful_urls"),
+        total_chunks=_payload_int(payload, "total_chunks"),
+        mapped_chunks=_payload_int(payload, "mapped_chunks", _payload_int(payload, "total_chunks")),
+        unmapped_chunks=_payload_int(payload, "unmapped_chunks"),
         subject_id=payload["subject_id"],
         message=payload["message"],
     )

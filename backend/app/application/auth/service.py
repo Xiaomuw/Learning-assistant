@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+import json
+import os
+import time
+import uuid
+from dataclasses import dataclass
+from json import JSONDecodeError
+from threading import Lock
+from typing import Any
+from urllib.error import URLError
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
 from app.application.errors import (
     ConflictError,
     ProcessingError,
@@ -9,15 +21,16 @@ from app.application.errors import (
     ValidationError,
 )
 from app.infrastructure.db.repositories.auth import (
+    consume_refresh_token_record,
     create_auth_user_record,
     get_user_auth_record_by_email,
     get_user_auth_record_by_id,
     get_user_auth_view_record,
+    get_or_create_wechat_mini_user_record,
     revoke_refresh_token_by_jti,
     revoke_refresh_tokens_for_user,
     save_refresh_token_record,
     touch_user_last_login,
-    touch_refresh_token_last_used_record,
     update_user_password_hash,
 )
 from app.application.auth.verification import (
@@ -54,6 +67,70 @@ from app.shared.schemas.contracts import (
 )
 
 
+_REFRESH_REPLAY_TTL_SECONDS = float(os.getenv("AUTH_REFRESH_REPLAY_TTL_SECONDS", "5"))
+_REFRESH_REPLAY_MAX_USES = int(os.getenv("AUTH_REFRESH_REPLAY_MAX_USES", "1"))
+
+
+@dataclass
+class _RefreshReplayEntry:
+    result: AuthSessionResult
+    expires_at: float
+    remaining_uses: int
+
+
+_refresh_replay_cache: dict[str, _RefreshReplayEntry] = {}
+_refresh_replay_lock = Lock()
+
+
+def _refresh_replay_key(user_id: str, token_jti: str, token_hash: str) -> str:
+    return f"{user_id}:{token_jti}:{token_hash}"
+
+
+def _remember_refresh_replay(
+    *,
+    user_id: str,
+    token_jti: str,
+    token_hash: str,
+    result: AuthSessionResult,
+) -> None:
+    if _REFRESH_REPLAY_TTL_SECONDS <= 0 or _REFRESH_REPLAY_MAX_USES <= 0:
+        return
+    now = time.monotonic()
+    with _refresh_replay_lock:
+        _refresh_replay_cache[_refresh_replay_key(user_id, token_jti, token_hash)] = _RefreshReplayEntry(
+            result=result,
+            expires_at=now + _REFRESH_REPLAY_TTL_SECONDS,
+            remaining_uses=_REFRESH_REPLAY_MAX_USES,
+        )
+
+
+def _consume_refresh_replay(
+    *,
+    user_id: str,
+    token_jti: str,
+    token_hash: str,
+) -> AuthSessionResult | None:
+    now = time.monotonic()
+    key = _refresh_replay_key(user_id, token_jti, token_hash)
+    with _refresh_replay_lock:
+        expired_keys = [
+            cache_key
+            for cache_key, entry in _refresh_replay_cache.items()
+            if entry.expires_at <= now or entry.remaining_uses <= 0
+        ]
+        for cache_key in expired_keys:
+            _refresh_replay_cache.pop(cache_key, None)
+
+        entry = _refresh_replay_cache.get(key)
+        if not entry or entry.expires_at <= now or entry.remaining_uses <= 0:
+            _refresh_replay_cache.pop(key, None)
+            return None
+        entry.remaining_uses -= 1
+        if entry.remaining_uses <= 0:
+            _refresh_replay_cache.pop(key, None)
+        return entry.result
+
+
 def _normalize_email(email: str) -> str:
     return str(email).strip().lower()
 
@@ -73,6 +150,82 @@ def _issue_auth_session(user: AuthUserView) -> AuthSessionResult:
         access_token=access_token,
         refresh_token=refresh_token,
     )
+
+
+def _exchange_wechat_mini_code(code: str) -> dict[str, Any]:
+    app_id = os.getenv("WECHAT_MINI_APP_ID", "").strip()
+    app_secret = os.getenv("WECHAT_MINI_APP_SECRET", "").strip()
+    if not app_id or not app_secret:
+        raise ServiceUnavailableError(
+            "微信小程序登录未配置 WECHAT_MINI_APP_ID / WECHAT_MINI_APP_SECRET",
+            reason="missing_config",
+        )
+
+    query = urlencode(
+        {
+            "appid": app_id,
+            "secret": app_secret,
+            "js_code": code,
+            "grant_type": "authorization_code",
+        }
+    )
+    url = f"https://api.weixin.qq.com/sns/jscode2session?{query}"
+    try:
+        with urlopen(url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (JSONDecodeError, UnicodeDecodeError, URLError, TimeoutError, OSError) as exc:  # pragma: no cover - real network path
+        raise ServiceUnavailableError(
+            "微信登录服务暂时不可用，请稍后重试",
+            reason="wechat_unavailable",
+        ) from exc
+
+    if payload.get("errcode"):
+        _raise_wechat_code_error(payload)
+    return payload
+
+
+def _raise_wechat_code_error(payload: dict[str, Any]) -> None:
+    code = int(payload.get("errcode") or 0)
+    if code == 45011:
+        raise RateLimitError("微信登录请求过于频繁，请稍后重试", reason="rate_limited")
+    if code == -1:
+        raise ServiceUnavailableError("微信登录服务暂时不可用，请稍后重试", reason="wechat_unavailable")
+    if code == 40226:
+        raise UnauthorizedError("微信登录暂时不可用，请稍后重试", reason="risk_blocked")
+    if code == 40163:
+        raise UnauthorizedError("微信登录凭证已使用或已过期，请重新登录", reason="code_used")
+    if code == 40029:
+        raise UnauthorizedError("微信登录凭证无效，请重新登录", reason="invalid_code")
+    raise UnauthorizedError("微信登录凭证无效，请重新登录", reason="invalid_code")
+
+
+def login_with_wechat_mini_code(
+    *,
+    code: str,
+    display_name: str | None = None,
+) -> AuthSessionResult:
+    normalized_code = code.strip()
+    if not normalized_code:
+        raise ValidationError("缺少微信登录凭证")
+
+    payload = _exchange_wechat_mini_code(normalized_code)
+    openid = str(payload.get("openid", "") or "").strip()
+    unionid = str(payload.get("unionid", "") or "").strip()
+    if not openid:
+        raise UnauthorizedError("微信登录凭证无效：缺少 openid", reason="invalid_code")
+
+    try:
+        user = get_or_create_wechat_mini_user_record(
+            openid=openid,
+            unionid=unionid,
+            password_hash=hash_password(str(uuid.uuid4())),
+            display_name=display_name,
+        )
+    except ValueError as exc:
+        raise ConflictError(str(exc)) from exc
+
+    revoke_refresh_tokens_for_user(user.id)
+    return _issue_auth_session(user)
 
 
 def send_register_code(email: str) -> VerificationDispatchResult:
@@ -174,16 +327,33 @@ def refresh_user_session(refresh_token: str | None) -> AuthSessionResult:
     if not user_id or not token_jti:
         raise UnauthorizedError("刷新凭证无效")
 
-    token_row = touch_refresh_token_last_used_record(token_jti)
-    if not token_row or token_row.token_hash != hash_token(refresh_token):
+    token_hash = hash_token(refresh_token)
+    token_row = consume_refresh_token_record(
+        token_jti=token_jti,
+        token_hash=token_hash,
+    )
+    if not token_row:
+        replayed = _consume_refresh_replay(
+            user_id=user_id,
+            token_jti=token_jti,
+            token_hash=token_hash,
+        )
+        if replayed:
+            return replayed
         raise UnauthorizedError("刷新凭证已失效")
 
-    revoke_refresh_token_by_jti(token_jti)
     auth_view = get_user_auth_view_record(user_id)
     if not auth_view:
         raise UnauthorizedError("用户不存在或已停用")
 
-    return _issue_auth_session(auth_view)
+    result = _issue_auth_session(auth_view)
+    _remember_refresh_replay(
+        user_id=user_id,
+        token_jti=token_jti,
+        token_hash=token_hash,
+        result=result,
+    )
+    return result
 
 
 def logout_user(refresh_token: str | None) -> MessageResult:

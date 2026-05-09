@@ -1,7 +1,10 @@
-.PHONY: test-graphs eval-graphs eval-graphs-remote
+.PHONY: test-backend test-graphs eval-graphs eval-graphs-remote
+
+test-backend:
+	LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false GRAPH_EVAL_LANGSMITH=false backend/.venv313/bin/python -m unittest discover -s backend/tests
 
 test-graphs:
-	LANGSMITH_TRACING=false GRAPH_EVAL_LANGSMITH=false backend/.venv313/bin/python -m unittest \
+	LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false GRAPH_EVAL_LANGSMITH=false backend/.venv313/bin/python -m unittest \
 		backend.tests.test_agent_graph_contracts \
 		backend.tests.test_orchestrator_intent_rules \
 		backend.tests.test_child_invokers \
@@ -21,7 +24,7 @@ test-graphs:
 		backend.tests.test_practice_graph_facts
 
 eval-graphs:
-	cd backend && LANGSMITH_TRACING=$${LANGSMITH_TRACING:-$${GRAPH_EVAL_LANGSMITH:-false}} GRAPH_EVAL_LANGSMITH=$${GRAPH_EVAL_LANGSMITH:-false} ./.venv313/bin/python -m app.orchestration.graphs.eval_runner
+	cd backend && LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false GRAPH_EVAL_LANGSMITH=false ./.venv313/bin/python -m app.orchestration.graphs.eval_runner
 
 eval-graphs-remote:
-	cd backend && GRAPH_EVAL_LANGSMITH=true LANGSMITH_TRACING=$${LANGSMITH_TRACING:-true} ./.venv313/bin/python -m app.orchestration.graphs.langsmith_eval --all
+	cd backend && GRAPH_EVAL_LANGSMITH=true LANGSMITH_TRACING=$${LANGSMITH_TRACING:-true} LANGCHAIN_TRACING_V2=$${LANGCHAIN_TRACING_V2:-true} ./.venv313/bin/python -m app.orchestration.graphs.langsmith_eval --all

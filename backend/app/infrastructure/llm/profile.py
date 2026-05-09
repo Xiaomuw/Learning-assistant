@@ -21,6 +21,7 @@ MODEL_METADATA_RULES = [
     ("gemini", "Google", "Gemini"),
     ("alibaba-qwen", "Alibaba", "Qwen"),
     ("qwen", "Alibaba", "Qwen"),
+    ("deepseek-v4", "DeepSeek", "V4"),
     ("deepseek", "DeepSeek", "DeepSeek"),
     ("glm", "Zhipu", "GLM"),
     ("kimi", "Moonshot", "Kimi"),
@@ -122,6 +123,26 @@ EXACT_MODEL_PROFILES: dict[str, ModelProfile] = {
         supported_modalities=("text",),
         max_output_tokens=16_384,
     ),
+    "deepseek-v4-pro": ModelProfile(
+        model_id="deepseek-v4-pro",
+        provider="DeepSeek",
+        family="V4",
+        supports_tool_calling=True,
+        supports_structured_output=False,
+        context_window=1_000_000,
+        supported_modalities=("text",),
+        max_output_tokens=384_000,
+    ),
+    "deepseek-v4-flash": ModelProfile(
+        model_id="deepseek-v4-flash",
+        provider="DeepSeek",
+        family="V4",
+        supports_tool_calling=True,
+        supports_structured_output=False,
+        context_window=1_000_000,
+        supported_modalities=("text",),
+        max_output_tokens=384_000,
+    ),
 }
 
 
@@ -195,6 +216,16 @@ FAMILY_DEFAULTS: dict[str, ModelProfile] = {
         context_window=128_000,
         supported_modalities=("text",),
         max_output_tokens=4_096,
+    ),
+    "V4": ModelProfile(
+        model_id="deepseek-v4-family-default",
+        provider="DeepSeek",
+        family="V4",
+        supports_tool_calling=True,
+        supports_structured_output=True,
+        context_window=1_000_000,
+        supported_modalities=("text",),
+        max_output_tokens=384_000,
     ),
     "DeepSeek": ModelProfile(
         model_id="deepseek-family-default",

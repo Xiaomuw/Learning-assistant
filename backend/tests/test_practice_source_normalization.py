@@ -185,6 +185,88 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
 
         self.assertEqual(captured["source_type"], "ai_generated")
 
+    def test_submit_attempt_updates_graph_mastery_for_canonical_concept(self) -> None:
+        graph_attempt_payloads: list[dict] = []
+        graph_states: list[dict] = []
+
+        class FakeAttemptRepository:
+            def create_attempt(self, payload: dict) -> str:
+                graph_attempt_payloads.append(dict(payload))
+                return str(payload["id"])
+
+        class FakeRepos:
+            attempts = FakeAttemptRepository()
+            learning_events = object()
+            mastery_snapshots = object()
+
+        class FakeCompiledGraph:
+            def invoke(self, state: dict) -> dict:
+                graph_states.append(dict(state))
+                return {}
+
+        class FakeGraph:
+            def compile(self) -> FakeCompiledGraph:
+                return FakeCompiledGraph()
+
+        with (
+            patch(
+                "app.domains.practice.attempts.evaluate_practice_answer",
+                return_value=MasteryEvaluationResult(
+                    subject_id="computer-network",
+                    knowledge_point="HTTP/HTTPS",
+                    normalized_answer="C",
+                    is_correct=True,
+                    score=100,
+                    mastery_score=100,
+                    mastery_level="mastered",
+                    feedback="回答正确。",
+                ),
+            ),
+            patch(
+                "app.domains.practice.attempts._create_practice_attempt",
+                return_value={"id": "legacy-attempt-1", "created_at": "2026-05-09T00:00:00Z"},
+            ),
+            patch("app.domains.practice.attempts.build_graph_fact_repositories", return_value=FakeRepos()),
+            patch("app.domains.practice.attempts.build_mastery_graph", return_value=FakeGraph()) as graph_builder,
+            patch(
+                "app.domains.practice.attempts._get_user_memory",
+                return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
+            ),
+            patch(
+                "app.domains.practice.attempts._save_user_memory",
+                return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP/HTTPS"], "last_session": ""},
+            ),
+        ):
+            record_practice_attempt_and_update_memory(
+                user_id="u1",
+                session_id="",
+                subject_id="computer-network",
+                quiz_item=PracticeRecommendation(
+                    question_id="q-http",
+                    question="HTTP 属于哪一层？",
+                    options=[
+                        {"key": "A", "text": "网络层"},
+                        {"key": "B", "text": "数据链路层"},
+                        {"key": "C", "text": "应用层"},
+                        {"key": "D", "text": "物理层"},
+                    ],
+                    correct_option="C",
+                    explanation="HTTP 属于应用层协议。",
+                    option_rationales={"C": "正确"},
+                    knowledge_point="HTTP/HTTPS",
+                    concept_id="computer-network.application.http-https",
+                    concept_name="HTTP/HTTPS",
+                    source_type="ai_generated",
+                ),
+                selected_option="C",
+            )
+
+        self.assertEqual(graph_attempt_payloads[0]["id"], "practice:legacy-attempt-1")
+        self.assertEqual(graph_attempt_payloads[0]["concept_id"], "computer-network.application.http-https")
+        self.assertEqual(graph_attempt_payloads[0]["score"], 1.0)
+        self.assertEqual(graph_states[0]["attempt_payloads"][0]["attempt_id"], "practice:legacy-attempt-1")
+        graph_builder.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,48 @@
+{
+  "name": "learning-assistant-weapp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "prepare:weapp": "node scripts/prepare-project-config.cjs",
+    "prebuild:weapp": "npm run prepare:weapp",
+    "prebuild:weapp:dev": "npm run prepare:weapp",
+    "prebuild:weapp:staging": "npm run prepare:weapp",
+    "predev:weapp": "npm run prepare:weapp",
+    "build:weapp": "taro build --type weapp --no-check",
+    "build:weapp:dev": "TARO_APP_API_BASE=http://127.0.0.1:8000/api taro build --type weapp --no-check",
+    "build:weapp:staging": "TARO_APP_ENV=staging taro build --type weapp --no-check --mode staging",
+    "check:weapp": "npm run typecheck && npm run lint && npm run build:weapp",
+    "dev:weapp": "taro build --type weapp --watch --no-check",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tarojs/components": "^4.0.0",
+    "@tarojs/helper": "^4.0.0",
+    "@tarojs/plugin-framework-react": "^4.0.0",
+    "@tarojs/plugin-platform-weapp": "^4.0.0",
+    "@tarojs/react": "^4.0.0",
+    "@tarojs/runtime": "^4.0.0",
+    "@tarojs/shared": "^4.0.0",
+    "@tarojs/taro": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-typescript": "^7.28.5",
+    "@tarojs/cli": "^4.0.0",
+    "@tarojs/webpack5-runner": "^4.0.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "babel-preset-taro": "^4.2.0",
+    "eslint": "^8.57.0",
+    "eslint-config-taro": "^4.0.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "typescript": "^5.7.3"
+  }
+}

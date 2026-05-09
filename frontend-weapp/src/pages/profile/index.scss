@@ -1,0 +1,108 @@
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 30px;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 42px;
+  font-weight: 900;
+}
+
+.profile-main {
+  flex: 1;
+}
+
+.profile-name,
+.profile-email {
+  display: block;
+}
+
+.profile-name {
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.profile-email {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 24px;
+}
+
+.section-card,
+.error-card {
+  padding: 28px;
+}
+
+.error-card {
+  color: #dc2626;
+}
+
+.section-title,
+.section-value,
+.section-desc {
+  display: block;
+}
+
+.section-title {
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.section-value {
+  margin-top: 12px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.section-desc {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 26px;
+  line-height: 1.6;
+}
+
+.notebook-row {
+  border-top: 1px solid #e2e8f0;
+  padding: 18px 0;
+}
+
+.notebook-row:first-of-type {
+  border-top: 0;
+}
+
+.notebook-name,
+.notebook-desc {
+  display: block;
+}
+
+.notebook-name {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.notebook-desc {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 23px;
+  line-height: 1.5;
+}
+
+.logout-button {
+  margin-top: 10px;
+}

@@ -80,9 +80,19 @@ def collect_environment_warnings() -> list[str]:
         )
     embedding_base_url = (os.getenv("OPENAI_EMBEDDING_BASE_URL") or "").strip()
     openai_base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
+    embedding_provider = (os.getenv("EMBEDDING_PROVIDER") or "google").strip().lower()
     if not embedding_base_url and "inference.do-ai.run" in openai_base_url.lower():
         warnings.append(
             "当前 embedding 默认复用 DigitalOcean inference endpoint；若出现 model not found，"
+            "请配置 OPENAI_EMBEDDING_BASE_URL / OPENAI_EMBEDDING_API_KEY / OPENAI_EMBEDDING_MODEL。"
+        )
+    if (
+        embedding_provider == "openai-compatible"
+        and not embedding_base_url
+        and "api.deepseek.com" in openai_base_url.lower()
+    ):
+        warnings.append(
+            "当前 embedding 会复用 DeepSeek chat endpoint；DeepSeek V4 不提供 embedding，"
             "请配置 OPENAI_EMBEDDING_BASE_URL / OPENAI_EMBEDDING_API_KEY / OPENAI_EMBEDDING_MODEL。"
         )
 

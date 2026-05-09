@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.orchestration.graphs.qa.adapter import DeterministicQARuntimeAdapter, QARuntimeAdapter
 from app.orchestration.graphs.qa.state import QAGraphState
 from app.orchestration.graphs.shared.schemas import (
+    ConceptRef,
     EvidenceChunk,
     FinalResponse,
     GraphError,
@@ -19,6 +20,7 @@ from app.orchestration.graphs.shared.schemas import (
     ToolResult,
 )
 from app.persistence.interfaces import LearningEventRepository
+from app.knowledge.concept_registry import get_concept_registry
 from app.services.tooling.executor import ToolExecutor
 from app.services.tooling.schemas import ToolExecutionRequest, ToolRiskLevel
 from app.shared.schemas.subject import DEFAULT_SUBJECTS
@@ -120,6 +122,38 @@ def context_resolver_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
+def concept_linker_node(state: QAGraphState) -> dict[str, Any]:
+    """Bind the resolved question to the taxonomy registry before retrieval."""
+
+    question = _resolved_question(state)
+    subject_hint = str(state.get("notebook_id") or state.get("course_id") or "").strip() or None
+    match = get_concept_registry().match_query(question, subject_id=subject_hint)
+    concept_linking = match.model_dump(mode="json")
+    update: dict[str, Any] = {
+        "concept_linking": concept_linking,
+        "qa_request": {
+            **dict(state.get("qa_request") or {}),
+            "question": question,
+            "concept_linking": concept_linking,
+            "subject_id": match.subject_id or subject_hint,
+            "concept_id": match.concept_id,
+            "topic_id": match.topic_id,
+        },
+    }
+    if match.status == "matched" and match.concept_id:
+        existing_concepts = list(state.get("concepts") or [])
+        update["concepts"] = [
+            *existing_concepts,
+            ConceptRef(
+                concept_id=match.concept_id,
+                name=match.concept_name or match.concept_id,
+                confidence=match.confidence,
+                source="concept_registry",
+            ).model_dump(mode="json"),
+        ]
+    return update
+
+
 def knowledge_router_node(state: QAGraphState) -> dict[str, Any]:
     """Select one or more knowledge bases before retrieval."""
 
@@ -130,44 +164,52 @@ def knowledge_router_node(state: QAGraphState) -> dict[str, Any]:
 
     notebook_id = state.get("notebook_id")
     course_id = state.get("course_id")
+    concept_linking = dict(state.get("concept_linking") or {})
+    linked_subject_id = str(concept_linking.get("subject_id") or "").strip()
+    concept_metadata = {
+        "concept_id": concept_linking.get("concept_id") or "",
+        "concept_name": concept_linking.get("concept_name") or "",
+        "topic_id": concept_linking.get("topic_id") or "",
+        "confidence": concept_linking.get("confidence") or 0.0,
+        "status": concept_linking.get("status") or "",
+    }
     if _should_consider_knowledge_candidates(question, source_policy):
         for candidate in _available_knowledge_bases(state):
             route = _route_from_candidate(candidate, question)
             if route is not None:
-                candidate_routes.append(route)
+                candidate_routes.append(_route_with_metadata(route, concept_metadata))
 
     has_named_route = any(
         str(route.get("source_reason") or "") == "explicit_named_knowledge_base"
         for route in candidate_routes
     )
+    should_use_current_route = _should_use_current_knowledge_base(state, question, source_policy) and not has_named_route
 
-    if notebook_id and _should_use_current_knowledge_base(state, question, source_policy) and not has_named_route:
+    if notebook_id and should_use_current_route:
         routes.append(
             _knowledge_route(
                 knowledge_base_id=str(notebook_id),
                 subject_id=str(notebook_id),
                 source_reason="current_notebook",
                 priority=20,
+                metadata=concept_metadata,
             )
         )
-    elif (
-        _should_use_current_knowledge_base(state, question, source_policy)
-        and not has_named_route
-    ):
+    elif should_use_current_route:
         routes.append(
             _knowledge_route(
                 knowledge_base_id="current_notebook",
                 subject_id=None,
                 source_reason="explicit_notebook_request",
                 priority=30,
+                metadata=concept_metadata,
             )
         )
 
     if (
         course_id
         and str(course_id) != str(notebook_id or "")
-        and _should_use_current_knowledge_base(state, question, source_policy)
-        and not has_named_route
+        and should_use_current_route
     ):
         routes.append(
             _knowledge_route(
@@ -175,6 +217,22 @@ def knowledge_router_node(state: QAGraphState) -> dict[str, Any]:
                 subject_id=str(course_id),
                 source_reason="current_course",
                 priority=40,
+                metadata=concept_metadata,
+            )
+        )
+    if (
+        linked_subject_id
+        and concept_linking.get("status") in {"matched", "subject_only", "ambiguous"}
+        and not should_use_current_route
+        and not has_named_route
+    ):
+        routes.append(
+            _knowledge_route(
+                knowledge_base_id=linked_subject_id,
+                subject_id=linked_subject_id,
+                source_reason="concept_registry",
+                priority=12,
+                metadata=concept_metadata,
             )
         )
 
@@ -502,11 +560,24 @@ def final_response_node(state: QAGraphState) -> dict[str, Any]:
         "answer_quality": dict(state.get("answer_quality") or {}),
         "source_usage": source_usage,
         "web_search_attempted": bool(state.get("web_search_attempted")),
+        "concept_linking": dict(state.get("concept_linking") or {}),
     }
+    concepts = list(response.concepts)
+    concept_linking = dict(state.get("concept_linking") or {})
+    if not concepts and concept_linking.get("status") == "matched" and concept_linking.get("concept_id"):
+        concepts = [
+            ConceptRef(
+                concept_id=str(concept_linking.get("concept_id") or ""),
+                name=str(concept_linking.get("concept_name") or concept_linking.get("concept_id") or ""),
+                confidence=float(concept_linking.get("confidence") or 0.0),
+                source="concept_registry",
+            )
+        ]
     final_response = response.model_copy(
         update={
             "answer": answer,
             "source_level": source_level,
+            "concepts": concepts,
             "evidence_refs": evidence_refs,
             "ui_payload": ui_payload,
         }
@@ -1018,6 +1089,15 @@ def _knowledge_route(
     }
 
 
+def _route_with_metadata(route: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(route)
+    merged["metadata"] = {
+        **dict(route.get("metadata") or {}),
+        **{key: value for key, value in metadata.items() if value not in {"", None}},
+    }
+    return merged
+
+
 def _available_knowledge_bases(state: QAGraphState) -> list[dict[str, Any]]:
     raw = state.get("available_knowledge_bases") or state.get("knowledge_bases") or []
     if not isinstance(raw, list):
@@ -1112,6 +1192,9 @@ def _retrieval_skipped_reason(
 ) -> str:
     intent = str((state.get("intent_result") or {}).get("intent") or "")
     question_type = str(state.get("question_type") or _infer_question_type(question))
+    concept_linking = dict(state.get("concept_linking") or {})
+    if concept_linking.get("status") in {"ambiguous", "unmapped"}:
+        return f"concept_registry_{concept_linking.get('status')}"
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or _has_notebook_signal(question):
         return "no_matching_knowledge_base"
     if intent == "concept_explain" or question_type == "concept":
@@ -1166,11 +1249,19 @@ def _tool_request(
         subject_id = route.get("subject_id") or route.get("knowledge_base_id")
         if not notebook_id and route.get("source_reason") in {"current_notebook", "explicit_notebook_request"}:
             notebook_id = route.get("knowledge_base_id")
+    concept_linking = dict(state.get("concept_linking") or {})
+    route_metadata = route.get("metadata") if isinstance(route, dict) and isinstance(route.get("metadata"), dict) else {}
+    concept_id = str(route_metadata.get("concept_id") or concept_linking.get("concept_id") or "").strip()
+    topic_id = str(route_metadata.get("topic_id") or concept_linking.get("topic_id") or "").strip()
+    if concept_linking.get("status") != "matched":
+        concept_id = ""
     tool_input = {
         "query": question,
         "notebook_id": notebook_id,
         "subject_id": subject_id or state.get("course_id"),
         "knowledge_base_id": route.get("knowledge_base_id") if route else None,
+        "concept_id": concept_id or None,
+        "topic_id": topic_id or None,
         "user_id": state.get("user_id"),
         "top_k": 4,
         "min_score": 0.65,
@@ -1193,6 +1284,9 @@ def _tool_request(
             "question_type": str(state.get("question_type") or ""),
             "subject_id": subject_id or state.get("course_id"),
             "notebook_id": notebook_id,
+            "concept_id": concept_id or None,
+            "topic_id": topic_id or None,
+            "concept_linking": concept_linking,
             "knowledge_route": dict(route or {}),
             "memory": state.get("memory") or {},
             "short_term_messages": list(state.get("messages") or []),
@@ -1211,8 +1305,9 @@ def _tag_tool_result_evidence(
     for item in result.evidence:
         metadata = {
             **dict(item.metadata),
-            "retrieval_source": retrieval_source,
         }
+        metadata.setdefault("retrieval_source", retrieval_source)
+        metadata["tool_retrieval_source"] = retrieval_source
         if route:
             metadata.update(
                 {

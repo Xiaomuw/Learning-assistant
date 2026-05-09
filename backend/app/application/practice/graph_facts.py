@@ -55,7 +55,8 @@ def _dual_write_practice_attempt(
 ) -> None:
     repos = build_graph_fact_repositories()
     normalized_subject_id = normalize_subject_id(subject_id)
-    concept_id = quiz_item.knowledge_point or "综合"
+    concept_id = quiz_item.concept_id or quiz_item.knowledge_point or "综合"
+    concept_name = quiz_item.concept_name or quiz_item.knowledge_point or concept_id
     graph_run_id = f"practice-attempt-{uuid4()}"
     attempt_id = f"attempt-{uuid4()}"
     submitted = LearningEvent(
@@ -68,6 +69,9 @@ def _dual_write_practice_attempt(
             "subject_id": normalized_subject_id,
             "question_id": quiz_item.question_id,
             "concept_id": concept_id,
+            "concept_name": concept_name,
+            "chapter_id": quiz_item.chapter_id,
+            "topic_id": quiz_item.topic_id,
             "selected_option": selected_option.strip().upper()[:1],
             "is_correct": result.is_correct,
         },
@@ -81,6 +85,9 @@ def _dual_write_practice_attempt(
             "subject_id": normalized_subject_id,
             "question_id": quiz_item.question_id,
             "concept_id": concept_id,
+            "concept_name": concept_name,
+            "chapter_id": quiz_item.chapter_id,
+            "topic_id": quiz_item.topic_id,
             "is_correct": result.is_correct,
             "score": 1.0 if result.is_correct else 0.0,
             "mastery_score": result.mastery_evaluation.mastery_score if result.mastery_evaluation else None,
@@ -112,7 +119,7 @@ def _dual_write_practice_attempt(
             "user_id": user_id,
             "subject_id": normalized_subject_id,
             "concept_id": concept_id,
-            "knowledge_point": concept_id,
+            "knowledge_point": concept_name,
             "question_id": quiz_item.question_id,
             "graph_run_id": graph_run_id,
             "source_event_id": scored.id,
@@ -133,6 +140,7 @@ def _dual_write_practice_attempt(
                     "user_id": user_id,
                     "subject_id": normalized_subject_id,
                     "concept_id": concept_id,
+                    "concept_name": concept_name,
                     "question_id": quiz_item.question_id,
                     "is_correct": result.is_correct,
                     "score": 1.0 if result.is_correct else 0.0,

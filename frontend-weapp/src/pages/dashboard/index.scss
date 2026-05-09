@@ -1,0 +1,123 @@
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  padding: 24px 12px;
+  text-align: center;
+}
+
+.stat-number {
+  display: block;
+  color: #2563eb;
+  font-size: 42px;
+  font-weight: 900;
+}
+
+.stat-label {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.summary-card,
+.section-card {
+  padding: 28px;
+}
+
+.error-card {
+  color: #dc2626;
+}
+
+.section-title {
+  display: block;
+  margin-bottom: 18px;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.tag-item {
+  display: inline-flex;
+  margin-right: 12px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  padding: 10px 18px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.tag-item.danger {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.empty-text {
+  display: block;
+  color: #64748b;
+  font-size: 26px;
+}
+
+.mastery-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-top: 1px solid #e2e8f0;
+  padding: 20px 0;
+}
+
+.mastery-row:first-of-type {
+  border-top: 0;
+}
+
+.mastery-title,
+.mastery-subtitle {
+  display: block;
+}
+
+.mastery-title {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.mastery-subtitle {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 22px;
+}
+
+.mastery-badge {
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.mastery-badge.mastered {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.mastery-badge.learning {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.mastery-badge.weak {
+  background: #fee2e2;
+  color: #991b1b;
+}

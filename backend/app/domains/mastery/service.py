@@ -13,11 +13,19 @@ def record_exposure(
     user_id: str,
     subject_id: str | None,
     knowledge_point: str | None,
+    chapter_id: str | None = None,
+    topic_id: str | None = None,
+    concept_id: str | None = None,
+    concept_name: str | None = None,
 ) -> KnowledgeMasteryRecord | None:
     return record_knowledge_exposure(
         user_id=user_id,
         subject_id=subject_id,
         knowledge_point=knowledge_point,
+        chapter_id=chapter_id,
+        topic_id=topic_id,
+        concept_id=concept_id,
+        concept_name=concept_name,
     )
 
 
@@ -26,12 +34,20 @@ def record_attempt(
     user_id: str,
     subject_id: str | None,
     knowledge_point: str | None,
-    is_correct: bool,
+    chapter_id: str | None = None,
+    topic_id: str | None = None,
+    concept_id: str | None = None,
+    concept_name: str | None = None,
+    is_correct: bool = False,
 ) -> KnowledgeMasteryRecord | None:
     return record_knowledge_attempt(
         user_id=user_id,
         subject_id=subject_id,
         knowledge_point=knowledge_point,
+        chapter_id=chapter_id,
+        topic_id=topic_id,
+        concept_id=concept_id,
+        concept_name=concept_name,
         is_correct=is_correct,
     )
 

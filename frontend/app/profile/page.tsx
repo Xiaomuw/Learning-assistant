@@ -50,6 +50,7 @@ import {
   type UserProfile,
 } from "@/lib/api";
 import {
+  clearStoredPracticeState,
   loadStoredModelConfig,
   persistQuiz,
   persistStoredModelConfig,
@@ -665,6 +666,7 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => {
+                      clearStoredPracticeState();
                       persistQuiz(recommendedPractice);
                       router.push("/practice");
                     }}

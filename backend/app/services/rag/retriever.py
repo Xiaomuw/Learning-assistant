@@ -69,6 +69,7 @@ def retrieve(
     top_k: int = 5,
     subject_id: str | None = None,
     doc_types: list[str] | None = None,
+    metadata_filter: dict[str, object] | None = None,
     min_score: float | None = None,
     user_id: str | None = None,
 ) -> list[RetrievedDocument]:
@@ -80,6 +81,7 @@ def retrieve(
             top_k=top_k,
             subject_id=subject_id,
             doc_types=effective_doc_types,
+            metadata_filter=metadata_filter,
             min_score=min_score,
             user_id=user_id,
         )
@@ -90,30 +92,49 @@ def diagnose_retrieval(
     *,
     query: str,
     docs: list[RetrievedDocument],
+    raw_docs: list[RetrievedDocument] | None = None,
     subject_id: str | None = None,
     user_id: str | None = None,
     min_ready_score: float = 0.5,
+    filter_reason: str = "",
+    filters: dict[str, object] | None = None,
 ) -> RetrievalDiagnostics:
     status = get_collection_document_status(subject_id=subject_id, user_id=user_id)
+    raw_doc_list = list(raw_docs if raw_docs is not None else docs)
     doc_type_counts: dict[str, int] = {}
     for doc in docs:
         doc_type = str(doc.metadata.get("doc_type") or "unknown")
         doc_type_counts[doc_type] = doc_type_counts.get(doc_type, 0) + 1
 
     top_score = max((doc.score for doc in docs), default=0.0)
+    raw_top_score = max((doc.score for doc in raw_doc_list), default=0.0)
     if status.doc_count <= 0:
         diagnosis = "empty_knowledge_base"
     elif not docs:
-        diagnosis = "no_matching_docs"
+        diagnosis = "low_score" if raw_doc_list and raw_top_score < min_ready_score else "no_matching_docs"
     elif top_score < min_ready_score:
         diagnosis = "low_score"
     else:
         diagnosis = "ready"
+    retrieval_stage = ""
+    used_keyword_fallback = False
+    for doc in raw_doc_list:
+        metadata = doc.metadata or {}
+        retrieval_stage = retrieval_stage or str(metadata.get("retrieval_stage") or "")
+        if metadata.get("retrieval_source") == "keyword_fallback":
+            used_keyword_fallback = True
 
     return RetrievalDiagnostics(
         query=query,
         hit_count=len(docs),
         top_score=round(float(top_score), 4),
+        raw_hit_count=len(raw_doc_list),
+        raw_top_score=round(float(raw_top_score), 4),
+        verified_count=len(docs),
+        filter_reason=filter_reason,
+        retrieval_stage=retrieval_stage,
+        used_keyword_fallback=used_keyword_fallback,
+        filters=dict(filters or {}),
         doc_type_counts=doc_type_counts,
         diagnosis=diagnosis,
         coverage_level=status.coverage_level,

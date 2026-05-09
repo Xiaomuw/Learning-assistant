@@ -1,0 +1,134 @@
+subject_id: operating-system
+subject_name: 操作系统原理
+chapters:
+  - chapter_id: operating-system.process
+    chapter_name: 进程与处理机管理
+    topics:
+      - topic_id: operating-system.process.thread
+        topic_name: 进程与线程
+        concepts:
+          - concept_id: operating-system.process.process-thread
+            concept_name: 进程与线程
+            aliases: [进程, 线程, PCB, TCB, 并发, 并行, 上下文切换, 资源分配, 调度单位]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [concept, comparison, scenario]
+          - concept_id: operating-system.process.state-transition
+            concept_name: 进程状态转换
+            aliases: [进程状态, 就绪, 运行, 阻塞, 创建, 终止, 状态转换, 进程控制]
+            prerequisites: [operating-system.process.process-thread]
+            importance: high
+            exam_frequency: medium
+            question_types: [process, concept]
+      - topic_id: operating-system.scheduling
+        topic_name: 处理机调度
+        concepts:
+          - concept_id: operating-system.scheduling.algorithms
+            concept_name: 调度算法
+            aliases: [调度算法, FCFS, SJF, SPF, 优先级调度, 时间片轮转, RR, 多级反馈队列]
+            prerequisites: [operating-system.process.process-thread]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, comparison, gantt]
+          - concept_id: operating-system.scheduling.metrics
+            concept_name: 调度性能指标
+            aliases: [周转时间, 带权周转时间, 等待时间, 响应时间, 平均等待时间, 甘特图]
+            prerequisites: [operating-system.scheduling.algorithms]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation]
+  - chapter_id: operating-system.sync-deadlock
+    chapter_name: 同步互斥与死锁
+    topics:
+      - topic_id: operating-system.sync
+        topic_name: 同步与互斥
+        concepts:
+          - concept_id: operating-system.sync.semaphore
+            concept_name: 信号量与 P/V 操作
+            aliases: [信号量, semaphore, P 操作, V 操作, wait, signal, 生产者消费者, 读者写者, 哲学家进餐]
+            prerequisites: [operating-system.process.process-thread]
+            importance: high
+            exam_frequency: high
+            question_types: [coding, process, concept]
+          - concept_id: operating-system.sync.mutex-monitor
+            concept_name: 互斥、管程与条件变量
+            aliases: [互斥, 临界区, 临界资源, 管程, 条件变量, monitor, mutex]
+            prerequisites: [operating-system.sync.semaphore]
+            importance: high
+            exam_frequency: medium
+            question_types: [concept, synchronization]
+      - topic_id: operating-system.deadlock
+        topic_name: 死锁
+        concepts:
+          - concept_id: operating-system.deadlock.conditions
+            concept_name: 死锁条件与处理
+            aliases: [死锁, 死锁四个必要条件, 互斥, 占有并等待, 不可剥夺, 循环等待, 死锁预防, 死锁避免]
+            prerequisites: [operating-system.sync.mutex-monitor]
+            importance: high
+            exam_frequency: high
+            question_types: [concept, scenario]
+          - concept_id: operating-system.deadlock.banker
+            concept_name: 银行家算法
+            aliases: [银行家算法, 安全序列, 安全状态, 资源分配图, Need 矩阵, Available]
+            prerequisites: [operating-system.deadlock.conditions]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, process]
+  - chapter_id: operating-system.memory
+    chapter_name: 内存管理
+    topics:
+      - topic_id: operating-system.memory.virtual-memory
+        topic_name: 虚拟内存
+        concepts:
+          - concept_id: operating-system.memory.paging
+            concept_name: 分页与地址转换
+            aliases: [分页, 页表, 页号, 页内偏移, 地址转换, 虚拟地址, 物理地址, 页面, 页框]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, concept]
+          - concept_id: operating-system.memory.tlb-eat
+            concept_name: TLB 与有效访问时间
+            aliases: [TLB, 快表, 有效访问时间, EAT, 访问时间, 命中率, 多级页表]
+            prerequisites: [operating-system.memory.paging]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation]
+          - concept_id: operating-system.memory.page-replacement
+            concept_name: 页面置换算法
+            aliases: [页面置换, FIFO, LRU, Clock, OPT, 缺页, 缺页率, Belady 异常]
+            prerequisites: [operating-system.memory.paging]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, simulation]
+  - chapter_id: operating-system.file-io
+    chapter_name: 文件系统与 I/O
+    topics:
+      - topic_id: operating-system.file-system
+        topic_name: 文件系统
+        concepts:
+          - concept_id: operating-system.file-system.allocation
+            concept_name: 文件分配方式
+            aliases: [文件系统, 文件分配, 连续分配, 链式分配, 索引分配, inode, 目录, 空闲空间管理]
+            prerequisites: []
+            importance: high
+            exam_frequency: medium
+            question_types: [comparison, calculation]
+          - concept_id: operating-system.file-system.disk-scheduling
+            concept_name: 磁盘调度算法
+            aliases: [磁盘调度, FCFS, SSTF, SCAN, C-SCAN, LOOK, 磁头移动距离]
+            prerequisites: [operating-system.file-system.allocation]
+            importance: medium
+            exam_frequency: medium
+            question_types: [calculation, simulation]
+      - topic_id: operating-system.io
+        topic_name: I/O 管理
+        concepts:
+          - concept_id: operating-system.io.methods
+            concept_name: I/O 控制方式
+            aliases: [I/O, IO, 程序查询, 中断, DMA, 通道, 缓冲区, 设备管理]
+            prerequisites: []
+            importance: medium
+            exam_frequency: medium
+            question_types: [comparison, concept]

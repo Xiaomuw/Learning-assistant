@@ -1,0 +1,117 @@
+subject_id: computer-network
+subject_name: 计算机网络
+chapters:
+  - chapter_id: computer-network.layering
+    chapter_name: 网络分层与体系结构
+    topics:
+      - topic_id: computer-network.layering.model
+        topic_name: 分层模型
+        concepts:
+          - concept_id: computer-network.layering.osi-tcpip
+            concept_name: OSI 与 TCP/IP 分层模型
+            aliases: [OSI, TCP/IP, 五层模型, 七层模型, 网络分层, 协议层次, 封装, 解封装]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [concept, comparison, process]
+          - concept_id: computer-network.layering.service-protocol-interface
+            concept_name: 服务、协议与接口
+            aliases: [服务, 协议, 接口, SAP, PDU, SDU, 数据单元]
+            prerequisites: [computer-network.layering.osi-tcpip]
+            importance: medium
+            exam_frequency: medium
+            question_types: [concept, comparison]
+  - chapter_id: computer-network.link-network
+    chapter_name: 数据链路层与网络层
+    topics:
+      - topic_id: computer-network.data-link
+        topic_name: 数据链路层
+        concepts:
+          - concept_id: computer-network.data-link.framing-crc
+            concept_name: 成帧与差错控制
+            aliases: [成帧, CRC, 循环冗余校验, 差错控制, 检错, 纠错, 帧]
+            prerequisites: [computer-network.layering.osi-tcpip]
+            importance: high
+            exam_frequency: medium
+            question_types: [calculation, concept]
+          - concept_id: computer-network.data-link.mac-ethernet
+            concept_name: 以太网与 MAC
+            aliases: [以太网, MAC 地址, CSMA/CD, 交换机, 局域网, 介质访问控制]
+            prerequisites: [computer-network.data-link.framing-crc]
+            importance: high
+            exam_frequency: high
+            question_types: [concept, scenario]
+      - topic_id: computer-network.network-layer
+        topic_name: 网络层
+        concepts:
+          - concept_id: computer-network.network-layer.ip-subnet
+            concept_name: IP 地址与子网划分
+            aliases: [IP 地址, IPv4, IPv6, 子网划分, CIDR, 子网掩码, 网络地址, 广播地址]
+            prerequisites: [computer-network.layering.osi-tcpip]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, concept]
+          - concept_id: computer-network.network-layer.routing
+            concept_name: 路由选择
+            aliases: [路由, 路由选择, 路由器, RIP, OSPF, BGP, 路由表, 分组转发]
+            prerequisites: [computer-network.network-layer.ip-subnet]
+            importance: high
+            exam_frequency: medium
+            question_types: [concept, calculation, process]
+  - chapter_id: computer-network.transport-application
+    chapter_name: 传输层与应用层
+    topics:
+      - topic_id: computer-network.transport
+        topic_name: 传输层
+        concepts:
+          - concept_id: computer-network.transport.tcp-udp
+            concept_name: TCP 与 UDP
+            aliases: [TCP, UDP, 传输层, 面向连接, 无连接, 可靠传输, 三次握手, 四次挥手]
+            prerequisites: [computer-network.network-layer.ip-subnet]
+            importance: high
+            exam_frequency: high
+            question_types: [comparison, process, concept]
+          - concept_id: computer-network.transport.flow-congestion-control
+            concept_name: 流量控制与拥塞控制
+            aliases: [流量控制, 拥塞控制, 滑动窗口, 慢开始, 拥塞避免, 快重传, 快恢复, cwnd, rwnd]
+            prerequisites: [computer-network.transport.tcp-udp]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, process, concept]
+      - topic_id: computer-network.application
+        topic_name: 应用层协议
+        concepts:
+          - concept_id: computer-network.application.http-https
+            concept_name: HTTP 与 HTTPS
+            aliases: [HTTP, HTTPS, HTTP/1.1, HTTP/2, HTTP/3, 默认端口, 端口80, 端口443, 请求响应, Web]
+            prerequisites: [computer-network.transport.tcp-udp]
+            importance: high
+            exam_frequency: high
+            question_types: [concept, port, process]
+          - concept_id: computer-network.application.dns
+            concept_name: DNS
+            aliases: [DNS, 域名解析, 域名系统, 递归查询, 迭代查询, 本地域名服务器, 根域名服务器]
+            prerequisites: [computer-network.network-layer.ip-subnet]
+            importance: high
+            exam_frequency: high
+            question_types: [process, concept]
+          - concept_id: computer-network.application.smtp-ftp
+            concept_name: SMTP、FTP 与常见应用协议
+            aliases: [SMTP, FTP, POP3, IMAP, DHCP, 应用层协议, 电子邮件协议, 文件传输]
+            prerequisites: [computer-network.transport.tcp-udp]
+            importance: medium
+            exam_frequency: medium
+            question_types: [concept, port, comparison]
+  - chapter_id: computer-network.security
+    chapter_name: 网络安全基础
+    topics:
+      - topic_id: computer-network.security.crypto-auth
+        topic_name: 加密、认证与完整性
+        concepts:
+          - concept_id: computer-network.security.tls-crypto
+            concept_name: TLS 与加密基础
+            aliases: [TLS, SSL, 对称加密, 非对称加密, 数字签名, 摘要, 认证, 完整性, 证书]
+            prerequisites: [computer-network.application.http-https]
+            importance: medium
+            exam_frequency: medium
+            question_types: [concept, comparison, process]

@@ -1,0 +1,51 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/login/login",
+    "pages/register/register",
+    "pages/chat/chat",
+    "pages/practice/practice",
+    "pages/dashboard/dashboard",
+    "pages/profile/profile"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#fff",
+    "navigationBarTitleText": "Learning Assistant",
+    "navigationBarTextStyle": "black"
+  },
+  "tabBar": {
+    "color": "#111827",
+    "selectedColor": "#4F46E5",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/chat/chat",
+        "text": "问答",
+        "iconPath": "assets/icons/chat.png",
+        "selectedIconPath": "assets/icons/chat-active.png"
+      },
+      {
+        "pagePath": "pages/practice/practice",
+        "text": "刷题",
+        "iconPath": "assets/icons/practice.png",
+        "selectedIconPath": "assets/icons/practice-active.png"
+      },
+      {
+        "pagePath": "pages/dashboard/dashboard",
+        "text": "中心",
+        "iconPath": "assets/icons/dashboard.png",
+        "selectedIconPath": "assets/icons/dashboard-active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "assets/icons/profile.png",
+        "selectedIconPath": "assets/icons/profile-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

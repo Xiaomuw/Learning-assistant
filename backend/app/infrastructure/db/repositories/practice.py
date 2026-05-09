@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.infrastructure.db.database import session_scope
 from app.infrastructure.db.models import PracticeAttemptModel, QuestionBankItemModel
@@ -16,6 +16,7 @@ from app.infrastructure.db.repositories._shared import (
     utcnow,
 )
 from app.shared.schemas.contracts import PracticeAttemptRecord, QuestionBankItemRecord, UserMemoryRecord
+from app.knowledge.concept_registry import ConceptMatch, get_concept_registry
 
 
 def upsert_question_bank_item_records(items: list[dict[str, Any]]) -> int:
@@ -23,12 +24,18 @@ def upsert_question_bank_item_records(items: list[dict[str, Any]]) -> int:
     with session_scope() as session:
         for item in items:
             question_id = str(item.get("id") or item.get("question_id") or uuid.uuid4())
+            concept_payload = _concept_payload_for_item(item)
             row = session.get(QuestionBankItemModel, question_id)
             if row is None:
                 row = QuestionBankItemModel(id=question_id)
                 session.add(row)
             row.subject_id = str(item.get("subject_id") or "general")
             row.knowledge_point = str(item.get("knowledge_point") or "").strip()
+            row.chapter_id = str(concept_payload.get("chapter_id") or item.get("chapter_id") or "")
+            row.topic_id = str(concept_payload.get("topic_id") or item.get("topic_id") or "")
+            row.concept_id = str(concept_payload.get("concept_id") or item.get("concept_id") or "")
+            row.concept_name = str(concept_payload.get("concept_name") or item.get("concept_name") or "")
+            row.concept_mapping_status = str(concept_payload.get("concept_mapping_status") or item.get("concept_mapping_status") or "")
             row.stem = str(item.get("question") or item.get("stem") or "").strip()
             row.options_json = normalize_quiz_options(item.get("options"))
             row.correct_option = str(item.get("correct_option") or "A").strip().upper()[:1]
@@ -62,7 +69,13 @@ def list_question_bank_item_records(
             stmt = stmt.where(QuestionBankItemModel.subject_id == subject_id)
         normalized_points = [str(point).strip() for point in list(knowledge_points or []) if str(point).strip()]
         if normalized_points:
-            stmt = stmt.where(QuestionBankItemModel.knowledge_point.in_(normalized_points))
+            stmt = stmt.where(
+                or_(
+                    QuestionBankItemModel.knowledge_point.in_(normalized_points),
+                    QuestionBankItemModel.concept_id.in_(normalized_points),
+                    QuestionBankItemModel.concept_name.in_(normalized_points),
+                )
+            )
         if difficulty:
             stmt = stmt.where(QuestionBankItemModel.difficulty == difficulty)
         normalized_years = [int(year) for year in list(years or [])]
@@ -120,7 +133,12 @@ def create_practice_attempt_record(
     selected_option: str,
     is_correct: bool,
     knowledge_point: str,
-    source_type: str,
+    chapter_id: str = "",
+    topic_id: str = "",
+    concept_id: str = "",
+    concept_name: str = "",
+    concept_mapping_status: str = "",
+    source_type: str = "ai_generated",
 ) -> PracticeAttemptRecord:
     with session_scope() as session:
         attempt = PracticeAttemptModel(
@@ -133,8 +151,61 @@ def create_practice_attempt_record(
             selected_option=selected_option.strip().upper()[:1],
             is_correct=bool(is_correct),
             knowledge_point=knowledge_point,
+            chapter_id=chapter_id,
+            topic_id=topic_id,
+            concept_id=concept_id,
+            concept_name=concept_name,
+            concept_mapping_status=concept_mapping_status,
             source_type=source_type or "ai_generated",
         )
         session.add(attempt)
         session.flush()
         return serialize_practice_attempt_record(attempt)
+
+
+def _concept_payload_for_item(item: dict[str, Any]) -> dict[str, str]:
+    subject_id = str(item.get("subject_id") or "general").strip()
+    explicit_concept_id = str(item.get("concept_id") or item.get("primary_concept_id") or "").strip()
+    registry = get_concept_registry()
+    if explicit_concept_id:
+        concept = registry.get_concept(explicit_concept_id)
+        if concept is not None:
+            return {
+                **concept.metadata(),
+                "concept_mapping_status": "matched",
+            }
+
+    query = "\n".join(
+        str(item.get(key) or "")
+        for key in ("knowledge_point", "concept_name", "question", "stem", "explanation")
+        if str(item.get(key) or "").strip()
+    )
+    match = registry.match_query(query, subject_id=subject_id)
+    return _concept_payload_from_match(match)
+
+
+def _concept_payload_from_match(match: ConceptMatch) -> dict[str, str]:
+    if match.status != "matched":
+        return {
+            "chapter_id": "",
+            "topic_id": "",
+            "concept_id": "",
+            "concept_name": "",
+            "concept_mapping_status": match.status,
+        }
+    concept = get_concept_registry().get_concept(match.concept_id)
+    if concept is None:
+        return {
+            "chapter_id": match.chapter_id or "",
+            "topic_id": match.topic_id or "",
+            "concept_id": match.concept_id or "",
+            "concept_name": match.concept_name or "",
+            "concept_mapping_status": match.status,
+        }
+    return {
+        "chapter_id": concept.chapter_id,
+        "topic_id": concept.topic_id,
+        "concept_id": concept.concept_id,
+        "concept_name": concept.concept_name,
+        "concept_mapping_status": "matched",
+    }

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import ExplanationCard from "./ExplanationCard";
 import MessageProcessPanel from "./MessageProcessPanel";
-import type { Message, MessageProcess } from "@/lib/api";
+import { stripMarkdownArtifacts, type Message, type MessageProcess } from "@/lib/api";
 
 interface ChatWindowProps {
   messages: Message[];
@@ -123,6 +123,8 @@ export default function ChatWindow({
         const isUser = message.role === "user";
         const visibleProcess = processWithAnswerThinking(message);
         const fallbackBadge = fallbackModelBadge(visibleProcess);
+        const plainContent = stripMarkdownArtifacts(message.content || "");
+        const showPlainContent = Boolean(plainContent && !message.explanation);
 
         return (
           <article
@@ -142,7 +144,7 @@ export default function ChatWindow({
                 <div className="space-y-2">
                   <p className="neo-label">你刚刚问</p>
                   <p className="text-sm font-bold leading-relaxed whitespace-pre-wrap">
-                    {message.content}
+                    {plainContent}
                   </p>
                 </div>
               ) : (
@@ -166,13 +168,12 @@ export default function ChatWindow({
                   {visibleProcess && (
                     <MessageProcessPanel
                       process={visibleProcess}
-                      autoOpen={isStreaming && index === messages.length - 1}
                     />
                   )}
 
-                  {message.content && (
+                  {showPlainContent && (
                     <p className="mt-4 text-sm font-bold leading-relaxed whitespace-pre-wrap">
-                      {message.content}
+                      {plainContent}
                     </p>
                   )}
 

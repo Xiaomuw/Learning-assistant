@@ -29,6 +29,133 @@ class SubjectModel(Base):
     )
 
 
+class KbSubjectModel(Base):
+    __tablename__ = "kb_subject"
+
+    subject_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    subject_name: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    metadata_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class KbChapterModel(Base):
+    __tablename__ = "kb_chapter"
+
+    chapter_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    chapter_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class KbTopicModel(Base):
+    __tablename__ = "kb_topic"
+
+    topic_id: Mapped[str] = mapped_column(String(180), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    chapter_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
+    topic_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class KbConceptModel(Base):
+    __tablename__ = "kb_concept"
+
+    concept_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    chapter_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
+    topic_id: Mapped[str] = mapped_column(String(180), index=True, nullable=False)
+    concept_name: Mapped[str] = mapped_column(String(240), index=True, nullable=False, default="")
+    aliases_json: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    prerequisites_json: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    importance: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
+    exam_frequency: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
+    question_types_json: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    metadata_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class KbChunkModel(Base):
+    __tablename__ = "kb_chunk"
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    vector_id: Mapped[str] = mapped_column(String(240), index=True, nullable=False, default="")
+    subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False, default="")
+    subject_name: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    chapter_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False, default="")
+    chapter_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    topic_id: Mapped[str] = mapped_column(String(180), index=True, nullable=False, default="")
+    topic_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    concept_id: Mapped[str] = mapped_column(String(200), index=True, nullable=False, default="")
+    concept_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    source_file: Mapped[str] = mapped_column(String(500), index=True, nullable=False, default="")
+    page_start: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    page_end: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    mapping_status: Mapped[str] = mapped_column(String(30), index=True, nullable=False, default="unmapped")
+    content_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False, default="")
+    content_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    metadata_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        Index("idx_kb_chunk_subject_concept", "subject_id", "concept_id"),
+        Index("idx_kb_chunk_source_status", "source_file", "mapping_status"),
+    )
+
+
 class UserMemoryModel(Base):
     __tablename__ = "user_memories"
 
@@ -51,6 +178,11 @@ class UserKnowledgeStatModel(Base):
     user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     subject_id: Mapped[str] = mapped_column(String(64), primary_key=True, default="general")
     knowledge_point: Mapped[str] = mapped_column(String(160), primary_key=True)
+    chapter_id: Mapped[str] = mapped_column(String(160), nullable=True, default="")
+    topic_id: Mapped[str] = mapped_column(String(180), nullable=True, default="")
+    concept_id: Mapped[str] = mapped_column(String(200), index=True, nullable=True, default="")
+    concept_name: Mapped[str] = mapped_column(String(240), nullable=True, default="")
+    concept_mapping_status: Mapped[str] = mapped_column(String(30), nullable=True, default="")
     exposure_count: Mapped[int] = mapped_column(nullable=False, default=0)
     attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
     correct_count: Mapped[int] = mapped_column(nullable=False, default=0)
@@ -144,6 +276,31 @@ class AuthRefreshTokenModel(Base):
     )
 
 
+class WechatMiniIdentityModel(Base):
+    __tablename__ = "wechat_mini_identities"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    openid: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    unionid: Mapped[str] = mapped_column(String(128), index=True, nullable=False, default="")
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    last_login_at: Mapped[object | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+
 class EmailVerificationChallengeModel(Base):
     __tablename__ = "email_verification_challenges"
 
@@ -213,6 +370,11 @@ class QuestionBankItemModel(Base):
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False, default="general")
     knowledge_point: Mapped[str] = mapped_column(String(120), index=True, nullable=False, default="")
+    chapter_id: Mapped[str] = mapped_column(String(160), nullable=True, default="")
+    topic_id: Mapped[str] = mapped_column(String(180), nullable=True, default="")
+    concept_id: Mapped[str] = mapped_column(String(200), index=True, nullable=True, default="")
+    concept_name: Mapped[str] = mapped_column(String(240), nullable=True, default="")
+    concept_mapping_status: Mapped[str] = mapped_column(String(30), nullable=True, default="")
     stem: Mapped[str] = mapped_column(Text, nullable=False, default="")
     options_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     correct_option: Mapped[str] = mapped_column(String(1), nullable=False, default="A")
@@ -222,6 +384,38 @@ class QuestionBankItemModel(Base):
     source_year: Mapped[int | None] = mapped_column(nullable=True, default=None)
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="基础")
     tags_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class PracticeQuestionModel(Base):
+    __tablename__ = "practice_question"
+
+    question_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False, default="")
+    subject_name: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    chapter_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    topic_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    concept_id: Mapped[str] = mapped_column(String(200), index=True, nullable=False, default="")
+    concept_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    difficulty: Mapped[str] = mapped_column(String(20), index=True, nullable=False, default="medium")
+    stem: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    options_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    answer: Mapped[str] = mapped_column(String(1), nullable=False, default="A")
+    explanation: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    knowledge_points_json: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    common_trap: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    metadata_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    source_file: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -247,6 +441,11 @@ class PracticeAttemptModel(Base):
     selected_option: Mapped[str] = mapped_column(String(1), nullable=False, default="")
     is_correct: Mapped[bool] = mapped_column(nullable=False, default=False)
     knowledge_point: Mapped[str] = mapped_column(String(120), index=True, nullable=False, default="")
+    chapter_id: Mapped[str] = mapped_column(String(160), nullable=True, default="")
+    topic_id: Mapped[str] = mapped_column(String(180), nullable=True, default="")
+    concept_id: Mapped[str] = mapped_column(String(200), index=True, nullable=True, default="")
+    concept_name: Mapped[str] = mapped_column(String(240), nullable=True, default="")
+    concept_mapping_status: Mapped[str] = mapped_column(String(30), nullable=True, default="")
     source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="ai_generated")
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),

@@ -14,6 +14,7 @@ from app.shared.schemas.contracts import (
     PracticeRecommendation,
     RetrievalDiagnostics,
 )
+from app.knowledge.concept_registry import get_concept_registry
 
 MCQ_OPTIONS = {"A", "B", "C", "D"}
 REFERENCE_DOC_TYPES = ["question_bank", "exam_pattern", "chapter", "pdf", "url"]
@@ -83,6 +84,8 @@ def retrieve_answer_references(
         part
         for part in [
             f"知识点：{quiz_item.knowledge_point or '综合'}",
+            f"concept_id：{quiz_item.concept_id}" if quiz_item.concept_id else "",
+            f"规范知识点：{quiz_item.concept_name}" if quiz_item.concept_name else "",
             f"题目：{quiz_item.question}",
             f"用户选择：{selected_option}",
             f"标准解析：{quiz_item.explanation}",
@@ -246,6 +249,10 @@ def _record_mastery_attempt(
     user_id: str,
     subject_id: str,
     knowledge_point: str,
+    chapter_id: str,
+    topic_id: str,
+    concept_id: str,
+    concept_name: str,
     is_correct: bool,
     fallback_score: float,
 ) -> tuple[float, str]:
@@ -254,6 +261,10 @@ def _record_mastery_attempt(
             user_id=user_id,
             subject_id=subject_id,
             knowledge_point=knowledge_point,
+            chapter_id=chapter_id,
+            topic_id=topic_id,
+            concept_id=concept_id,
+            concept_name=concept_name,
             is_correct=is_correct,
         )
     except Exception as exc:
@@ -273,7 +284,9 @@ def evaluate_practice_answer(
     selected_option: str,
 ) -> MasteryEvaluationResult:
     normalized_subject_id = subject_id or "general"
-    knowledge_point = quiz_item.knowledge_point or "综合"
+    concept_payload = _concept_payload_for_quiz_item(quiz_item, subject_id=normalized_subject_id)
+    quiz_item = quiz_item.model_copy(update=concept_payload)
+    knowledge_point = quiz_item.knowledge_point or quiz_item.concept_name or "综合"
     normalization = normalize_answer(selected_option=selected_option, quiz_item=quiz_item)
     is_correct = normalization.normalized_answer == quiz_item.correct_option
     rag_result = retrieve_answer_references(
@@ -297,6 +310,10 @@ def evaluate_practice_answer(
         user_id=user_id,
         subject_id=normalized_subject_id,
         knowledge_point=knowledge_point,
+        chapter_id=quiz_item.chapter_id,
+        topic_id=quiz_item.topic_id,
+        concept_id=quiz_item.concept_id,
+        concept_name=quiz_item.concept_name,
         is_correct=is_correct,
         fallback_score=score,
     )
@@ -316,6 +333,11 @@ def evaluate_practice_answer(
     return MasteryEvaluationResult(
         subject_id=normalized_subject_id,
         knowledge_point=knowledge_point,
+        chapter_id=quiz_item.chapter_id,
+        topic_id=quiz_item.topic_id,
+        concept_id=quiz_item.concept_id,
+        concept_name=quiz_item.concept_name,
+        concept_mapping_status=quiz_item.concept_mapping_status,
         answer_type=normalization.answer_type,
         normalized_answer=normalization.normalized_answer,
         is_correct=is_correct,
@@ -328,3 +350,42 @@ def evaluate_practice_answer(
         retrieval_diagnosis=rag_result.diagnosis.diagnosis,
         reference_doc_count=len(rag_result.docs),
     )
+
+
+def _concept_payload_for_quiz_item(item: PracticeRecommendation, *, subject_id: str) -> dict[str, str]:
+    registry = get_concept_registry()
+    if item.concept_id:
+        concept = registry.get_concept(item.concept_id)
+        if concept is not None:
+            return {
+                "chapter_id": concept.chapter_id,
+                "topic_id": concept.topic_id,
+                "concept_id": concept.concept_id,
+                "concept_name": concept.concept_name,
+                "concept_mapping_status": "matched",
+            }
+    match = registry.match_query(
+        "\n".join(
+            part
+            for part in [item.knowledge_point, item.concept_name, item.question, item.explanation]
+            if str(part or "").strip()
+        ),
+        subject_id=subject_id,
+    )
+    if match.status == "matched" and match.concept_id:
+        concept = registry.get_concept(match.concept_id)
+        if concept is not None:
+            return {
+                "chapter_id": concept.chapter_id,
+                "topic_id": concept.topic_id,
+                "concept_id": concept.concept_id,
+                "concept_name": concept.concept_name,
+                "concept_mapping_status": "matched",
+            }
+    return {
+        "chapter_id": item.chapter_id,
+        "topic_id": item.topic_id,
+        "concept_id": item.concept_id,
+        "concept_name": item.concept_name or item.knowledge_point,
+        "concept_mapping_status": item.concept_mapping_status or match.status,
+    }

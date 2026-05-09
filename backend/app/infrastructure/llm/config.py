@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from pydo import Client
 
 DEFAULT_DO_BASE_URL = "https://inference.do-ai.run/v1"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_CHAT_MODEL = "openai-gpt-4.1"
+DEFAULT_CHAT_MODEL = "deepseek-v4-pro"
 DEFAULT_EMBEDDING_MODEL = "models/gemini-embedding-2"
 DEFAULT_OPENAI_COMPATIBLE_EMBEDDING_MODEL = "text-embedding-3-small"
-DEFAULT_FALLBACK_CHAT_MODEL = "anthropic-claude-3-haiku-20240306"
+DEFAULT_FALLBACK_CHAT_MODEL = "deepseek-v4-flash"
 DEFAULT_NVIDIA_GLM_MODEL = "z-ai/glm4.7"
 DEFAULT_LLM_TIMEOUT_SECONDS = 45.0
 DEFAULT_LLM_MAX_RETRIES = 1
@@ -106,8 +107,12 @@ def get_nvidia_api_key() -> str | None:
     return os.getenv("NVIDIA_API_KEY")
 
 
+def get_deepseek_api_key() -> str | None:
+    return os.getenv("DEEPSEEK_API_KEY") or get_model_access_key()
+
+
 def get_openai_compatible_base_url() -> str:
-    return os.getenv("OPENAI_BASE_URL", DEFAULT_DO_BASE_URL)
+    return os.getenv("OPENAI_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL)
 
 
 def get_embedding_provider() -> str:
@@ -167,6 +172,10 @@ def is_nvidia_chat_model(model_id: str | None) -> bool:
     return normalized == get_nvidia_glm_model().lower() or normalized.startswith("z-ai/glm")
 
 
+def is_deepseek_chat_model(model_id: str | None) -> bool:
+    return (model_id or "").strip().lower().startswith("deepseek-")
+
+
 def get_chat_model_connection(model_id: str | None) -> ChatModelConnection:
     selected_model = (model_id or get_locked_chat_model()).strip() or get_locked_chat_model()
     if is_nvidia_chat_model(selected_model):
@@ -177,16 +186,37 @@ def get_chat_model_connection(model_id: str | None) -> ChatModelConnection:
             provider="NVIDIA",
         )
 
+    if is_deepseek_chat_model(selected_model):
+        return ChatModelConnection(
+            model_id=selected_model,
+            api_key=get_deepseek_api_key(),
+            base_url=get_openai_compatible_base_url(),
+            provider="DeepSeek",
+        )
+
     return ChatModelConnection(
         model_id=selected_model,
         api_key=get_model_access_key(),
         base_url=get_openai_compatible_base_url(),
-        provider="DigitalOcean",
+        provider=_detect_chat_provider(get_openai_compatible_base_url()),
     )
+
+
+def _detect_chat_provider(base_url: str) -> str:
+    url_lower = base_url.lower()
+    if "api.deepseek.com" in url_lower:
+        return "DeepSeek"
+    if "inference.do-ai.run" in url_lower:
+        return "DigitalOcean"
+    if "dashscope" in url_lower:
+        return "DashScope"
+    return "OpenAI-compatible"
 
 
 def _detect_embedding_provider(base_url: str) -> str:
     url_lower = base_url.lower()
+    if "api.deepseek.com" in url_lower:
+        return "DeepSeek"
     if "inference.do-ai.run" in url_lower:
         return "DigitalOcean"
     if "dashscope" in url_lower:
@@ -231,7 +261,16 @@ def get_fallback_embedding_model_connection() -> EmbeddingModelConnection | None
 
 
 def get_known_model_api_keys() -> list[str]:
-    return [key for key in {get_model_access_key(), get_embedding_api_key(), get_nvidia_api_key()} if key]
+    return [
+        key
+        for key in {
+            get_model_access_key(),
+            get_embedding_api_key(),
+            get_deepseek_api_key(),
+            get_nvidia_api_key(),
+        }
+        if key
+    ]
 
 
 def is_digitalocean_inference_endpoint() -> bool:
@@ -240,6 +279,10 @@ def is_digitalocean_inference_endpoint() -> bool:
 
 def is_digitalocean_embedding_endpoint() -> bool:
     return "inference.do-ai.run" in get_embedding_base_url().lower()
+
+
+def is_deepseek_endpoint() -> bool:
+    return "api.deepseek.com" in get_openai_compatible_base_url().lower()
 
 
 def get_embedding_check_ctx_length() -> bool:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -21,6 +22,18 @@ from app.orchestration.graphs import langsmith_eval
 
 
 class GraphEvalRunnerTest(unittest.TestCase):
+    def test_langsmith_eval_import_does_not_load_dotenv(self) -> None:
+        with (
+            patch.dict(os.environ, {"LANGSMITH_TRACING": "false"}, clear=False),
+            patch("dotenv.load_dotenv") as load_dotenv,
+        ):
+            before = os.environ.get("LANGSMITH_TRACING")
+            importlib.reload(langsmith_eval)
+            after = os.environ.get("LANGSMITH_TRACING")
+
+        load_dotenv.assert_not_called()
+        self.assertEqual(after, before)
+
     def test_graph_eval_runner_passes_default_deterministic_cases(self) -> None:
         with patch.dict(os.environ, {"GRAPH_EVAL_LANGSMITH": "false"}, clear=False):
             summary = eval_runner.run_graph_evals()
@@ -62,6 +75,17 @@ class GraphEvalRunnerTest(unittest.TestCase):
         self.assertEqual(summary["reason"], "GRAPH_EVAL_LANGSMITH disabled")
         langsmith_eval.assert_no_sensitive_eval_payload(summary)
 
+    def test_langsmith_eval_remote_run_disabled_does_not_sync_or_create_client(self) -> None:
+        with (
+            patch.dict(os.environ, {"GRAPH_EVAL_LANGSMITH": "false"}, clear=False),
+            patch("app.orchestration.graphs.langsmith_eval.sync_eval_dataset") as sync_eval_dataset,
+        ):
+            summary = langsmith_eval.run_remote_eval()
+
+        self.assertFalse(summary["ran"])
+        self.assertEqual(summary["reason"], "GRAPH_EVAL_LANGSMITH disabled")
+        sync_eval_dataset.assert_not_called()
+
     def test_langsmith_eval_sync_creates_sanitized_dataset_examples(self) -> None:
         fake_client = Mock()
         fake_client.read_dataset.side_effect = RuntimeError("missing")
@@ -94,10 +118,10 @@ class GraphEvalRunnerTest(unittest.TestCase):
         def fake_evaluate(target, *, data, evaluators, client, **kwargs):
             captured["data"] = data
             captured["evaluator_count"] = len(evaluators)
-            output = target({"case_name": "qa_model_only_concept", "graph_type": "qa"})
+            output = target({"case_name": "qa_concept_filtered_retrieval", "graph_type": "qa"})
             captured["output"] = output
             for evaluator in evaluators:
-                score = evaluator(inputs={"case_name": "qa_model_only_concept"}, outputs=output)
+                score = evaluator(inputs={"case_name": "qa_concept_filtered_retrieval"}, outputs=output)
                 self.assertIn("key", score)
             return {"ok": True}
 

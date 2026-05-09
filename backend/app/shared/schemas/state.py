@@ -154,6 +154,7 @@ class AgentState(TypedDict, total=False):
     question: str               # 用户提出的原始问题
     normalized_question: str    # preflight 规范化后的问题，用于 Studio/trace 排障
     request_mode: Literal["sync", "sse"]  # 当前请求入口，用于调试与 tracing 命名
+    thinking_mode: bool        # 本轮是否启用 DeepSeek thinking
     user_style_name: str        # 用户自定义的助手风格名称
     user_style_prompt: str      # 用户自定义的助手说话风格 / 角色提示词
     short_term_messages: list[dict[str, Any]]  # 当前会话最近几轮消息，作为短期记忆

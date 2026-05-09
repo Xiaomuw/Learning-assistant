@@ -21,6 +21,7 @@ import {
   normalizeExplanationPayload,
   normalizeMemoryPayload,
   sendChatSSE,
+  stripMarkdownArtifacts,
   uploadPDFToNotebook,
   type Memory,
   type Message,
@@ -36,10 +37,12 @@ import {
   type QuizRequestResolution,
 } from "@/lib/api";
 import {
+  appendStoredQuiz,
   DEFAULT_NOTEBOOK_ID,
   FALLBACK_NOTEBOOKS,
+  clearStoredActiveChatSession,
   clearStoredChatDraft,
-  clearStoredPracticeState,
+  loadStoredActiveChatSession,
   loadLatestStoredChatDraft,
   loadStoredChatDraft,
   loadStoredMemory,
@@ -48,11 +51,12 @@ import {
   loadStoredSessions,
   mergeStoredChatDraftsWithSessions,
   persistMemory,
-  persistQuiz,
+  persistStoredActiveChatSession,
   persistStoredChatDraft,
   persistStoredModelConfig,
   persistStoredSessions,
   persistStoredNotebookId,
+  setLearningStoreUser,
   type ChatSession,
 } from "@/lib/learning-store";
 
@@ -127,6 +131,8 @@ const PROCESS_STAGE_ORDER: Record<string, number> = {
   teaching: 6,
   tool_decision: 7,
   execution: 8,
+  answer_stream: 8.5,
+  stream_status: 8.75,
   answer: 9,
   error: 10,
 };
@@ -409,6 +415,36 @@ function hasRetrievalStatusPayload(data: Record<string, unknown>) {
   );
 }
 
+function hasStreamStageStatusPayload(data: Record<string, unknown>) {
+  return typeof data.stream_stage === "string" && data.stream_stage.trim().length > 0;
+}
+
+function streamStageKey(data: Record<string, unknown>) {
+  const stage = String(data.stream_stage ?? "");
+  if (stage.includes("tool")) {
+    return "tool_decision";
+  }
+  if (stage.includes("answer")) {
+    return "answer_stream";
+  }
+  if (stage.includes("model")) {
+    return "execution";
+  }
+  return "stream_status";
+}
+
+function buildStreamStageDetail(data: Record<string, unknown>) {
+  const detail = typeof data.detail === "string" ? data.detail.trim() : "";
+  const summary =
+    typeof data.safe_decision_summary === "string"
+      ? data.safe_decision_summary.trim()
+      : "";
+  if (detail && summary) {
+    return `${detail} ${summary}`;
+  }
+  return detail || summary || "学习引擎正在输出安全实时进度。";
+}
+
 function hasContextAuditStatusPayload(data: Record<string, unknown>) {
   return (
     "context_audit" in data ||
@@ -662,17 +698,17 @@ function buildAnswerContent(
   explanation?: Message["explanation"]
 ) {
   if (finalAnswer.trim()) {
-    return finalAnswer.trim();
+    return stripMarkdownArtifacts(finalAnswer);
   }
   const stepContent = (explanation?.steps ?? [])
     .map((item) => item.trim())
     .filter(Boolean)
     .join("\n\n");
   if (stepContent) {
-    return stepContent;
+    return stripMarkdownArtifacts(stepContent);
   }
   if (explanation?.topic?.trim()) {
-    return `我已经围绕「${explanation.topic.trim()}」整理好讲解了。`;
+    return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
   }
   return "讲解已经准备好了。";
 }
@@ -746,6 +782,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [thinkingModeEnabled, setThinkingModeEnabled] = useState(false);
   const [, setMemory] = useState<Memory>(EMPTY_MEMORY);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState(DEFAULT_NOTEBOOK_ID);
@@ -775,8 +812,9 @@ export default function ChatPage() {
     const requestedSessionId = searchParams?.get("session") ?? null;
 
     async function initializePage() {
+      const cachedSessions = mergeStoredChatDraftsWithSessions(loadStoredSessions());
       setMemory(loadStoredMemory());
-      setSessions(mergeStoredChatDraftsWithSessions(loadStoredSessions()));
+      setSessions(cachedSessions);
       setModelConfig(loadStoredModelConfig());
 
       try {
@@ -807,6 +845,64 @@ export default function ChatPage() {
         setSelectedNotebookId(fallbackId);
         persistStoredNotebookId(fallbackId);
 
+        const rememberSession = (sessionId: string, notebookId: string) => {
+          persistStoredActiveChatSession({
+            userId,
+            sessionId,
+            notebookId,
+            updatedAt: Date.now(),
+          });
+        };
+
+        const restoreExistingSession = (
+          availableSessions: ChatSession[],
+          sessionId: string | null | undefined
+        ) => {
+          if (!sessionId) {
+            return false;
+          }
+
+          const session = availableSessions.find((item) => item.id === sessionId);
+          if (!session) {
+            return false;
+          }
+
+          const draft = loadStoredChatDraft(session.id);
+          const sessionNotebookId = resolveNotebookId(
+            remoteNotebooks,
+            draft?.notebookId ?? session.notebookId,
+            fallbackId
+          );
+          setCurrentSessionId(session.id);
+          activeDraftSessionRef.current = session.id;
+          setMessages(draft?.messages ?? session.messages);
+          setSelectedNotebookId(sessionNotebookId);
+          persistStoredNotebookId(sessionNotebookId);
+          rememberSession(session.id, sessionNotebookId);
+          return true;
+        };
+
+        const restoreDraftSession = (draft: ReturnType<typeof loadLatestStoredChatDraft>) => {
+          if (!draft) {
+            return false;
+          }
+
+          const sessionNotebookId = resolveNotebookId(
+            remoteNotebooks,
+            draft.notebookId,
+            fallbackId
+          );
+          setCurrentSessionId(draft.sessionId);
+          activeDraftSessionRef.current = draft.sessionId;
+          setMessages(draft.messages);
+          setSelectedNotebookId(sessionNotebookId);
+          persistStoredNotebookId(sessionNotebookId);
+          rememberSession(draft.sessionId, sessionNotebookId);
+          return true;
+        };
+
+        const activeSession = loadStoredActiveChatSession(userId);
+
         if (remoteMemory) {
           setMemory(remoteMemory);
           persistMemory(remoteMemory);
@@ -817,56 +913,25 @@ export default function ChatPage() {
           setSessions(mergedSessions);
           persistStoredSessions(mergedSessions);
 
-          if (requestedSessionId) {
-            const requestedSession = mergedSessions.find(
-              (session) => session.id === requestedSessionId
+          const latestDraft = loadLatestStoredChatDraft();
+          const restored =
+            restoreExistingSession(mergedSessions, requestedSessionId) ||
+            restoreExistingSession(mergedSessions, activeSession?.sessionId) ||
+            restoreDraftSession(
+              latestDraft &&
+                mergedSessions.some((session) => session.id === latestDraft.sessionId)
+                ? latestDraft
+                : null
             );
 
-            if (requestedSession) {
-              const draft = loadStoredChatDraft(requestedSession.id);
-              const sessionNotebookId = resolveNotebookId(
-                remoteNotebooks,
-                requestedSession.notebookId,
-                fallbackId
-              );
-              setCurrentSessionId(requestedSession.id);
-              activeDraftSessionRef.current = requestedSession.id;
-              setMessages(draft?.messages ?? requestedSession.messages);
-              setSelectedNotebookId(sessionNotebookId);
-              persistStoredNotebookId(sessionNotebookId);
-            }
-          } else {
-            const latestDraft = loadLatestStoredChatDraft();
-            const draftSession = latestDraft
-              ? mergedSessions.find((session) => session.id === latestDraft.sessionId)
-              : null;
-            if (latestDraft && draftSession) {
-              const sessionNotebookId = resolveNotebookId(
-                remoteNotebooks,
-                latestDraft.notebookId,
-                fallbackId
-              );
-              setCurrentSessionId(latestDraft.sessionId);
-              activeDraftSessionRef.current = latestDraft.sessionId;
-              setMessages(latestDraft.messages);
-              setSelectedNotebookId(sessionNotebookId);
-              persistStoredNotebookId(sessionNotebookId);
-            }
+          if (!restored && requestedSessionId) {
+            clearStoredActiveChatSession(userId);
           }
         } else {
           const latestDraft = loadLatestStoredChatDraft();
-          if (latestDraft) {
-            const sessionNotebookId = resolveNotebookId(
-              remoteNotebooks,
-              latestDraft.notebookId,
-              fallbackId
-            );
-            setCurrentSessionId(latestDraft.sessionId);
-            activeDraftSessionRef.current = latestDraft.sessionId;
-            setMessages(latestDraft.messages);
-            setSelectedNotebookId(sessionNotebookId);
-            persistStoredNotebookId(sessionNotebookId);
-          }
+          restoreExistingSession(cachedSessions, requestedSessionId) ||
+            restoreExistingSession(cachedSessions, activeSession?.sessionId) ||
+            restoreDraftSession(latestDraft);
         }
 
         if (remoteModelConfig) {
@@ -924,7 +989,16 @@ export default function ChatPage() {
     sessionId = currentSessionId || activeDraftSessionRef.current,
     notebookId = selectedNotebookId
   ) {
-    if (!user || !sessionId || draftMessages.length === 0) {
+    if (!sessionId) {
+      return;
+    }
+
+    if (draftMessages.length === 0) {
+      clearStoredChatDraft(sessionId);
+      return;
+    }
+
+    if (!user) {
       return;
     }
 
@@ -932,6 +1006,19 @@ export default function ChatPage() {
       sessionId,
       notebookId: resolveNotebookId(notebooks, notebookId),
       messages: draftMessages,
+      updatedAt: Date.now(),
+    });
+  }
+
+  function rememberActiveSession(sessionId: string, notebookId = selectedNotebookId) {
+    if (!user || !sessionId) {
+      return;
+    }
+
+    persistStoredActiveChatSession({
+      userId: user.id,
+      sessionId,
+      notebookId: resolveNotebookId(notebooks, notebookId),
       updatedAt: Date.now(),
     });
   }
@@ -993,6 +1080,9 @@ export default function ChatPage() {
     clearCurrentTransientDraft();
     activeDraftSessionRef.current = "";
     setIsStreaming(false);
+    if (user) {
+      clearStoredActiveChatSession(user.id);
+    }
     const nextNotebookId = resolveNotebookId(notebooks, notebookId);
     setSelectedNotebookId(nextNotebookId);
     persistStoredNotebookId(nextNotebookId);
@@ -1006,6 +1096,10 @@ export default function ChatPage() {
     clearCurrentTransientDraft();
     activeDraftSessionRef.current = "";
     setIsStreaming(false);
+    setLearningStoreUser(user?.id ?? null);
+    if (user) {
+      clearStoredActiveChatSession(user.id);
+    }
     setMessages([]);
     setCurrentSessionId("");
     setShowHistory(false);
@@ -1055,6 +1149,7 @@ export default function ChatPage() {
     activeStreamRef.current = null;
 
     const sessionId = currentSessionId || crypto.randomUUID();
+    const thinkingModeForRequest = thinkingModeEnabled;
     const userMessage: Message = {
       role: "user",
       content: question,
@@ -1065,13 +1160,18 @@ export default function ChatPage() {
       role: "assistant",
       content: "",
       timestamp: Date.now() + 1,
-      process: createInitialProcess(),
+      process: createInitialProcess(
+        thinkingModeForRequest
+          ? "思考模式已启用，正在准备处理。"
+          : "已连接学习引擎，正在准备处理。"
+      ),
     };
 
     if (!currentSessionId) {
       setCurrentSessionId(sessionId);
     }
     activeDraftSessionRef.current = sessionId;
+    rememberActiveSession(sessionId, selectedNotebookId);
 
     setMessages((previous) => {
       const next = [...previous, userMessage, assistantMessage];
@@ -1248,6 +1348,40 @@ export default function ChatPage() {
               break;
             }
 
+            if (hasStreamStageStatusPayload(data)) {
+              updateLastAssistant((message) => {
+                const nextProcess = upsertProcessStage(
+                  message.process,
+                  {
+                    key: streamStageKey(data),
+                    label:
+                      typeof data.stage_label === "string" && data.stage_label.trim()
+                        ? data.stage_label.trim()
+                        : "实时进度",
+                    status:
+                      data.status === "completed" || data.status === "failed"
+                        ? (data.status as "completed" | "failed")
+                        : "running",
+                    detail: buildStreamStageDetail(data),
+                    elapsed:
+                      typeof data.elapsed === "number" ? data.elapsed : undefined,
+                  },
+                  typeof data.stage_label === "string" && data.stage_label.trim()
+                    ? data.stage_label.trim()
+                    : "实时进度",
+                  { completeRunning: data.status === "completed" || data.status === "failed" }
+                );
+                if (typeof data.safe_decision_summary === "string" && data.safe_decision_summary.trim()) {
+                  nextProcess.reasoningSummary = data.safe_decision_summary.trim();
+                }
+                return {
+                  ...message,
+                  process: nextProcess,
+                };
+              });
+              break;
+            }
+
             if (data.heartbeat === true) {
               updateLastAssistant((message) => ({
                 ...message,
@@ -1271,20 +1405,29 @@ export default function ChatPage() {
 
             updateLastAssistant((message) => ({
               ...message,
-              process: upsertProcessStage(
-                message.process,
-                {
-                  key: "status",
-                  label: "准备中",
-                  status: "running",
-                  detail:
-                    typeof data.message === "string"
-                      ? data.message
-                      : "已连接学习引擎，正在准备处理。",
-                },
-                "准备中",
-                { completeRunning: false }
-              ),
+              process: (() => {
+                const nextProcess = upsertProcessStage(
+                  message.process,
+                  {
+                    key: "status",
+                    label: "准备中",
+                    status: "running",
+                    detail:
+                      typeof data.message === "string"
+                        ? data.message
+                        : "已连接学习引擎，正在准备处理。",
+                  },
+                  "准备中",
+                  { completeRunning: false }
+                );
+                if (
+                  typeof data.safe_decision_summary === "string" &&
+                  data.safe_decision_summary.trim()
+                ) {
+                  nextProcess.reasoningSummary = data.safe_decision_summary.trim();
+                }
+                return nextProcess;
+              })(),
             }));
             break;
           }
@@ -1492,7 +1635,7 @@ export default function ChatPage() {
                   status: "running",
                   detail:
                     data.streaming_mode === "token"
-                      ? "正在接收模型流式片段。"
+                      ? "正在接收模型实时回答片段。"
                       : "正在展示节点级回答片段。",
                   elapsed:
                     typeof data.elapsed === "number" ? data.elapsed : undefined,
@@ -1502,7 +1645,9 @@ export default function ChatPage() {
               );
               nextProcess.reasoningSummary =
                 nextProcess.reasoningSummary ||
-                "当前为节点级流式：模型/工具节点完成后立即展示结果，不展示原始思维链。";
+                (data.streaming_mode === "token"
+                  ? "当前为安全实时流式：回答正文逐步展示，处理过程只展示可审计决策摘要，不展示原始隐藏思维链。"
+                  : "当前为节点级流式：模型/工具节点完成后立即展示结果，不展示原始思维链。");
               return {
                 ...message,
                 content: `${message.content || ""}${delta}`,
@@ -1544,17 +1689,17 @@ export default function ChatPage() {
             )
               ? LEGACY_DUPLICATE_QUALITY_GATE_NOTICE
               : finalAnswer;
+            let storedPracticeQueueCount = 0;
 
             if (quizItems.length > 0) {
-              if (quizRequest?.should_switch_topic) {
-                clearStoredPracticeState();
-              }
-              persistQuiz(quizItems, {
+              setLearningStoreUser(user?.id ?? null);
+              const storedQuizList = appendStoredQuiz(quizItems, {
                 topic: quizRequest?.requested_topic || quizRequest?.active_topic || quizRequest?.topic || quizItems[0]?.knowledge_point,
                 subjectId: quizRequest?.subject_id || selectedNotebookId,
                 sessionId,
                 shouldSwitchTopic: Boolean(quizRequest?.should_switch_topic),
               });
+              storedPracticeQueueCount = storedQuizList.length;
             }
 
             updateLastAssistant((message) => {
@@ -1566,7 +1711,7 @@ export default function ChatPage() {
                   status: "completed",
                   detail:
                     quizItems.length > 0
-                      ? `已准备 ${quizItems.length} 道练习题，并同步生成了最终回答。`
+                      ? `新增 ${quizItems.length} 道练习题，当前练习队列共 ${storedPracticeQueueCount || quizItems.length} 道，并同步生成了最终回答。`
                       : quizClarification
                         ? "需要先确认练习方向。"
                         : qualityFailureSummary
@@ -1726,6 +1871,7 @@ export default function ChatPage() {
       {
         notebookId: selectedNotebookId,
         sessionId,
+        thinkingMode: thinkingModeForRequest,
         idleTimeoutMs: 90000,
         maxConnectRetries: 2,
         onRetry: (attempt, maxRetries) => {
@@ -1883,8 +2029,14 @@ export default function ChatPage() {
         <InputBar
           onSend={handleSend}
           onUpload={handleUpload}
-          disabled={isStreaming}
+          inputDisabled={false}
+          sendDisabled={isStreaming}
+          uploadDisabled={isStreaming}
+          isSending={isStreaming}
           isUploading={isUploading}
+          thinkingModeEnabled={thinkingModeEnabled}
+          thinkingModeDisabled={isStreaming}
+          onThinkingModeChange={setThinkingModeEnabled}
           placeholder={`围绕「${selectedNotebook?.name ?? "选择知识库辅助参考"}」开始提问...`}
         />
       </div>
@@ -1909,6 +2061,7 @@ export default function ChatPage() {
           persistStoredNotebookId(sessionNotebookId);
           setCurrentSessionId(session.id);
           activeDraftSessionRef.current = session.id;
+          rememberActiveSession(session.id, sessionNotebookId);
           setMessages(session.messages);
           setShowHistory(false);
         }}

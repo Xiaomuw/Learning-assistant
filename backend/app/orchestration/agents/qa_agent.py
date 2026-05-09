@@ -80,6 +80,7 @@ def qa_agent(state: AgentState) -> dict[str, Any]:
             "web_search_attempted": bool(state.get("web_search_attempted", False)),
             "web_search_used": bool(state.get("web_search_used", False)),
             "web_search_error": str(state.get("web_search_error", "") or ""),
+            "thinking_mode": bool(state.get("thinking_mode", False)),
         },
     )
     request_mode = str(state.get("request_mode", "sync") or "sync").strip().lower()

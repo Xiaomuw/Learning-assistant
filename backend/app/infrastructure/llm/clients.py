@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from app.infrastructure.llm.config import (
     DEFAULT_CHAT_MODEL,
+    ChatModelConnection,
     ensure_model_env_aliases,
     get_chat_model_connection,
     get_embedding_check_ctx_length,
@@ -44,6 +45,7 @@ def validate_chat_model_access(model_id: str) -> tuple[bool, str | None]:
             base_url=connection.base_url,
             timeout=get_llm_timeout_seconds(),
             max_retries=get_llm_max_retries(),
+            **_deepseek_chat_kwargs(connection, thinking_mode=False),
         )
         response = llm.invoke("Reply with OK only.")
         content = response.content if isinstance(response.content, str) else str(response.content)
@@ -76,11 +78,14 @@ def get_chat_llm(
     model_override: str | None = None,
     timeout_seconds: float | None = None,
     max_retries: int | None = None,
+    thinking_mode: bool | None = None,
 ) -> Any:
     """创建统一配置的 ChatOpenAI 实例。"""
     model_id = model_override or get_active_chat_model(default_model)
     connection = get_chat_model_connection(model_id)
     model_profile = get_model_profile(model_id)
+    is_deepseek = connection.provider == "DeepSeek"
+    deepseek_thinking_enabled = bool(thinking_mode) if is_deepseek else False
     llm = ChatOpenAI(
         model=connection.model_id,
         temperature=temperature,
@@ -88,6 +93,7 @@ def get_chat_llm(
         base_url=connection.base_url,
         timeout=timeout_seconds if timeout_seconds is not None else get_llm_timeout_seconds(),
         max_retries=max_retries if max_retries is not None else get_llm_max_retries(),
+        **_deepseek_chat_kwargs(connection, thinking_mode=thinking_mode),
     )
     return llm.with_config(
         {
@@ -100,9 +106,32 @@ def get_chat_llm(
                 "selected_model": model_profile.model_id,
                 "model_provider": model_profile.provider,
                 "model_family": model_profile.family,
+                "deepseek_thinking_mode": deepseek_thinking_enabled,
+                "raw_reasoning_content_logged": False,
             },
         }
     )
+
+
+def _deepseek_chat_kwargs(
+    connection: ChatModelConnection,
+    *,
+    thinking_mode: bool | None,
+) -> dict[str, Any]:
+    if connection.provider != "DeepSeek":
+        return {}
+
+    thinking_enabled = bool(thinking_mode)
+    kwargs: dict[str, Any] = {
+        "extra_body": {
+            "thinking": {
+                "type": "enabled" if thinking_enabled else "disabled",
+            }
+        }
+    }
+    if thinking_enabled:
+        kwargs["reasoning_effort"] = "high"
+    return kwargs
 
 
 def _build_google_embeddings() -> Any:

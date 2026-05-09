@@ -24,9 +24,12 @@ import {
   type QuizItem,
 } from "@/lib/api";
 import {
+  appendStoredQuiz,
   DEFAULT_NOTEBOOK_ID,
   buildQuizSignature,
   clearStoredPracticeState,
+  clearStoredQuiz,
+  getQuizItemNotebookId,
   loadStoredMemory,
   loadStoredPracticeState,
   loadStoredQuiz,
@@ -34,6 +37,7 @@ import {
   persistMemory,
   persistPracticeState,
   persistQuiz,
+  setLearningStoreUser,
   type StoredPracticeState,
 } from "@/lib/learning-store";
 
@@ -47,6 +51,12 @@ interface AttemptFeedback {
   optionRationales: Record<string, string>;
   masteryEvaluation?: MasteryEvaluationResult | null;
   personalizedFeedback?: string;
+}
+
+interface LearningCenterPracticeTarget {
+  subjectId: string;
+  conceptId: string;
+  conceptName: string;
 }
 
 function practicePackFailureMessage(result: {
@@ -88,6 +98,40 @@ function safePracticeHint(hint: string | undefined) {
   return cleaned || "先根据题干关键条件排除明显不符合的选项，再提交作答。";
 }
 
+function countQuizSignatureItems(signature: string | undefined) {
+  if (!signature) {
+    return 0;
+  }
+  return signature.split("|").filter(Boolean).length;
+}
+
+function usablePracticeTopic(value: string | undefined) {
+  const topic = value?.trim();
+  if (!topic || topic === "混合练习") {
+    return "";
+  }
+  return topic;
+}
+
+function parseLearningCenterPracticeTarget(): LearningCenterPracticeTarget | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const conceptId = params.get("concept")?.trim() || "";
+  if (!conceptId) {
+    return null;
+  }
+
+  const conceptName = params.get("concept_name")?.trim() || conceptId;
+  return {
+    subjectId: params.get("subject")?.trim() || DEFAULT_NOTEBOOK_ID,
+    conceptId,
+    conceptName,
+  };
+}
+
 export default function PracticePage() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
@@ -103,8 +147,15 @@ export default function PracticePage() {
   const [packError, setPackError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState("");
   const [currentNotebookId, setCurrentNotebookId] = useState(DEFAULT_NOTEBOOK_ID);
+  const [learningCenterTarget, setLearningCenterTarget] =
+    useState<LearningCenterPracticeTarget | null>(null);
   const [isPracticeCompleted, setIsPracticeCompleted] = useState(false);
   const [practiceCompletedAt, setPracticeCompletedAt] = useState<number | null>(null);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    setLearningCenterTarget(parseLearningCenterPracticeTarget());
+  }, []);
 
   useEffect(() => {
     if (isLoading || !user) {
@@ -138,23 +189,62 @@ export default function PracticePage() {
       const stateTopic = storedState?.topic?.trim() || "";
       const metaSubjectId = quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID;
       const stateSubjectId = storedState?.subjectId || storedState?.notebookId || DEFAULT_NOTEBOOK_ID;
+      const metaTopics = quizMeta?.topics || (metaTopic ? [metaTopic] : []);
+      const metaSubjectIds = quizMeta?.subjectIds || (metaSubjectId ? [metaSubjectId] : []);
+      const metaSessionIds = quizMeta?.sessionIds || (quizMeta?.sessionId ? [quizMeta.sessionId] : []);
       const metaMatchesState =
         !storedState ||
-        ((!metaTopic || !stateTopic || metaTopic === stateTopic) &&
-          (!metaSubjectId || !stateSubjectId || metaSubjectId === stateSubjectId));
-      if (storedState?.quizSignature === quizSignature && metaMatchesState) {
+        ((!metaTopic ||
+          !stateTopic ||
+          metaTopic === stateTopic ||
+          metaTopic === "混合练习" ||
+          metaTopics.includes(stateTopic)) &&
+          (!metaSubjectId ||
+            !stateSubjectId ||
+            metaSubjectId === stateSubjectId ||
+            metaSubjectIds.includes(stateSubjectId)) &&
+          (!storedState.sessionId ||
+            !quizMeta?.sessionId ||
+            storedState.sessionId === quizMeta.sessionId ||
+            metaSessionIds.includes(storedState.sessionId)));
+      const restoredQuizItemCount =
+        storedState?.quizItemCount || countQuizSignatureItems(storedState?.quizSignature);
+      const appendedToStoredQuiz = Boolean(
+        storedState &&
+          restoredQuizItemCount > 0 &&
+          restoredQuizItemCount < nextQuizList.length &&
+          buildQuizSignature(nextQuizList.slice(0, restoredQuizItemCount)) === storedState.quizSignature
+      );
+      if (
+        storedState &&
+        ((storedState.quizSignature === quizSignature && metaMatchesState) ||
+          (appendedToStoredQuiz && metaMatchesState))
+      ) {
+        const shouldJumpToAppendedItems = Boolean(
+          appendedToStoredQuiz &&
+            storedState.isCompleted &&
+            restoredQuizItemCount < nextQuizList.length
+        );
         const restoredIndex = Math.max(
           0,
-          Math.min(storedState.currentIndex, nextQuizList.length - 1)
+          Math.min(
+            shouldJumpToAppendedItems ? restoredQuizItemCount : storedState.currentIndex,
+            nextQuizList.length - 1
+          )
         );
         setCurrentIndex(restoredIndex);
-        setSelectedOption(storedState.selectedOption);
-        setFeedback(storedState.feedback);
-        setShowHint(storedState.showHint);
+        setSelectedOption(shouldJumpToAppendedItems ? null : storedState.selectedOption);
+        setFeedback(shouldJumpToAppendedItems ? null : storedState.feedback);
+        setShowHint(shouldJumpToAppendedItems ? false : storedState.showHint);
         setCurrentSessionId(storedState.sessionId || quizMeta?.sessionId || fallbackSessionId);
-        setCurrentNotebookId(storedState.notebookId || quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID);
-        setIsPracticeCompleted(Boolean(storedState.isCompleted));
-        setPracticeCompletedAt(storedState.completedAt ?? null);
+        setCurrentNotebookId(
+          getQuizItemNotebookId(
+            nextQuizList[restoredIndex],
+            storedState.notebookId || quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID
+          )
+        );
+        setIsPracticeCompleted(shouldJumpToAppendedItems ? false : Boolean(storedState.isCompleted));
+        setPracticeCompletedAt(shouldJumpToAppendedItems ? null : storedState.completedAt ?? null);
       } else {
         if (storedState) {
           clearStoredPracticeState();
@@ -164,7 +254,7 @@ export default function PracticePage() {
         setFeedback(null);
         setShowHint(false);
         setCurrentSessionId(quizMeta?.sessionId || fallbackSessionId);
-        setCurrentNotebookId(quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID);
+        setCurrentNotebookId(getQuizItemNotebookId(nextQuizList[0], quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID));
         setIsPracticeCompleted(false);
         setPracticeCompletedAt(null);
       }
@@ -172,6 +262,7 @@ export default function PracticePage() {
     };
 
     const userId = user.id;
+    setLearningStoreUser(userId);
     const cachedQuiz = loadStoredQuiz();
     setQuizList(cachedQuiz);
 
@@ -209,14 +300,17 @@ export default function PracticePage() {
 
     persistPracticeState({
       quizSignature: buildQuizSignature(quizList),
+      quizItemCount: quizList.length,
       currentIndex,
       selectedOption,
       showHint,
       feedback,
       sessionId: currentSessionId,
-      notebookId: currentNotebookId,
-      subjectId: currentNotebookId,
-      topic: loadStoredQuizMeta()?.topic || quizList[currentIndex]?.knowledge_point || "",
+      notebookId: getQuizItemNotebookId(quizList[currentIndex], currentNotebookId),
+      subjectId: getQuizItemNotebookId(quizList[currentIndex], currentNotebookId),
+      topic:
+        usablePracticeTopic(quizList[currentIndex]?.knowledge_point) ||
+        usablePracticeTopic(loadStoredQuizMeta()?.topic),
       isCompleted: isPracticeCompleted,
       completedAt: practiceCompletedAt,
       updatedAt: Date.now(),
@@ -236,6 +330,7 @@ export default function PracticePage() {
   ]);
 
   const currentQuiz = quizList[currentIndex] ?? null;
+  const currentQuizNotebookId = getQuizItemNotebookId(currentQuiz, currentNotebookId);
   const isLastQuestion = currentIndex >= quizList.length - 1;
   const progressPercent =
     quizList.length > 0 ? Math.round(((currentIndex + 1) / quizList.length) * 100) : 0;
@@ -304,14 +399,17 @@ export default function PracticePage() {
 
     persistPracticeState({
       quizSignature: buildQuizSignature(quizList),
+      quizItemCount: quizList.length,
       currentIndex,
       selectedOption,
       showHint,
       feedback,
       sessionId: currentSessionId,
-      notebookId: currentNotebookId,
-      subjectId: currentNotebookId,
-      topic: loadStoredQuizMeta()?.topic || currentQuiz?.knowledge_point || "",
+      notebookId: currentQuizNotebookId,
+      subjectId: currentQuizNotebookId,
+      topic:
+        usablePracticeTopic(currentQuiz?.knowledge_point) ||
+        usablePracticeTopic(loadStoredQuizMeta()?.topic),
       isCompleted: isPracticeCompleted,
       completedAt: practiceCompletedAt,
       ...overrides,
@@ -338,11 +436,14 @@ export default function PracticePage() {
     setIsSubmitting(true);
     try {
       const submittedOption = selectedOption;
+      const submissionSessionId = currentQuiz.source_session_id || currentSessionId;
+      const quizItemPayload = { ...currentQuiz };
+      delete quizItemPayload.source_session_id;
       const result = await submitPracticeAttempt({
         user_id: user.id,
-        session_id: currentSessionId,
-        notebookId: currentNotebookId,
-        quiz_item: currentQuiz,
+        session_id: submissionSessionId,
+        subject_id: currentQuizNotebookId,
+        quiz_item: quizItemPayload,
         selected_option: submittedOption,
       });
 
@@ -362,14 +463,17 @@ export default function PracticePage() {
       setPracticeCompletedAt(nextCompletedAt);
       persistPracticeState({
         quizSignature: buildQuizSignature(quizList),
+        quizItemCount: quizList.length,
         currentIndex,
         selectedOption: submittedOption,
         showHint,
         feedback: nextFeedback,
-        sessionId: currentSessionId,
-        notebookId: currentNotebookId,
-        subjectId: currentNotebookId,
-        topic: loadStoredQuizMeta()?.topic || currentQuiz?.knowledge_point || "",
+        sessionId: submissionSessionId,
+        notebookId: currentQuizNotebookId,
+        subjectId: currentQuizNotebookId,
+        topic:
+          usablePracticeTopic(currentQuiz?.knowledge_point) ||
+          usablePracticeTopic(loadStoredQuizMeta()?.topic),
         isCompleted: isLastQuestion,
         completedAt: nextCompletedAt,
         updatedAt: Date.now(),
@@ -387,6 +491,96 @@ export default function PracticePage() {
     }
   }
 
+  function resetPracticeView() {
+    setQuizList([]);
+    setCurrentIndex(0);
+    setSelectedOption(null);
+    setShowHint(false);
+    setFeedback(null);
+    setSubmitError("");
+    setPackError("");
+    setCurrentSessionId("");
+    setCurrentNotebookId(DEFAULT_NOTEBOOK_ID);
+    setIsPracticeCompleted(false);
+    setPracticeCompletedAt(null);
+    hasLoadedPracticeStateRef.current = true;
+  }
+
+  function handleConfirmClearPracticePack() {
+    setLearningStoreUser(user?.id ?? null);
+    clearStoredQuiz();
+    clearStoredPracticeState();
+    resetPracticeView();
+    setIsClearConfirmOpen(false);
+  }
+
+  async function handleGenerateLearningCenterPack() {
+    if (!user || !learningCenterTarget || isGeneratingPack) {
+      return;
+    }
+
+    setPackError("");
+    setIsGeneratingPack(true);
+    try {
+      const result = await createPracticePack({
+        user_id: user.id,
+        session_id: currentSessionId,
+        subject_id: learningCenterTarget.subjectId,
+        request_text: `针对「${learningCenterTarget.conceptName}」生成 408 单选题`,
+        current_practice_question: currentQuiz,
+        last_practice_pack: quizList,
+        context: {
+          concept_id: learningCenterTarget.conceptId,
+          concept_name: learningCenterTarget.conceptName,
+          active_topic: learningCenterTarget.conceptName,
+          topic: learningCenterTarget.conceptName,
+        },
+      });
+
+      if (Array.isArray(result.items) && result.items.length > 0) {
+        const subjectId = result.subject_id || learningCenterTarget.subjectId;
+        const nextQuizList = result.items.map((item) => ({
+          ...item,
+          subject_id: item.subject_id || subjectId,
+          notebook_id: item.notebook_id || subjectId,
+          knowledge_point: item.knowledge_point || learningCenterTarget.conceptName,
+          concept_id: item.concept_id || learningCenterTarget.conceptId,
+          concept_name: item.concept_name || learningCenterTarget.conceptName,
+        }));
+        setLearningStoreUser(user.id);
+        clearStoredPracticeState();
+        persistQuiz(nextQuizList, {
+          topic: learningCenterTarget.conceptName,
+          topics: [learningCenterTarget.conceptName],
+          subjectId,
+          sessionId: currentSessionId,
+          shouldSwitchTopic: true,
+        });
+        setQuizList(nextQuizList);
+        setCurrentIndex(0);
+        setSelectedOption(null);
+        setFeedback(null);
+        setShowHint(false);
+        setSubmitError("");
+        setCurrentNotebookId(subjectId);
+        setIsPracticeCompleted(false);
+        setPracticeCompletedAt(null);
+        hasLoadedPracticeStateRef.current = true;
+      } else {
+        setPackError(practicePackFailureMessage(result));
+      }
+    } catch (error) {
+      console.error("学习中心定向出题失败:", error);
+      setPackError(
+        error instanceof Error && error.message
+          ? error.message
+          : "定向出题失败，请稍后重试。"
+      );
+    } finally {
+      setIsGeneratingPack(false);
+    }
+  }
+
   async function handleGenerateMore() {
     if (!user || !currentQuiz || isGeneratingPack) {
       return;
@@ -399,19 +593,20 @@ export default function PracticePage() {
       const practiceState = loadStoredPracticeState();
       const memory = loadStoredMemory();
       const topic =
-        quizMeta?.topic?.trim() ||
-        practiceState?.topic?.trim() ||
-        currentQuiz.knowledge_point?.trim() ||
+        usablePracticeTopic(currentQuiz.knowledge_point) ||
+        usablePracticeTopic(practiceState?.topic) ||
+        usablePracticeTopic(quizMeta?.topic) ||
         knowledgePoints[0]?.trim() ||
         "";
       const currentPracticeQuestion =
         topic && !currentQuiz.knowledge_point?.trim()
           ? { ...currentQuiz, knowledge_point: topic }
           : currentQuiz;
+      const activeNotebookId = getQuizItemNotebookId(currentQuiz, currentNotebookId);
       const result = await createPracticePack({
         user_id: user.id,
         session_id: currentSessionId,
-        subject_id: currentNotebookId,
+        subject_id: activeNotebookId,
         request_text: "AI补题",
         current_practice_question: currentPracticeQuestion,
         last_practice_pack: quizList,
@@ -425,17 +620,22 @@ export default function PracticePage() {
         },
       });
       if (Array.isArray(result.items) && result.items.length > 0) {
-        clearStoredPracticeState();
-        setQuizList(result.items);
-        persistQuiz(result.items, {
+        setLearningStoreUser(user.id);
+        const nextQuizList = appendStoredQuiz(result.items, {
           topic: result.quiz_request.active_topic || result.quiz_request.topic || result.items[0]?.knowledge_point,
-          subjectId: result.quiz_request.subject_id || currentNotebookId,
+          subjectId: result.quiz_request.subject_id || activeNotebookId,
           sessionId: currentSessionId,
           shouldSwitchTopic: true,
         });
-        setCurrentIndex(0);
-        setSelectedOption(null);
-        setFeedback(null);
+        const shouldJumpToNewItems = isPracticeCompleted || isLastQuestion;
+        const nextIndex = shouldJumpToNewItems
+          ? Math.min(quizList.length, Math.max(0, nextQuizList.length - 1))
+          : currentIndex;
+        setQuizList(nextQuizList);
+        setCurrentIndex(nextIndex);
+        setCurrentNotebookId(getQuizItemNotebookId(nextQuizList[nextIndex], activeNotebookId));
+        setSelectedOption(shouldJumpToNewItems ? null : selectedOption);
+        setFeedback(shouldJumpToNewItems ? null : feedback);
         setShowHint(false);
         setIsPracticeCompleted(false);
         setPracticeCompletedAt(null);
@@ -526,9 +726,6 @@ export default function PracticePage() {
           <div>
             <p className="neo-label">Practice Mode</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight">选择题练习</h1>
-            <p className="mt-3 text-sm font-bold leading-relaxed">
-              现在刷题统一改成单选题：作答后会直接给出对错、正确答案和每个选项的解析。
-            </p>
           </div>
 
           <div className="neo-badge -rotate-3 bg-white">
@@ -546,6 +743,39 @@ export default function PracticePage() {
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-4 pb-24">
+        {learningCenterTarget ? (
+          <section className="neo-card-secondary mb-4 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[3px] border-neo-ink bg-white shadow-neo-sm">
+                <Target size={18} strokeWidth={2.8} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="neo-label">Learning Center Target</p>
+                <h2 className="mt-1 break-words text-xl font-black">
+                  {learningCenterTarget.conceptName}
+                </h2>
+                <p className="mt-2 break-words text-sm font-bold leading-relaxed">
+                  来自学习中心的定向练习。点击后才会生成题，不会在页面加载时自动调用。
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleGenerateLearningCenterPack}
+              disabled={isGeneratingPack}
+              className="neo-button mt-4 w-full justify-center disabled:opacity-70"
+            >
+              <Sparkles size={16} strokeWidth={2.8} />
+              {isGeneratingPack ? "正在生成题" : "针对该知识点生成题"}
+            </button>
+            {packError ? (
+              <p className="mt-3 break-words text-sm font-black text-red-700">
+                {packError}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
         {quizList.length === 0 ? (
           <section className="neo-card-secondary animate-stamp-in p-5">
             <p className="neo-label">No Quiz Yet</p>
@@ -602,15 +832,27 @@ export default function PracticePage() {
                 <span className="neo-badge bg-white">{progressPercent}%</span>
               </div>
 
-              <button
-                type="button"
-                onClick={handleGenerateMore}
-                disabled={isGeneratingPack}
-                className="neo-button-secondary mt-4 w-full justify-center disabled:opacity-70"
-              >
-                <Sparkles size={16} strokeWidth={2.8} />
-                {isGeneratingPack ? "正在补题" : "AI 补题"}
-              </button>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleGenerateMore}
+                  disabled={isGeneratingPack}
+                  className="neo-button-secondary w-full justify-center disabled:opacity-70"
+                >
+                  <Sparkles size={16} strokeWidth={2.8} />
+                  {isGeneratingPack ? "正在补题" : "AI 补题"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsClearConfirmOpen(true)}
+                  disabled={isSubmitting || isGeneratingPack}
+                  aria-label="清空当前练习题库"
+                  className="neo-button-secondary w-full justify-center bg-neo-accent disabled:opacity-70"
+                >
+                  <XCircle size={16} strokeWidth={2.8} />
+                  清空题库
+                </button>
+              </div>
               {packError ? (
                 <p className="mt-3 text-sm font-black text-red-700">{packError}</p>
               ) : null}
@@ -934,6 +1176,41 @@ export default function PracticePage() {
       </main>
 
       <BottomNav />
+
+      {isClearConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-practice-pack-title"
+            className="neo-card w-full max-w-md p-5"
+          >
+            <p className="neo-label">Practice Queue</p>
+            <h2 id="clear-practice-pack-title" className="mt-2 text-xl font-black">
+              清空当前练习题库？
+            </h2>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-neo-ink/70">
+              这个操作只会清空当前练习队列和页面进度。已经提交过的做题记录、掌握度和聊天历史都会保留。
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setIsClearConfirmOpen(false)}
+                className="neo-button-ghost w-full justify-center"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearPracticePack}
+                className="neo-button w-full justify-center bg-neo-accent"
+              >
+                确认清空
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

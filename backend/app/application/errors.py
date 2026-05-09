@@ -4,9 +4,10 @@ from __future__ import annotations
 class ApplicationError(Exception):
     status_code = 400
 
-    def __init__(self, detail: str) -> None:
+    def __init__(self, detail: str, *, reason: str | None = None) -> None:
         super().__init__(detail)
         self.detail = detail
+        self.reason = reason
 
 
 class NotFoundError(ApplicationError):

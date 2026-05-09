@@ -17,6 +17,45 @@ from tests.postgres_test_utils import TemporaryPostgresSchema
 
 
 class RepositoryInitTest(unittest.TestCase):
+    def test_latest_quiz_merge_appends_and_dedupes_without_database(self) -> None:
+        os.environ.setdefault(
+            "DATABASE_URL",
+            "postgresql+psycopg://test:test@127.0.0.1:5432/learning_assistant_test",
+        )
+        session_repos = importlib.import_module("app.infrastructure.db.repositories.sessions")
+        merged = session_repos._merge_latest_quiz_items(
+            [
+                {
+                    "question_id": "ai-1",
+                    "question": "栈的特点是什么？",
+                    "options": [{"key": "A", "text": "先进后出"}],
+                    "correct_option": "A",
+                }
+            ],
+            [
+                {
+                    "question_id": "ai-1",
+                    "question": "栈的特点是什么？",
+                    "options": [{"key": "A", "text": "先进后出"}],
+                    "correct_option": "A",
+                },
+                {
+                    "question_id": "ai-2",
+                    "question": "TCP 属于哪一层协议？",
+                    "options": [{"key": "A", "text": "传输层"}],
+                    "correct_option": "A",
+                },
+            ],
+            existing_subject_id="data-structure",
+            incoming_subject_id="computer-network",
+        )
+
+        self.assertEqual([item["question_id"] for item in merged], ["ai-1", "ai-2"])
+        self.assertEqual(merged[0]["subject_id"], "data-structure")
+        self.assertEqual(merged[0]["notebook_id"], "data-structure")
+        self.assertEqual(merged[1]["subject_id"], "computer-network")
+        self.assertEqual(merged[1]["notebook_id"], "computer-network")
+
     def test_database_init_and_core_crud(self) -> None:
         with TemporaryPostgresSchema() as db_schema:
             db_schema.configure_env()
@@ -133,6 +172,68 @@ class RepositoryInitTest(unittest.TestCase):
             latest_sessions = [item.model_dump() for item in session_repos.list_chat_session_records(user_id="user_test", limit=20)]
             self.assertEqual((latest_sessions[0]["latest_quiz"] or [])[0]["question"], "HTTP 默认端口是？")
             self.assertEqual(session["session_memory"]["active_topic"], "HTTP")
+
+            updated_session = session_repos.append_chat_turn_record(
+                user_id="user_test",
+                session_id="session-1",
+                subject_id="computer-network",
+                title="继续出题",
+                user_message={"role": "user", "content": "再出一道计算机网络题"},
+                assistant_message={"role": "assistant", "content": "已追加练习题。"},
+                latest_quiz=[
+                    {
+                        "question_id": "ai-1",
+                        "question": "HTTP 默认端口是？",
+                        "options": [
+                            {"key": "A", "text": "20"},
+                            {"key": "B", "text": "53"},
+                            {"key": "C", "text": "80"},
+                            {"key": "D", "text": "443"},
+                        ],
+                        "correct_option": "C",
+                        "explanation": "HTTP 默认端口是 80。",
+                        "option_rationales": {
+                            "A": "20 是 FTP 数据端口。",
+                            "B": "53 是 DNS 常见端口。",
+                            "C": "80 是 HTTP 默认端口。",
+                            "D": "443 是 HTTPS 默认端口。",
+                        },
+                        "knowledge_point": "HTTP",
+                        "difficulty": "基础",
+                        "source_type": "ai_generated",
+                        "source_name": "",
+                        "source_year": None,
+                    },
+                    {
+                        "question_id": "ai-2",
+                        "question": "DNS 主要用于完成什么任务？",
+                        "options": [
+                            {"key": "A", "text": "域名解析"},
+                            {"key": "B", "text": "磁盘调度"},
+                            {"key": "C", "text": "进程同步"},
+                            {"key": "D", "text": "内存分页"},
+                        ],
+                        "correct_option": "A",
+                        "explanation": "DNS 主要负责把域名解析为 IP 地址。",
+                        "option_rationales": {
+                            "A": "域名解析是 DNS 的核心职责。",
+                            "B": "磁盘调度属于操作系统 I/O 管理。",
+                            "C": "进程同步属于操作系统并发控制。",
+                            "D": "内存分页属于存储管理。",
+                        },
+                        "knowledge_point": "DNS",
+                        "difficulty": "基础",
+                        "source_type": "ai_generated",
+                        "source_name": "",
+                        "source_year": None,
+                    },
+                ],
+                session_memory=session["session_memory"],
+            ).model_dump()
+            merged_quiz = updated_session["latest_quiz"]
+            self.assertEqual([item["question_id"] for item in merged_quiz], ["ai-1", "ai-2"])
+            self.assertEqual(merged_quiz[0]["subject_id"], created["id"])
+            self.assertEqual(merged_quiz[1]["subject_id"], "computer-network")
 
             imported_count = practice_repos.upsert_question_bank_item_records(
                 [

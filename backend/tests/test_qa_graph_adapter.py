@@ -121,7 +121,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn(ToolCapability.WEB_SEARCH.value, requested_capabilities)
         self.assertNotIn("tavily", encoded_requests.lower())
 
-    def test_open_tools_stable_concept_does_not_plan_tools_by_default(self) -> None:
+    def test_open_tools_stable_concept_plans_filtered_retrieval(self) -> None:
         result = build_graph().compile().invoke(
             {
                 "run_id": "run-qa-stable-concept",
@@ -132,7 +132,10 @@ class QAGraphAdapterTest(unittest.TestCase):
             }
         )
 
-        self.assertEqual(result["tool_requests"], [])
+        self.assertEqual([item["capability"] for item in result["tool_requests"]], [ToolCapability.NOTEBOOK_RETRIEVE.value])
+        request_input = result["tool_requests"][0]["input"]
+        self.assertEqual(request_input["subject_id"], "computer-network")
+        self.assertEqual(request_input["concept_id"], "computer-network.application.http-https")
 
     def test_notebook_signal_plans_notebook_retrieve_without_web(self) -> None:
         result = build_graph().compile().invoke(

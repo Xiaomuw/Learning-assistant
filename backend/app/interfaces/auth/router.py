@@ -13,6 +13,7 @@ from app.application.auth.service import (
     change_password as change_password_service,
     complete_registration as complete_registration_service,
     get_current_user_view,
+    login_with_wechat_mini_code as login_with_wechat_mini_code_service,
     login_user as login_user_service,
     logout_user as logout_user_service,
     refresh_user_session as refresh_user_session_service,
@@ -41,6 +42,11 @@ class AuthEnvelope(BaseModel):
     user: AuthUserResponse
 
 
+class AuthTokenEnvelope(AuthEnvelope):
+    access_token: str
+    refresh_token: str
+
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     code: str = Field(min_length=6, max_length=6)
@@ -63,6 +69,19 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class WechatMiniLoginRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=256)
+    display_name: str | None = Field(default=None, max_length=120)
+
+
+class WechatMiniRefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1, max_length=4096)
+
+
+class WechatMiniLogoutRequest(BaseModel):
+    refresh_token: str | None = Field(default=None, max_length=4096)
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=8, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
@@ -81,6 +100,15 @@ def _build_auth_envelope(user: AuthUserView) -> AuthEnvelope:
 def _issue_session_response(response: Response, result: AuthSessionResult) -> AuthEnvelope:
     set_auth_cookies(response, result.access_token, result.refresh_token)
     return _build_auth_envelope(result.user)
+
+
+def _build_token_envelope(result: AuthSessionResult) -> AuthTokenEnvelope:
+    user = _build_auth_envelope(result.user).user
+    return AuthTokenEnvelope(
+        user=user,
+        access_token=result.access_token,
+        refresh_token=result.refresh_token,
+    )
 
 
 @router.post("/auth/register/send-code", response_model=SendRegisterCodeResponse)
@@ -127,6 +155,33 @@ async def login(body: LoginRequest, response: Response):
     except ApplicationError as exc:
         raise to_http_exception(exc) from exc
     return _issue_session_response(response, result)
+
+
+@router.post("/auth/wechat-mini/login", response_model=AuthTokenEnvelope)
+async def wechat_mini_login(body: WechatMiniLoginRequest):
+    try:
+        result = login_with_wechat_mini_code_service(
+            code=body.code,
+            display_name=body.display_name,
+        )
+    except ApplicationError as exc:
+        raise to_http_exception(exc) from exc
+    return _build_token_envelope(result)
+
+
+@router.post("/auth/wechat-mini/refresh", response_model=AuthTokenEnvelope)
+async def wechat_mini_refresh(body: WechatMiniRefreshRequest):
+    try:
+        result = refresh_user_session_service(body.refresh_token)
+    except ApplicationError as exc:
+        raise to_http_exception(exc) from exc
+    return _build_token_envelope(result)
+
+
+@router.post("/auth/wechat-mini/logout")
+async def wechat_mini_logout(body: WechatMiniLogoutRequest):
+    result = logout_user_service(body.refresh_token)
+    return result.model_dump()
 
 
 @router.post("/auth/refresh", response_model=AuthEnvelope)

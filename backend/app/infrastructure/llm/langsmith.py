@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Iterator
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -35,6 +37,31 @@ _RUNTIME_DISABLED = False
 _MAX_TRACE_STRING_CHARS = 500
 _MAX_TRACE_LIST_ITEMS = 2
 _MAX_TRACE_DEPTH = 6
+_FULL_CONTENT_KEYS = {
+    "question",
+    "user_message",
+    "answer",
+    "final_answer",
+    "model_answer",
+    "response",
+    "reasoning_summary",
+    "safe_reasoning_summary",
+    "safe_decision_summary",
+    "stem",
+    "explanation",
+    "selected_option",
+    "correct_option",
+}
+_HIDDEN_REASONING_KEYS = {
+    "reasoning_content",
+    "raw_reasoning",
+    "chain_of_thought",
+    "cot",
+    "raw_cot",
+    "thinking_trace",
+    "internal_reasoning",
+}
+_HIDDEN_REASONING_TYPES = {"reasoning", "thinking", "reasoning_content"}
 
 _SENSITIVE_KEY_PATTERN = re.compile(
     r"(api[_-]?key|access[_-]?key|secret|token|password|authorization|cookie|credential)",
@@ -110,14 +137,14 @@ class SafeTraceRun(NullRun):
             logger.warning(f"⚠️ LangSmith run end 失败，已忽略: {exc}")
 
 
-def _redact_text(value: str) -> str:
+def _redact_text(value: str, *, max_chars: int | None = _MAX_TRACE_STRING_CHARS) -> str:
     redacted = _DB_PASSWORD_PATTERN.sub(r"\g<prefix><redacted>\g<suffix>", value)
     redacted = _TOKEN_PATTERN.sub("<redacted-token>", redacted)
     redacted = _EMAIL_PATTERN.sub("<redacted-email>", redacted)
     redacted = _UUID_PATTERN.sub("<redacted-uuid>", redacted)
-    if len(redacted) > _MAX_TRACE_STRING_CHARS:
-        overflow = len(redacted) - _MAX_TRACE_STRING_CHARS
-        redacted = f"{redacted[:_MAX_TRACE_STRING_CHARS]}... [truncated {overflow} chars]"
+    if max_chars is not None and len(redacted) > max_chars:
+        overflow = len(redacted) - max_chars
+        redacted = f"{redacted[:max_chars]}... [truncated {overflow} chars]"
     return redacted
 
 
@@ -144,6 +171,22 @@ def _summarize_sequence(
     }
 
 
+def _hidden_reasoning_summary(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        char_count = len(value)
+    elif isinstance(value, (list, tuple)):
+        char_count = sum(len(str(item)) for item in value)
+    elif isinstance(value, dict):
+        char_count = sum(len(str(item_value)) for item_value in value.values())
+    else:
+        char_count = len(str(value))
+    return {
+        "redacted": True,
+        "char_count": char_count,
+        "reason": "raw reasoning_content is not sent to LangSmith; use safe reasoning summaries instead",
+    }
+
+
 def sanitize_for_langsmith(
     value: Any,
     *,
@@ -155,15 +198,25 @@ def sanitize_for_langsmith(
         return "<truncated-depth>"
 
     normalized_key = key.lower()
+    if normalized_key in _HIDDEN_REASONING_KEYS:
+        return _hidden_reasoning_summary(value)
     if normalized_key and _SENSITIVE_KEY_PATTERN.search(normalized_key):
         return "<redacted>"
 
     if isinstance(value, str):
+        if normalized_key in _FULL_CONTENT_KEYS:
+            return _redact_text(value, max_chars=None)
         if normalized_key in _LONG_TEXT_KEYS:
             return _summarize_text(value)
         return _redact_text(value)
 
     if isinstance(value, dict):
+        item_type = str(value.get("type") or "").strip().lower()
+        if item_type in _HIDDEN_REASONING_TYPES:
+            return {
+                "type": item_type,
+                **_hidden_reasoning_summary(value),
+            }
         if normalized_key in {"metadata", "guard", "learning_context", "context_audit", "retrieval_diagnosis"}:
             return {
                 str(item_key): sanitize_for_langsmith(item_value, key=str(item_key), depth=depth - 1)
@@ -211,11 +264,28 @@ def _normalize_langsmith_environment() -> None:
     for endpoint_name in ("LANGSMITH_ENDPOINT", "LANGCHAIN_ENDPOINT"):
         if not (os.getenv(endpoint_name) or "").strip():
             os.environ.pop(endpoint_name, None)
-    if _get_bool_env("LANGSMITH_TRACING", default=False) and not (
-        os.getenv("LANGSMITH_API_KEY") or ""
-    ).strip():
+    tracing_enabled = _get_bool_env("LANGSMITH_TRACING", default=False)
+    api_key = (os.getenv("LANGSMITH_API_KEY") or "").strip()
+    endpoint = (os.getenv("LANGSMITH_ENDPOINT") or "").strip()
+    project = (os.getenv("LANGSMITH_PROJECT") or "").strip() or DEFAULT_LANGSMITH_PROJECT
+
+    if not tracing_enabled:
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        return
+
+    if not api_key:
         os.environ.pop("LANGSMITH_TRACING", None)
         os.environ.pop("LANGCHAIN_TRACING_V2", None)
+        return
+
+    # LangChain/LangGraph integrations still read the older LANGCHAIN_* names.
+    # Keep them aligned with the product-level LANGSMITH_* configuration so
+    # automatic child runs land in the same project as our explicit trace_run calls.
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_PROJECT"] = project
+    os.environ["LANGCHAIN_API_KEY"] = api_key
+    if endpoint:
+        os.environ["LANGCHAIN_ENDPOINT"] = endpoint
 
 
 _normalize_langsmith_environment()
@@ -303,6 +373,71 @@ def initialize_langsmith() -> bool:
         f"project={settings.project} | endpoint={settings.endpoint or 'cloud-default'}"
     )
     return True
+
+
+def get_langsmith_health_status() -> dict[str, Any]:
+    """Return a readable LangSmith readiness summary without breaking startup."""
+
+    settings = get_langsmith_settings()
+    endpoint = settings.endpoint or "https://api.smith.langchain.com"
+    base = {
+        "project": settings.project,
+        "endpoint": endpoint,
+        "has_api_key": settings.has_api_key,
+        "sdk_available": settings.sdk_available,
+        "langchain_tracing_v2": os.getenv("LANGCHAIN_TRACING_V2") == "true",
+        "langchain_project": os.getenv("LANGCHAIN_PROJECT") or "",
+        "langchain_endpoint": os.getenv("LANGCHAIN_ENDPOINT") or "",
+    }
+    if not _get_bool_env("LANGSMITH_TRACING", default=False):
+        return {
+            **base,
+            "status": "disabled",
+            "enabled": False,
+            "client_ready": False,
+        }
+    if not settings.sdk_available:
+        return {
+            **base,
+            "status": "sdk_unavailable",
+            "enabled": False,
+            "client_ready": False,
+        }
+    if not settings.has_api_key:
+        return {
+            **base,
+            "status": "missing_api_key",
+            "enabled": False,
+            "client_ready": False,
+        }
+    host = urlparse(endpoint).hostname or endpoint
+    try:
+        socket.getaddrinfo(host, 443)
+    except Exception as exc:  # pragma: no cover - depends on local DNS/network
+        return {
+            **base,
+            "status": "dns_unreachable",
+            "enabled": True,
+            "host": host,
+            "client_ready": False,
+            "error_type": exc.__class__.__name__,
+        }
+    client = get_langsmith_client()
+    if client is None:
+        return {
+            **base,
+            "status": "client_unavailable",
+            "enabled": True,
+            "host": host,
+            "client_ready": False,
+        }
+    return {
+        **base,
+        "status": "client_ready",
+        "enabled": True,
+        "host": host,
+        "client_ready": True,
+    }
 
 
 @contextmanager

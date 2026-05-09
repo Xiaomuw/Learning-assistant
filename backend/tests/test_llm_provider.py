@@ -56,10 +56,74 @@ class LLMProviderTest(unittest.TestCase):
 
         self.assertEqual(
             [item["id"] for item in models],
-            ["openai-gpt-4.1", "anthropic-claude-3-haiku-20240306"],
+            ["deepseek-v4-pro", "anthropic-claude-3-haiku-20240306"],
         )
+        self.assertEqual(models[0]["label"], "DeepSeek-V4-Pro")
+        self.assertEqual(models[0]["provider"], "DeepSeek")
         self.assertEqual(models[1]["label"], "Claude 3 Haiku")
         self.assertEqual(models[1]["provider"], "Anthropic")
+
+    def test_chat_model_connection_routes_deepseek_v4_to_deepseek(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "MODEL_ACCESS_KEY": "deepseek-token",
+                "OPENAI_BASE_URL": "https://api.deepseek.com",
+            },
+            clear=False,
+        ):
+            connection = get_chat_model_connection("deepseek-v4-pro")
+
+        self.assertEqual(connection.model_id, "deepseek-v4-pro")
+        self.assertEqual(connection.api_key, "deepseek-token")
+        self.assertEqual(connection.base_url, "https://api.deepseek.com")
+        self.assertEqual(connection.provider, "DeepSeek")
+
+    def test_deepseek_v4_profile_uses_manual_json_instead_of_native_json_schema(self) -> None:
+        profile = get_model_profile("deepseek-v4-pro")
+
+        self.assertEqual(profile.provider, "DeepSeek")
+        self.assertTrue(profile.supports_tool_calling)
+        self.assertFalse(profile.supports_structured_output)
+
+    def test_get_chat_llm_passes_deepseek_thinking_toggle(self) -> None:
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "MODEL_ACCESS_KEY": "deepseek-token",
+                    "OPENAI_BASE_URL": "https://api.deepseek.com",
+                },
+                clear=False,
+            ),
+            patch("app.infrastructure.llm.clients.ChatOpenAI") as mocked_chat,
+        ):
+            provider.get_chat_llm(
+                default_model="deepseek-v4-pro",
+                temperature=0.2,
+                model_override="deepseek-v4-pro",
+                thinking_mode=False,
+            )
+            disabled_kwargs = mocked_chat.call_args.kwargs
+            mocked_chat.reset_mock()
+            provider.get_chat_llm(
+                default_model="deepseek-v4-pro",
+                temperature=0.2,
+                model_override="deepseek-v4-pro",
+                thinking_mode=True,
+            )
+            enabled_kwargs = mocked_chat.call_args.kwargs
+
+        self.assertEqual(
+            disabled_kwargs["extra_body"],
+            {"thinking": {"type": "disabled"}},
+        )
+        self.assertNotIn("reasoning_effort", disabled_kwargs)
+        self.assertEqual(
+            enabled_kwargs["extra_body"],
+            {"thinking": {"type": "enabled"}},
+        )
+        self.assertEqual(enabled_kwargs["reasoning_effort"], "high")
 
     def test_chat_model_connection_routes_gpt41_to_digitalocean(self) -> None:
         with patch.dict(

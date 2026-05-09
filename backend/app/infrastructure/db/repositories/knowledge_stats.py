@@ -6,6 +6,7 @@ from app.infrastructure.db.database import session_scope
 from app.infrastructure.db.models import UserKnowledgeStatModel
 from app.infrastructure.db.repositories._shared import serialize_knowledge_stat_record, utcnow
 from app.shared.schemas.contracts import KnowledgeMasteryRecord
+from app.knowledge.concept_registry import get_concept_registry
 
 
 def _clamp_score(value: float) -> float:
@@ -83,9 +84,21 @@ def record_knowledge_exposure(
     user_id: str,
     subject_id: str | None,
     knowledge_point: str | None,
+    chapter_id: str | None = None,
+    topic_id: str | None = None,
+    concept_id: str | None = None,
+    concept_name: str | None = None,
     count: int = 1,
 ) -> KnowledgeMasteryRecord | None:
-    point = _normalize_point(knowledge_point)
+    concept_payload = _resolve_concept_payload(
+        subject_id=subject_id,
+        knowledge_point=knowledge_point,
+        chapter_id=chapter_id,
+        topic_id=topic_id,
+        concept_id=concept_id,
+        concept_name=concept_name,
+    )
+    point = _normalize_point(concept_payload["tracking_point"])
     if not user_id or not point:
         return None
     normalized_subject_id = _normalize_subject_id(subject_id)
@@ -97,6 +110,7 @@ def record_knowledge_exposure(
             subject_id=normalized_subject_id,
             knowledge_point=point,
         )
+        _apply_concept_payload(row, concept_payload)
         row.exposure_count = int(row.exposure_count or 0) + max(1, int(count or 1))
         row.last_seen_at = now
         _recalculate(row)
@@ -109,9 +123,21 @@ def record_knowledge_attempt(
     user_id: str,
     subject_id: str | None,
     knowledge_point: str | None,
-    is_correct: bool,
+    chapter_id: str | None = None,
+    topic_id: str | None = None,
+    concept_id: str | None = None,
+    concept_name: str | None = None,
+    is_correct: bool = False,
 ) -> KnowledgeMasteryRecord | None:
-    point = _normalize_point(knowledge_point)
+    concept_payload = _resolve_concept_payload(
+        subject_id=subject_id,
+        knowledge_point=knowledge_point,
+        chapter_id=chapter_id,
+        topic_id=topic_id,
+        concept_id=concept_id,
+        concept_name=concept_name,
+    )
+    point = _normalize_point(concept_payload["tracking_point"])
     if not user_id or not point:
         return None
     normalized_subject_id = _normalize_subject_id(subject_id)
@@ -123,6 +149,7 @@ def record_knowledge_attempt(
             subject_id=normalized_subject_id,
             knowledge_point=point,
         )
+        _apply_concept_payload(row, concept_payload)
         row.attempt_count = int(row.attempt_count or 0) + 1
         if is_correct:
             row.correct_count = int(row.correct_count or 0) + 1
@@ -133,6 +160,76 @@ def record_knowledge_attempt(
         _recalculate(row)
         session.flush()
         return serialize_knowledge_stat_record(row)
+
+
+def _resolve_concept_payload(
+    *,
+    subject_id: str | None,
+    knowledge_point: str | None,
+    chapter_id: str | None = None,
+    topic_id: str | None = None,
+    concept_id: str | None = None,
+    concept_name: str | None = None,
+) -> dict[str, str]:
+    registry = get_concept_registry()
+    explicit_concept_id = _normalize_point(concept_id)
+    if explicit_concept_id:
+        concept = registry.get_concept(explicit_concept_id)
+        if concept is not None:
+            return {
+                "tracking_point": concept.concept_id,
+                "chapter_id": concept.chapter_id,
+                "topic_id": concept.topic_id,
+                "concept_id": concept.concept_id,
+                "concept_name": concept.concept_name,
+                "concept_mapping_status": "matched",
+            }
+        return {
+            "tracking_point": explicit_concept_id,
+            "chapter_id": _normalize_point(chapter_id),
+            "topic_id": _normalize_point(topic_id),
+            "concept_id": explicit_concept_id,
+            "concept_name": _normalize_point(concept_name) or _normalize_point(knowledge_point),
+            "concept_mapping_status": "provided",
+        }
+
+    query = " ".join(
+        value
+        for value in [
+            _normalize_point(concept_name),
+            _normalize_point(knowledge_point),
+        ]
+        if value
+    )
+    match = registry.match_query(query, subject_id=subject_id)
+    if match.status == "matched" and match.concept_id:
+        concept = registry.get_concept(match.concept_id)
+        if concept is not None:
+            return {
+                "tracking_point": concept.concept_id,
+                "chapter_id": concept.chapter_id,
+                "topic_id": concept.topic_id,
+                "concept_id": concept.concept_id,
+                "concept_name": concept.concept_name,
+                "concept_mapping_status": "matched",
+            }
+    fallback_point = _normalize_point(knowledge_point) or _normalize_point(concept_name)
+    return {
+        "tracking_point": fallback_point,
+        "chapter_id": _normalize_point(chapter_id),
+        "topic_id": _normalize_point(topic_id),
+        "concept_id": "",
+        "concept_name": _normalize_point(concept_name) or fallback_point,
+        "concept_mapping_status": match.status,
+    }
+
+
+def _apply_concept_payload(row: UserKnowledgeStatModel, payload: dict[str, str]) -> None:
+    row.chapter_id = payload.get("chapter_id") or ""
+    row.topic_id = payload.get("topic_id") or ""
+    row.concept_id = payload.get("concept_id") or ""
+    row.concept_name = payload.get("concept_name") or ""
+    row.concept_mapping_status = payload.get("concept_mapping_status") or ""
 
 
 def list_knowledge_mastery_records(

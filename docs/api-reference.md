@@ -44,9 +44,14 @@ SSE 流式接口。
   "user_id": "当前登录用户 ID",
   "session_id": "optional-session-id",
   "question": "TCP 和 HTTP 的关系是什么？",
-  "subject_id": "computer-network"
+  "subject_id": "computer-network",
+  "thinking_mode": false
 }
 ```
+
+`thinking_mode` 可选，默认 `false`。设为 `true` 时，本轮 DeepSeek V4 请求启用 thinking；接口仍只返回安全进度摘要和最终回答，不返回原始 `reasoning_content`。
+
+LangSmith tracing 开启后会记录用户原始问题、路由、工具调用、检索摘要、模型选择、最终答案和安全推理摘要。原始 `reasoning_content` / chain-of-thought 会被脱敏，不会写入 LangSmith。
 
 #### SSE 事件类型
 
@@ -92,6 +97,7 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 ### 3.2 POST `/api/chat/sync`
 
 同步接口，一次性返回最终状态摘要。
+请求体与 `/api/chat` 相同，支持可选 `thinking_mode`。
 
 #### 响应示例
 

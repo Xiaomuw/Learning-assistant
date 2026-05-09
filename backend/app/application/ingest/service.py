@@ -15,7 +15,7 @@ from app.application.errors import (
 from app.infrastructure.db.repositories.subjects import get_subject_record
 from app.infrastructure.ingest.pdf import extract_text_from_pdf
 from app.infrastructure.ingest.web import extract_text_from_url
-from app.services.notebook_knowledge_base import ingest_notebook_documents
+from app.services.notebook_knowledge_base import ingest_notebook_documents_with_summary
 from app.shared.schemas.contracts import IngestResult
 from app.shared.schemas.subject import normalize_subject_id
 
@@ -100,6 +100,9 @@ def _build_pdf_ingest_payload(*, filename: str, subject_id: str, pages: list[dic
             "doc_type": "pdf",
             "source": filename,
             "source_id": filename,
+            "source_file": filename,
+            "page_start": page["metadata"].get("page"),
+            "page_end": page["metadata"].get("page"),
             "knowledge_point": "",
             "visibility": "personal",
         }
@@ -125,6 +128,7 @@ def _build_url_ingest_payload(*, subject_id: str, urls: list[str]) -> tuple[list
                     "doc_type": "url",
                     "source": url,
                     "source_id": url,
+                    "source_file": url,
                     "knowledge_point": "",
                     "visibility": "personal",
                 }
@@ -154,7 +158,7 @@ def ingest_pdf_bytes(*, filename: str, content: bytes, subject_id: str, user_id:
             subject_id=subject_id,
             pages=pages,
         )
-        total_chunks = ingest_notebook_documents(
+        ingest_summary = ingest_notebook_documents_with_summary(
             texts=texts,
             metadatas=metadatas,
             subject_id=subject_id,
@@ -163,7 +167,9 @@ def ingest_pdf_bytes(*, filename: str, content: bytes, subject_id: str, user_id:
         return IngestResult(
             filename=filename,
             total_pages=len(pages),
-            total_chunks=total_chunks,
+            total_chunks=int(ingest_summary.inserted_chunks),
+            mapped_chunks=int(ingest_summary.mapped_chunks),
+            unmapped_chunks=int(ingest_summary.unmapped_chunks),
             subject_id=subject_id,
             message=f"上传并入库成功（学科: {subject_id}）",
         )
@@ -185,7 +191,7 @@ def ingest_urls(*, subject_id: str, urls: list[str], user_id: str) -> IngestResu
         texts, metadatas, success_count = _build_url_ingest_payload(subject_id=subject_id, urls=urls)
         if not texts:
             raise ValidationError("所有 URL 解析失败或内容过少")
-        total_chunks = ingest_notebook_documents(
+        ingest_summary = ingest_notebook_documents_with_summary(
             texts=texts,
             metadatas=metadatas,
             subject_id=subject_id,
@@ -194,7 +200,9 @@ def ingest_urls(*, subject_id: str, urls: list[str], user_id: str) -> IngestResu
         return IngestResult(
             total_urls=len(urls),
             successful_urls=success_count,
-            total_chunks=total_chunks,
+            total_chunks=int(ingest_summary.inserted_chunks),
+            mapped_chunks=int(ingest_summary.mapped_chunks),
+            unmapped_chunks=int(ingest_summary.unmapped_chunks),
             subject_id=subject_id,
             message=f"成功抓取 {success_count}/{len(urls)} 个网页",
         )

@@ -19,6 +19,7 @@ from app.infrastructure.llm.config import (
     get_model_switching_status,
     is_model_switching_enabled,
 )
+from app.infrastructure.llm.langsmith import get_langsmith_health_status
 from app.infrastructure.llm.profile import get_model_profile
 from app.infrastructure.llm.provider import validate_chat_model_access
 from app.services.runtime_models import resolve_active_chat_model
@@ -58,6 +59,21 @@ class ModelHealthResponse(BaseModel):
     model_switching_status: str = "development"
     supports_tool_calling: bool = True
     supports_structured_output: bool = True
+
+
+class LangSmithHealthResponse(BaseModel):
+    status: str
+    enabled: bool
+    project: str
+    endpoint: str
+    has_api_key: bool
+    sdk_available: bool
+    client_ready: bool
+    langchain_tracing_v2: bool
+    langchain_project: str = ""
+    langchain_endpoint: str = ""
+    host: str | None = None
+    error_type: str | None = None
 
 
 def _redact_model_error(error_message: str | None) -> str | None:
@@ -125,3 +141,9 @@ async def check_model_health(
         supports_tool_calling=profile.supports_tool_calling,
         supports_structured_output=profile.supports_structured_output,
     )
+
+
+@router.get("/settings/observability/langsmith/health", response_model=LangSmithHealthResponse)
+async def check_langsmith_health(_: AuthenticatedUser = Depends(require_current_user)):
+    """返回脱敏后的 LangSmith tracing 就绪状态。"""
+    return LangSmithHealthResponse(**get_langsmith_health_status())

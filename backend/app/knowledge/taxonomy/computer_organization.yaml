@@ -1,0 +1,113 @@
+subject_id: computer-organization
+subject_name: 计算机组成原理
+chapters:
+  - chapter_id: computer-organization.data-operation
+    chapter_name: 数据表示与运算器
+    topics:
+      - topic_id: computer-organization.data-representation
+        topic_name: 数据表示
+        concepts:
+          - concept_id: computer-organization.data-representation.integer
+            concept_name: 整数表示与补码
+            aliases: [补码, 原码, 反码, 移码, 定点数, 机器数, 真值, 溢出, 符号位]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, concept]
+          - concept_id: computer-organization.data-representation.float
+            concept_name: 浮点数表示
+            aliases: [浮点数, IEEE754, 阶码, 尾数, 规格化, 舍入, 浮点溢出, 表示范围, 精度]
+            prerequisites: [computer-organization.data-representation.integer]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, concept]
+      - topic_id: computer-organization.alu
+        topic_name: 运算器
+        concepts:
+          - concept_id: computer-organization.alu.arithmetic-logic
+            concept_name: 运算器与 ALU
+            aliases: [ALU, 运算器, 加法器, 算术逻辑单元, 标志位, 进位, 溢出判断]
+            prerequisites: [computer-organization.data-representation.integer]
+            importance: medium
+            exam_frequency: medium
+            question_types: [concept, calculation]
+  - chapter_id: computer-organization.memory
+    chapter_name: 存储系统
+    topics:
+      - topic_id: computer-organization.memory.hierarchy
+        topic_name: 存储层次
+        concepts:
+          - concept_id: computer-organization.memory.hierarchy-locality
+            concept_name: 存储层次与局部性原理
+            aliases: [存储层次, 局部性原理, 时间局部性, 空间局部性, 主存, 辅存, 寄存器, 平均访问时间]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [concept, calculation]
+          - concept_id: computer-organization.memory.cache-mapping
+            concept_name: Cache 映射与地址划分
+            aliases: [Cache, 高速缓存, 直接映射, 全相联, 组相联, tag, index, offset, 标记位, 块内偏移]
+            prerequisites: [computer-organization.memory.hierarchy-locality]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, concept]
+          - concept_id: computer-organization.memory.cache-policy
+            concept_name: Cache 替换与写策略
+            aliases: [Cache 替换, LRU, FIFO, 随机替换, 写直达, 写回, 脏位, 命中率, AMAT]
+            prerequisites: [computer-organization.memory.cache-mapping]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, policy]
+  - chapter_id: computer-organization.instruction-cpu
+    chapter_name: 指令系统与 CPU
+    topics:
+      - topic_id: computer-organization.instruction
+        topic_name: 指令系统
+        concepts:
+          - concept_id: computer-organization.instruction.format-addressing
+            concept_name: 指令格式与寻址方式
+            aliases: [指令系统, 指令格式, 操作码, 操作数, 寻址方式, 立即寻址, 直接寻址, 间接寻址, 变址寻址]
+            prerequisites: []
+            importance: high
+            exam_frequency: high
+            question_types: [concept, calculation]
+      - topic_id: computer-organization.cpu
+        topic_name: CPU 数据通路与控制器
+        concepts:
+          - concept_id: computer-organization.cpu.datapath-control
+            concept_name: CPU 数据通路与控制器
+            aliases: [CPU, 数据通路, 控制器, 取指, 译码, 执行, 微操作, 控制信号, PC, IR]
+            prerequisites: [computer-organization.instruction.format-addressing]
+            importance: high
+            exam_frequency: high
+            question_types: [process, concept]
+          - concept_id: computer-organization.cpu.pipeline
+            concept_name: 流水线
+            aliases: [流水线, 指令流水线, 吞吐率, 加速比, 结构相关, 数据相关, 控制相关, 转发, 分支预测, 停顿]
+            prerequisites: [computer-organization.cpu.datapath-control]
+            importance: high
+            exam_frequency: high
+            question_types: [calculation, concept, process]
+  - chapter_id: computer-organization.bus-io
+    chapter_name: 总线与 I/O 系统
+    topics:
+      - topic_id: computer-organization.bus
+        topic_name: 总线
+        concepts:
+          - concept_id: computer-organization.bus.bandwidth-arbitration
+            concept_name: 总线带宽与仲裁
+            aliases: [总线, 总线带宽, 总线仲裁, 同步总线, 异步总线, 数据总线, 地址总线, 控制总线]
+            prerequisites: []
+            importance: medium
+            exam_frequency: medium
+            question_types: [calculation, concept]
+      - topic_id: computer-organization.io
+        topic_name: I/O 系统
+        concepts:
+          - concept_id: computer-organization.io.interrupt-dma
+            concept_name: 中断与 DMA
+            aliases: [I/O 系统, IO 系统, 中断, DMA, 程序查询, 通道, 外设, CPU 参与程度]
+            prerequisites: [computer-organization.bus.bandwidth-arbitration]
+            importance: medium
+            exam_frequency: medium
+            question_types: [comparison, concept]

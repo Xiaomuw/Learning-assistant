@@ -62,7 +62,19 @@ GENERIC_SUBJECT_SUFFIX_TERMS = {
     "课程",
     "题目",
     "题",
+    "单选",
+    "单选题",
+    "选择题",
+    "多选",
+    "多选题",
+    "判断",
+    "判断题",
+    "简答",
+    "简答题",
+    "问答",
+    "问答题",
     "练习",
+    "练习题",
     "测验",
     "测试",
 }
@@ -441,7 +453,7 @@ def _remove_count_and_type_terms(message: str) -> str:
     cleaned = str(message or "")
     cleaned = re.sub(r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"[一两二三四五六七八九十0-9]+\s*道", " ", cleaned)
-    cleaned = re.sub(r"(?:单选题|选择题|多选题|判断题|简答题|问答题|题目|练习题|题|练习)", " ", cleaned)
+    cleaned = re.sub(r"(?:单选题|单选|选择题|选择|多选题|多选|判断题|判断|简答题|简答|问答题|问答|题目|练习题|题|练习)", " ", cleaned)
     return " ".join(cleaned.split()).strip()
 
 
@@ -697,7 +709,7 @@ def _string_list(value: Any) -> list[str]:
 
 def _clean_topic(value: str) -> str:
     topic = re.sub(
-        r"(帮我|请|给我|来|出|生成|做|练习|刷题|题目|题|单选题|多选题|判断题|简答题|难度|中等|简单|困难|基础|几道|一些|点)",
+        r"(帮我|请|给我|来|出|生成|做|练习|刷题|题目|题|单选题|单选|选择题|多选题|多选|判断题|判断|简答题|简答|问答题|问答|难度|中等|简单|困难|基础|几道|一些|点)",
         " ",
         value,
         flags=re.IGNORECASE,

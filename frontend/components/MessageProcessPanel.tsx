@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bot,
   BrainCircuit,
@@ -15,7 +15,6 @@ import type { MessageProcess, MessageProcessStage } from "@/lib/api";
 
 interface MessageProcessPanelProps {
   process: MessageProcess;
-  autoOpen?: boolean;
 }
 
 function getStageIcon(stage: MessageProcessStage) {
@@ -29,8 +28,10 @@ function getStageIcon(stage: MessageProcessStage) {
     case "tool_decision":
       return Wrench;
     case "execution":
+    case "stream_status":
       return Bot;
     case "answer":
+    case "answer_stream":
       return Sparkles;
     default:
       return CircleAlert;
@@ -64,13 +65,8 @@ function fallbackReasonLabel(reason?: string) {
 
 export default function MessageProcessPanel({
   process,
-  autoOpen = false,
 }: MessageProcessPanelProps) {
-  const [isOpen, setIsOpen] = useState(autoOpen);
-
-  useEffect(() => {
-    setIsOpen(autoOpen);
-  }, [autoOpen]);
+  const [isOpen, setIsOpen] = useState(false);
 
   const stageCount = process.stages.length;
   const toolCount = process.toolCalls?.length ?? 0;
@@ -89,6 +85,8 @@ export default function MessageProcessPanel({
       <button
         type="button"
         onClick={() => setIsOpen((value) => !value)}
+        aria-expanded={isOpen}
+        aria-label={isOpen ? "收起处理过程" : "展开处理过程"}
         className="flex w-full items-center justify-between gap-4 border-[3px] border-neo-ink bg-neo-bg px-4 py-3 text-left shadow-neo-sm"
       >
         <div className="min-w-0">

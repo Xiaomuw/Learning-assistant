@@ -144,6 +144,11 @@ def serialize_knowledge_stat_record(row: UserKnowledgeStatModel) -> KnowledgeMas
         user_id=row.user_id,
         subject_id=row.subject_id,
         knowledge_point=row.knowledge_point,
+        chapter_id=row.chapter_id or "",
+        topic_id=row.topic_id or "",
+        concept_id=row.concept_id or "",
+        concept_name=row.concept_name or "",
+        concept_mapping_status=row.concept_mapping_status or "",
         exposure_count=int(row.exposure_count or 0),
         attempt_count=int(row.attempt_count or 0),
         correct_count=int(row.correct_count or 0),
@@ -257,6 +262,11 @@ def serialize_question_bank_item_record(item: QuestionBankItemModel) -> Question
         question_id=item.id,
         subject_id=item.subject_id,
         knowledge_point=item.knowledge_point,
+        chapter_id=getattr(item, "chapter_id", "") or "",
+        topic_id=getattr(item, "topic_id", "") or "",
+        concept_id=getattr(item, "concept_id", "") or "",
+        concept_name=getattr(item, "concept_name", "") or "",
+        concept_mapping_status=getattr(item, "concept_mapping_status", "") or "",
         question=item.stem,
         options=normalize_quiz_options(item.options_json),
         correct_option=item.correct_option,
@@ -282,6 +292,11 @@ def serialize_practice_attempt_record(attempt: PracticeAttemptModel) -> Practice
         selected_option=attempt.selected_option,
         is_correct=bool(attempt.is_correct),
         knowledge_point=attempt.knowledge_point,
+        chapter_id=getattr(attempt, "chapter_id", "") or "",
+        topic_id=getattr(attempt, "topic_id", "") or "",
+        concept_id=getattr(attempt, "concept_id", "") or "",
+        concept_name=getattr(attempt, "concept_name", "") or "",
+        concept_mapping_status=getattr(attempt, "concept_mapping_status", "") or "",
         source_type=attempt.source_type,
         created_at=to_iso8601(attempt.created_at),
     )
@@ -390,7 +405,8 @@ def migrate_legacy_memories(save_memory_fn) -> int:
 
 def ensure_schema_compatibility() -> int:
     inspector = inspect(engine)
-    if "user_profiles" not in inspector.get_table_names():
+    table_names = set(inspector.get_table_names())
+    if "user_profiles" not in table_names:
         return 0
     alter_statements: list[str] = []
     existing_columns = {column["name"] for column in inspector.get_columns("user_profiles")}
@@ -400,6 +416,21 @@ def ensure_schema_compatibility() -> int:
         )
     if "session_memory" not in {column["name"] for column in inspector.get_columns("chat_sessions")}:
         alter_statements.append("ALTER TABLE chat_sessions ADD COLUMN session_memory JSONB")
+    for table_name in ("question_bank_items", "practice_attempts", "user_knowledge_stats"):
+        if table_name not in table_names:
+            continue
+        table_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        for column_name, column_type in (
+            ("chapter_id", "VARCHAR(160)"),
+            ("topic_id", "VARCHAR(180)"),
+            ("concept_id", "VARCHAR(200)"),
+            ("concept_name", "VARCHAR(240)"),
+            ("concept_mapping_status", "VARCHAR(30)"),
+        ):
+            if column_name not in table_columns:
+                alter_statements.append(
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                )
     if not alter_statements:
         return 0
     with engine.begin() as connection:

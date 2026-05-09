@@ -90,6 +90,17 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.question_type, "single_choice")
         self.assertEqual(result.count, 5)
 
+    def test_explicit_data_structure_single_choice_keeps_subject_topic(self) -> None:
+        result = resolve_quiz_request("给我出5道数据结构的单选题", {"last_topic": "HTTP"})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "数据结构与算法")
+        self.assertEqual(result.subject_id, "data-structure")
+        self.assertEqual(result.requested_topic, "数据结构与算法")
+        self.assertEqual(result.question_type, "single_choice")
+        self.assertEqual(result.count, 5)
+        self.assertNotEqual(result.topic, "单选")
+
     def test_english_practice_question_request_extracts_topic_and_count(self) -> None:
         result = resolve_quiz_request("Generate two stack practice questions", {})
 
@@ -160,6 +171,16 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.topic, "计算机网络")
         self.assertEqual(result.subject_id, "computer-network")
         self.assertEqual(result.source, "explicit_user_input")
+
+    def test_explicit_computer_network_single_choice_keeps_subject_topic(self) -> None:
+        result = resolve_quiz_request("再出2道计算机网络的单选题", {"last_topic": "数据结构与算法"})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "计算机网络")
+        self.assertEqual(result.subject_id, "computer-network")
+        self.assertEqual(result.requested_topic, "计算机网络")
+        self.assertEqual(result.question_type, "single_choice")
+        self.assertEqual(result.count, 2)
 
     def test_ai_refill_uses_current_practice_question(self) -> None:
         result = resolve_quiz_request(

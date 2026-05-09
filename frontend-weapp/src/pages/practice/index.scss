@@ -1,0 +1,157 @@
+.practice-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.practice-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.header-button {
+  width: 150px;
+  margin: 0;
+}
+
+.quiz-card,
+.empty-card {
+  padding: 30px;
+}
+
+.empty-title {
+  display: block;
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.empty-desc {
+  display: block;
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 26px;
+  line-height: 1.6;
+}
+
+.quiz-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.knowledge-point {
+  color: #64748b;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.question-text {
+  display: block;
+  margin-top: 28px;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.option-item {
+  display: flex;
+  gap: 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 18px;
+  padding: 22px;
+  background: #ffffff;
+}
+
+.option-item.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.option-item.correct {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.option-item.wrong {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.option-item.dimmed {
+  opacity: 0.58;
+}
+
+.option-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.option-text {
+  flex: 1;
+  font-size: 28px;
+  line-height: 1.5;
+}
+
+.feedback-card {
+  margin-top: 28px;
+  border-radius: 18px;
+  padding: 24px;
+}
+
+.feedback-card.ok {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.feedback-card.bad {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.feedback-title,
+.feedback-answer {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.feedback-text {
+  display: block;
+  margin-top: 12px;
+  font-size: 26px;
+  line-height: 1.6;
+}
+
+.feedback-answer {
+  margin-top: 12px;
+}
+
+.error-text {
+  display: block;
+  margin-top: 20px;
+  color: #dc2626;
+  font-size: 26px;
+}
+
+.action-button {
+  margin-top: 30px;
+}

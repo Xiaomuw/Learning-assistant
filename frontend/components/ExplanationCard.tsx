@@ -3,10 +3,12 @@
 import { useState } from "react";
 import {
   AlertTriangle,
+  BookOpenText,
   ChevronDown,
   Link2,
   type LucideIcon,
 } from "lucide-react";
+import { stripMarkdownArtifacts } from "@/lib/api";
 
 export interface Explanation {
   topic: string;
@@ -82,10 +84,19 @@ export default function ExplanationCard({
   questionType = "concept",
   onSuggestionClick,
 }: ExplanationCardProps) {
-  const mistakes = explanation.mistakes ? [explanation.mistakes] : [];
-  const similar = explanation.similar;
+  const thinking = stripMarkdownArtifacts(explanation.thinking || "");
+  const steps = explanation.steps
+    .map((step) => stripMarkdownArtifacts(step))
+    .filter(Boolean);
+  const mistakes = explanation.mistakes
+    ? [stripMarkdownArtifacts(explanation.mistakes)].filter(Boolean)
+    : [];
+  const similar = explanation.similar
+    .map((item) => stripMarkdownArtifacts(item))
+    .filter(Boolean);
 
   const similarTitle = SIMILAR_TITLE[questionType] ?? "延伸知识点";
+  const hasTeaching = Boolean(thinking || steps.length > 0);
 
   return (
     <div className="space-y-3">
@@ -94,10 +105,43 @@ export default function ExplanationCard({
         <span className="neo-badge -rotate-2 bg-neo-secondary">Topic</span>
         <div className="-rotate-1 border-[3px] border-neo-ink bg-neo-muted px-4 py-2 shadow-neo-sm">
           <p className="text-sm font-black uppercase tracking-[0.14em]">
-            {explanation.topic || "知识点"}
+            {stripMarkdownArtifacts(explanation.topic) || "知识点"}
           </p>
         </div>
       </div>
+
+      {/* Teaching */}
+      {hasTeaching && (
+        <Section
+          title="讲解"
+          icon={BookOpenText}
+          background="bg-white"
+          defaultOpen
+        >
+          <div className="space-y-4">
+            {thinking && (
+              <p className="text-sm font-bold leading-relaxed text-neo-ink">
+                {thinking}
+              </p>
+            )}
+            {steps.length > 0 && (
+              <ol className="space-y-3">
+                {steps.map((step, index) => (
+                  <li
+                    key={`${step}-${index}`}
+                    className="grid grid-cols-[2rem_1fr] gap-2 text-sm font-bold leading-relaxed"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center border-[3px] border-neo-ink bg-neo-muted text-xs font-black shadow-neo-sm">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 pt-1">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </Section>
+      )}
 
       {/* Mistakes */}
       {mistakes.length > 0 && (

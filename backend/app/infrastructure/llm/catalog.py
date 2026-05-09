@@ -27,6 +27,7 @@ MODEL_METADATA_RULES = [
     ("gemini", "Google", "Gemini"),
     ("alibaba-qwen", "Alibaba", "Qwen"),
     ("qwen", "Alibaba", "Qwen"),
+    ("deepseek-v4", "DeepSeek", "V4"),
     ("deepseek", "DeepSeek", "DeepSeek"),
     ("glm", "Zhipu", "GLM"),
     ("kimi", "Moonshot", "Kimi"),
@@ -37,6 +38,8 @@ MODEL_METADATA_RULES = [
 ]
 
 PREFERRED_MODEL_ORDER = [
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
     "openai-gpt-4.1",
     "anthropic-claude-3-haiku-20240306",
     "openai-gpt-5",
@@ -110,6 +113,12 @@ def _prettify_model_label(model_id: str, family: str) -> str:
         return model_id.replace("kimi-", "Kimi-")
     if family == "Llama":
         return model_id.replace("llama", "Llama ")
+    if family == "V4":
+        if model_id == "deepseek-v4-pro":
+            return "DeepSeek-V4-Pro"
+        if model_id == "deepseek-v4-flash":
+            return "DeepSeek-V4-Flash"
+        return model_id.replace("deepseek-v4-", "DeepSeek-V4-")
     if family == "DeepSeek":
         return model_id.replace("deepseek-", "DeepSeek-")
 

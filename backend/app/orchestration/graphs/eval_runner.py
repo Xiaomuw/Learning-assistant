@@ -16,7 +16,7 @@ from app.infrastructure.llm.langsmith import trace_run
 from app.orchestration.graphs.mastery.graph import build_graph as build_mastery_graph
 from app.orchestration.graphs.qa.graph import build_graph as build_qa_graph
 from app.orchestration.graphs.question_generation.graph import build_graph as build_qgen_graph
-from app.shared.schemas.agent_graphs import FinalResponse, GraphType, SourcePolicy
+from app.shared.schemas.agent_graphs import FinalResponse, GraphType, SourcePolicy, ToolCapability
 
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -97,7 +97,7 @@ def main() -> int:
 def _cases() -> list[GraphEvalCase]:
     return [
         GraphEvalCase(
-            name="qa_model_only_concept",
+            name="qa_concept_filtered_retrieval",
             graph_type=GraphType.QA,
             runner=lambda: build_qa_graph().compile().invoke(
                 {
@@ -111,10 +111,10 @@ def _cases() -> list[GraphEvalCase]:
             assertions=[
                 _assert_final_response,
                 _assert_non_empty_answer,
-                _assert_no_tool_requests,
+                _assert_concept_filtered_tool_request,
                 _assert_has_learning_event("question_answered"),
             ],
-            expected_metrics={"non_empty_response": True, "tool_requests": 0},
+            expected_metrics={"non_empty_response": True, "tool_requests": 1, "concept_filtered_retrieval": True},
         ),
         GraphEvalCase(
             name="qa_tool_policy_stable_concept_no_tools",
@@ -333,6 +333,19 @@ def _assert_no_tool_requests(output: dict[str, Any]) -> str | None:
         return "unexpected_tool_requests"
     if list(output.get("tool_results") or []):
         return "unexpected_tool_results"
+    return None
+
+
+def _assert_concept_filtered_tool_request(output: dict[str, Any]) -> str | None:
+    requests = list(output.get("tool_requests") or [])
+    if len(requests) != 1:
+        return "concept_filtered_request_count_mismatch"
+    request = requests[0]
+    if request.get("capability") != ToolCapability.NOTEBOOK_RETRIEVE.value:
+        return "concept_filtered_request_wrong_capability"
+    request_input = request.get("input") if isinstance(request, dict) else {}
+    if not isinstance(request_input, dict) or not request_input.get("subject_id") or not request_input.get("concept_id"):
+        return "concept_filtered_request_missing_filter"
     return None
 
 

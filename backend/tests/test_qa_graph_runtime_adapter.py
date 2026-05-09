@@ -15,7 +15,8 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
-from app.domains.qa.schemas import AgentExecutionResult, AnswerSchema
+from app.domains.qa.runtime import _stream_delta_to_text, create_agent
+from app.domains.qa.schemas import AgentExecutionResult, AgentRequest, AnswerSchema
 from app.orchestration.graphs.qa.adapter import ProductionQARuntimeAdapter
 from app.orchestration.graphs.qa.graph import build_graph
 from app.shared.schemas.agent_graphs import FinalResponse, SourceLevel, SourcePolicy, ToolCapability, ToolStatus
@@ -39,6 +40,41 @@ class _FakeAgent:
 
     def run(self) -> AgentExecutionResult:
         return self._result
+
+
+class _FakeStreamChunk:
+    def __init__(self, content) -> None:
+        self.content = content
+
+
+class _FakeStreamingLLM:
+    def __init__(self, chunks: list[str] | None = None, invoke_text: str = "HTTP 是应用层协议。") -> None:
+        self.chunks = list(chunks or [])
+        self.invoke_text = invoke_text
+
+    def stream(self, _messages):
+        for chunk in self.chunks:
+            yield _FakeStreamChunk(chunk)
+
+    def invoke(self, _messages):
+        return self.invoke_text
+
+
+def _runtime_request(runtime_context: dict | None = None) -> AgentRequest:
+    return AgentRequest(
+        user_id="u1",
+        session_id="s1",
+        subject_id="general",
+        subject_name="通用知识库",
+        subject_description="用于概念问答。",
+        question="什么是 HTTP？",
+        question_type="concept",
+        short_term_context="学生1: 什么是 HTTP？",
+        session_memory_context="当前主主题：HTTP",
+        long_term_context="用户昵称：测试用户",
+        runtime_context=dict(runtime_context or {}),
+        model_name="test-model",
+    )
 
 
 class QAGraphRuntimeAdapterTest(unittest.TestCase):
@@ -111,6 +147,8 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         self.assertEqual(tool_result["provider"], "tavily")
         self.assertEqual(tool_result["capability"], ToolCapability.WEB_SEARCH.value)
         self.assertEqual(tool_result["status"], ToolStatus.SUCCESS.value)
+        self.assertEqual(response.ui_payload["explanation"]["topic"], "HTTP/3")
+        self.assertEqual(response.ui_payload["explanation"]["steps"], ["总结主流浏览器支持情况"])
         self.assertNotIn("raw_output", response.ui_payload)
         self.assertIn("tool_fallback_used", event_types)
         self.assertIn("question_answered", event_types)
@@ -206,6 +244,49 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         self.assertEqual(result["final_response"]["ui_payload"]["primary_model_id"], "llama3.3-70b-instruct")
         self.assertEqual(result["final_response"]["ui_payload"]["fallback_model_id"], "qwen3-coder-flash")
 
+    def test_deterministic_context_streams_plaintext_tokens_when_available(self) -> None:
+        request = _runtime_request({"stream_answer_tokens": True})
+        fake_llm = _FakeStreamingLLM(["HTTP 是", "应用层协议。"])
+
+        with (
+            patch("app.domains.qa.runtime.select_execution_mode", return_value="deterministic_context"),
+            patch("app.domains.qa.runtime.get_chat_llm", return_value=fake_llm),
+        ):
+            result = create_agent(request, state={}, model_profile=_profile()).run()
+
+        self.assertEqual(result.execution_mode, "deterministic_context")
+        self.assertEqual(result.streaming_mode, "token")
+        self.assertEqual(result.streaming_token_count, 2)
+        self.assertFalse(result.streaming_degraded_reason)
+        self.assertEqual(result.final_answer, "HTTP 是应用层协议。")
+
+    def test_deterministic_context_empty_stream_degrades_to_node_streaming(self) -> None:
+        request = _runtime_request({"stream_answer_tokens": True})
+        fake_llm = _FakeStreamingLLM([], invoke_text="HTTP fallback answer")
+
+        with (
+            patch("app.domains.qa.runtime.select_execution_mode", return_value="deterministic_context"),
+            patch("app.domains.qa.runtime.get_chat_llm", return_value=fake_llm),
+        ):
+            result = create_agent(request, state={}, model_profile=_profile()).run()
+
+        self.assertEqual(result.execution_mode, "deterministic_context")
+        self.assertEqual(result.streaming_mode, "node")
+        self.assertEqual(result.streaming_token_count, 0)
+        self.assertEqual(result.streaming_degraded_reason, "provider_stream_returned_no_chunks")
+        self.assertEqual(result.final_answer, "HTTP fallback answer")
+
+    def test_stream_delta_filters_reasoning_content_blocks(self) -> None:
+        chunk = _FakeStreamChunk(
+            [
+                {"type": "reasoning", "text": "hidden chain"},
+                {"type": "thinking", "content": "hidden thought"},
+                {"type": "text", "text": "visible answer"},
+            ]
+        )
+
+        self.assertEqual(_stream_delta_to_text(chunk), "visible answer")
+
     def test_maps_empty_answer_to_safe_contract_error(self) -> None:
         result = self._invoke_with_runtime_result(
             AgentExecutionResult(
@@ -237,7 +318,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         self.assertEqual(result["errors"][0]["code"], "production_qa_runtime_error")
         self.assertIn("暂时不可用", result["final_response"]["answer"])
 
-    def test_stable_concept_with_default_notebook_skips_knowledge_retrieval(self) -> None:
+    def test_stable_concept_with_default_notebook_uses_concept_filtered_retrieval(self) -> None:
         runtime_result = AgentExecutionResult(
             execution_mode="deterministic_context",
             answer=AnswerSchema(
@@ -265,7 +346,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         ):
             result = build_graph(adapter=adapter).compile().invoke(
                 {
-                    "run_id": "run-stable-concept-no-rag",
+                    "run_id": "run-stable-concept-filtered-rag",
                     "user_id": "u1",
                     "thread_id": "s1",
                     "notebook_id": "data-structure",
@@ -275,14 +356,14 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                 }
             )
 
-        self.assertEqual(result["knowledge_routes"], [])
-        self.assertEqual(result["retrieval_skipped_reason"], "stable_concept_model_first")
-        self.assertEqual(result["retrieval_report"]["requested_count"], 0)
-        self.assertEqual(result.get("tool_requests") or [], [])
+        self.assertEqual(len(result["knowledge_routes"]), 1)
+        self.assertEqual(result["knowledge_routes"][0]["subject_id"], "computer-network")
         self.assertEqual(
-            result["final_response"]["ui_payload"]["retrieval_skipped_reason"],
-            "stable_concept_model_first",
+            result["knowledge_routes"][0]["metadata"]["concept_id"],
+            "computer-network.application.http-https",
         )
+        self.assertEqual(result["retrieval_report"]["requested_count"], 1)
+        self.assertEqual(result["tool_requests"][0]["input"]["concept_id"], "computer-network.application.http-https")
 
     def test_explicit_named_knowledge_base_routes_to_matching_canonical_subject(self) -> None:
         runtime_result = AgentExecutionResult(

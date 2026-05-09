@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import DataError, IntegrityError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -140,7 +141,7 @@ class PracticeApiTest(unittest.TestCase):
         self.assertEqual(payload["selected_option"], "A")
         self.assertEqual(payload["correct_option"], "C")
 
-    def test_submit_practice_attempt_returns_clear_error_message(self) -> None:
+    def test_submit_practice_attempt_maps_legacy_constraint_runtime_error_to_400(self) -> None:
         with patch(
             "app.interfaces.api.practice.submit_attempt",
             side_effect=RuntimeError("value too long for type character varying(20)"),
@@ -173,11 +174,54 @@ class PracticeApiTest(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 400)
         detail = response.json()["detail"]
-        self.assertIn("提交作答失败", detail)
-        self.assertIn("重新生成一组题包", detail)
+        self.assertIn("题目数据包含过长或不合法字段", detail)
+        self.assertIn("重新生成题包", detail)
         self.assertNotIn("character varying", detail)
+
+    def test_submit_practice_attempt_maps_sqlalchemy_constraint_error_to_400(self) -> None:
+        for exc in (
+            DataError("INSERT", {}, Exception("value too long for type character varying(20)")),
+            IntegrityError("INSERT", {}, Exception("violates check constraint")),
+        ):
+            with self.subTest(exc=exc.__class__.__name__):
+                with patch(
+                    "app.interfaces.api.practice.submit_attempt",
+                    side_effect=exc,
+                ):
+                    response = self.client.post(
+                        "/api/practice/attempts",
+                        json={
+                            "user_id": "default_user",
+                            "session_id": "session-1",
+                            "subject_id": "general",
+                            "quiz_item": {
+                                "question_id": "ai-1",
+                                "question": "HTTP 默认端口是？",
+                                "options": [
+                                    {"key": "A", "text": "20"},
+                                    {"key": "B", "text": "53"},
+                                    {"key": "C", "text": "80"},
+                                    {"key": "D", "text": "443"},
+                                ],
+                                "correct_option": "C",
+                                "explanation": "HTTP 默认端口是 80。",
+                                "option_rationales": {"C": "正确"},
+                                "knowledge_point": "HTTP",
+                                "difficulty": "基础",
+                                "source_type": "deterministic_adapter",
+                                "source_name": "",
+                                "source_year": None,
+                            },
+                            "selected_option": "A",
+                        },
+                    )
+
+                self.assertEqual(response.status_code, 400)
+                detail = response.json()["detail"]
+                self.assertIn("题目数据包含过长或不合法字段", detail)
+                self.assertNotIn("character varying", detail)
 
     def test_create_practice_pack_uses_current_question_context(self) -> None:
         quiz_request = QuizRequestResolution(

@@ -1,0 +1,157 @@
+<view class="profile-page">
+  <!-- Loading -->
+  <view wx:if="{{isLoading}}" class="center-state">
+    <view class="neo-box state-card">
+      <text class="state-label">Profile</text>
+      <text class="state-title">正在恢复你的个人中心…</text>
+    </view>
+  </view>
+
+  <block wx:else>
+    <!-- Notice Toast -->
+    <view wx:if="{{notice}}" class="notice-bar {{notice.tone === 'success' ? 'notice-success' : (notice.tone === 'error' ? 'notice-error' : 'notice-info')}}">
+      <text class="notice-text">{{notice.text}}</text>
+      <view class="notice-close" bindtap="dismissNotice">✕</view>
+    </view>
+
+    <!-- Header -->
+    <view class="profile-header">
+      <text class="profile-header-title">我的</text>
+    </view>
+
+    <scroll-view scroll-y="true" class="profile-scroll">
+      <!-- User Card -->
+      <view class="neo-box user-card">
+        <view class="avatar-wrap">
+          <text class="avatar-icon">👤</text>
+        </view>
+        <view class="user-info">
+          <text class="user-name">{{profile.display_name || user.display_name || '学习者'}}</text>
+          <text class="user-id">ID: {{user.id}}</text>
+          <text class="user-email">{{user.email}}</text>
+          <text wx:if="{{profile.agent_style_name}}" class="user-style">当前风格：{{profile.agent_style_name}}</text>
+        </view>
+        <view class="neo-btn-sm" bindtap="openEditProfile">✏️ 编辑</view>
+      </view>
+
+      <!-- Stats Row -->
+      <view class="stats-row">
+        <view class="stat-cell stat-muted">
+          <text class="stat-num">{{notebooks.length}}</text>
+          <text class="stat-key">笔记本</text>
+        </view>
+        <view class="stat-cell stat-secondary">
+          <text class="stat-num">{{sessions.length}}</text>
+          <text class="stat-key">对话记录</text>
+        </view>
+      </view>
+
+      <!-- Recommended Practice -->
+      <view class="neo-box section-card">
+        <view class="section-head">
+          <view>
+            <text class="state-label">Recommended Practice</text>
+            <text class="section-title">基于薄弱点的推荐题</text>
+            <text class="section-desc">优先推送历年真题，不够时会自动补 AI 单选题。</text>
+          </view>
+          <view class="badge-num">{{recommendedPractice.length}} 题</view>
+        </view>
+        <view wx:if="{{recommendedPractice.length === 0}}" class="empty-hint">
+          <text>目前还没有可推荐的题目。先去问答页生成题包，或者导入历年真题题库。</text>
+        </view>
+        <block wx:else>
+          <view wx:for="{{recommendedPractice}}" wx:for-index="idx" wx:key="question_id" class="quiz-preview" wx:if="{{idx < 2}}">
+            <view class="quiz-badges">
+              <text class="badge badge-accent">{{item.difficulty}}</text>
+              <text class="badge badge-secondary">{{item.knowledge_point}}</text>
+            </view>
+            <text class="quiz-q">{{item.question}}</text>
+          </view>
+          <view class="neo-btn start-btn" bindtap="startRecommendedPractice">✅ 开始做这组推荐题</view>
+        </block>
+      </view>
+
+      <!-- Notebooks -->
+      <view class="neo-box section-card">
+        <text class="state-label">Knowledge Base</text>
+        <text class="section-title">我的笔记本</text>
+        <view wx:for="{{notebooks}}" wx:key="id" class="notebook-row">
+          <text class="notebook-icon">{{item.icon || '📘'}}</text>
+          <view class="notebook-info">
+            <text class="notebook-name">{{item.name}}</text>
+            <text class="notebook-desc">{{item.description}}</text>
+          </view>
+          <text class="notebook-count">{{item.doc_count}} 份</text>
+        </view>
+        <view wx:if="{{notebooks.length === 0}}" class="empty-hint"><text>暂无笔记本</text></view>
+      </view>
+
+      <!-- Chat History -->
+      <view class="neo-box section-card">
+        <view class="section-head" bindtap="toggleHistoryManager">
+          <view>
+            <text class="state-label">Chat History</text>
+            <text class="section-title">聊天历史</text>
+          </view>
+          <text class="toggle-arrow">{{showHistoryManager ? '▾' : '▸'}}</text>
+        </view>
+        <view wx:if="{{showHistoryManager}}">
+          <view wx:for="{{sessions}}" wx:key="id" class="session-row">
+            <view class="session-info" data-id="{{item.id}}" bindtap="resumeSession">
+              <text class="session-title">{{item.title || '未命名对话'}}</text>
+              <text class="session-meta">{{item.subject_id || 'general'}}</text>
+            </view>
+            <view class="del-btn {{deletingSessionId === item.id ? 'btn-disabled' : ''}}" data-id="{{item.id}}" bindtap="deleteSessionItem">🗑</view>
+          </view>
+          <view wx:if="{{sessions.length === 0}}" class="empty-hint"><text>暂无聊天记录</text></view>
+
+        </view>
+      </view>
+
+      <!-- Security -->
+      <view class="neo-box section-card">
+        <view class="section-head" bindtap="toggleSecuritySettings">
+          <view>
+            <text class="state-label">Security</text>
+            <text class="section-title">账号安全</text>
+          </view>
+          <text class="toggle-arrow">{{showSecuritySettings ? '▾' : '▸'}}</text>
+        </view>
+        <view wx:if="{{showSecuritySettings}}" class="security-form">
+          <view class="field-group">
+            <view class="field-label">当前密码</view>
+            <input class="neo-input" type="password" password="true" placeholder="输入当前密码" data-field="currentPassword" bindinput="onPasswordInput" value="{{currentPassword}}"/>
+          </view>
+          <view class="field-group">
+            <view class="field-label">新密码</view>
+            <input class="neo-input" type="password" password="true" placeholder="至少 8 位" data-field="newPassword" bindinput="onPasswordInput" value="{{newPassword}}"/>
+          </view>
+          <view class="field-group">
+            <view class="field-label">确认新密码</view>
+            <input class="neo-input" type="password" password="true" placeholder="再次输入新密码" data-field="confirmNewPassword" bindinput="onPasswordInput" value="{{confirmNewPassword}}"/>
+          </view>
+          <view class="neo-btn save-btn {{isChangingPassword ? 'btn-disabled' : ''}}" bindtap="handleChangePassword">
+            <text>{{isChangingPassword ? '修改中…' : '修改密码'}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- Logout -->
+      <view class="neo-btn logout-btn" bindtap="handleLogout">退出登录</view>
+    </scroll-view>
+
+    <!-- Edit Profile Modal -->
+    <view wx:if="{{showEditProfile}}" class="modal-overlay">
+      <view class="modal-card neo-box">
+        <text class="modal-title">修改昵称</text>
+        <input class="neo-input" type="text" placeholder="请输入新昵称" value="{{draftDisplayName}}" bindinput="onDraftNameInput" maxlength="120"/>
+        <view class="modal-actions">
+          <view class="neo-btn modal-cancel-btn" bindtap="closeEditProfile">取消</view>
+          <view class="neo-btn modal-save-btn {{isSavingDisplayName ? 'btn-disabled' : ''}}" bindtap="saveDisplayName">
+            <text>{{isSavingDisplayName ? '保存中…' : '保存'}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

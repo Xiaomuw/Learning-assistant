@@ -15,13 +15,13 @@ services:
     ports:
       - "5433:5432"
     environment:
-      - POSTGRES_DB=learning_assistant
-      - POSTGRES_USER=learning_user
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - POSTGRES_DB=${POSTGRES_DB:-learning_assistant}
+      - POSTGRES_USER=${POSTGRES_USER:-learning_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-learning_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U learning_user -d learning_assistant"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -37,8 +37,8 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql+psycopg://learning_user:${POSTGRES_PASSWORD:-}@postgres:5432/learning_assistant
-      - LANGGRAPH_POSTGRES_URL=postgresql://learning_user:${POSTGRES_PASSWORD:-}@postgres:5432/learning_assistant
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-learning_user}:${POSTGRES_PASSWORD:-learning_password}@postgres:5432/${POSTGRES_DB:-learning_assistant}
+      - LANGGRAPH_POSTGRES_URL=postgresql://${POSTGRES_USER:-learning_user}:${POSTGRES_PASSWORD:-learning_password}@postgres:5432/${POSTGRES_DB:-learning_assistant}
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
       - APP_ENV=production

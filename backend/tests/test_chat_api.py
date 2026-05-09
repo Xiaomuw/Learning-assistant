@@ -24,6 +24,7 @@ os.environ.setdefault(
 import app.interfaces.api.chat as chat_module
 from app.interfaces.api.chat import ChatRequest, router as chat_router
 from app.application.chat import messages as chat_messages
+from app.application.chat.orchestrator_runtime import _chat_state_from_orchestrator_result
 from app.application.chat import service as chat_service
 from app.application.chat import state_builder as chat_state_builder
 from app.interfaces.auth.dependencies import require_current_user
@@ -68,6 +69,24 @@ class _CloseGuardedStream:
         if not self.pending_task.done():
             raise RuntimeError("aclose(): asynchronous generator is already running")
         self.closed = True
+
+
+class _FakeStreamChunk:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _FakeStreamingLLM:
+    def __init__(self, chunks: list[str], invoke_text: str = "HTTP fallback answer") -> None:
+        self.chunks = chunks
+        self.invoke_text = invoke_text
+
+    def stream(self, _messages):
+        for chunk in self.chunks:
+            yield _FakeStreamChunk(chunk)
+
+    def invoke(self, _messages):
+        return self.invoke_text
 
 
 class ChatApiTest(unittest.TestCase):
@@ -244,6 +263,61 @@ class ChatApiTest(unittest.TestCase):
         _, kwargs = orchestrator.call_args
         self.assertEqual(kwargs["request_mode"], "sync")
 
+    def test_orchestrator_chat_state_preserves_structured_explanation(self) -> None:
+        state = _chat_state_from_orchestrator_result(
+            initial_state={
+                "user_id": "default_user",
+                "session_id": "session-structured-explanation",
+                "question": "什么是 HTTP？",
+                "subject_id": "general",
+            },
+            graph_result={
+                "intent_decision": {"intent": "concept_explain", "target_graph_type": "qa"},
+                "final_response": {
+                    "answer": "HTTP 是应用层协议。",
+                    "source_level": "model",
+                    "concepts": [{"concept_id": "http", "name": "HTTP", "confidence": 0.8, "source": "test"}],
+                    "coach_actions": ["explain_concept"],
+                    "ui_payload": {
+                        "reasoning_summary": "模型直接回答。",
+                        "explanation": {
+                            "topic": "HTTP",
+                            "thinking": "先讲定位，再讲请求响应。",
+                            "steps": ["客户端发送请求。", "服务器返回响应。"],
+                            "mistakes": "不要把 HTTP 当成传输层协议。",
+                            "similar": ["HTTPS"],
+                        },
+                    },
+                },
+            },
+            request_mode="sync",
+            latency_ms=12,
+        )
+
+        self.assertEqual(state["explanation"]["steps"], ["客户端发送请求。", "服务器返回响应。"])
+        self.assertNotEqual(state["explanation"]["steps"], ["explain_concept"])
+
+    def test_run_chat_sync_propagates_thinking_mode_to_initial_state(self) -> None:
+        orchestrator_state = {
+            "question_type": "concept",
+            "route": "explain",
+            "explanation": {"topic": "HTTP", "thinking": "HTTP 是应用层协议。", "steps": [], "mistakes": "", "similar": []},
+            "final_answer": "HTTP 是应用层协议。",
+            "quiz_items": [],
+            "memory": {},
+        }
+        with patch("app.application.chat.service.run_orchestrator_chat", return_value=orchestrator_state) as orchestrator:
+            chat_service.run_chat_sync(
+                user_id="default_user",
+                session_id="session-thinking",
+                question="什么是 HTTP？",
+                subject_id="general",
+                thinking_mode=True,
+            )
+
+        initial_state = orchestrator.call_args.args[0]
+        self.assertTrue(initial_state["thinking_mode"])
+
     def test_run_chat_sync_propagates_quiz_clarification_payload(self) -> None:
         quiz_request = {
             "is_quiz_request": True,
@@ -312,6 +386,24 @@ class ChatApiTest(unittest.TestCase):
         self.assertIn("event: done", body)
         self.assertIn(json.dumps({"question_type": "smalltalk", "elapsed": 0.01}, ensure_ascii=False), body)
         self.assertIn('{"question_type": "smalltalk", "explanation":', body)
+
+    def test_chat_sse_passes_thinking_mode_to_stream_chat(self) -> None:
+        with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_stream_workflow) as stream_chat:
+            with self.client.stream(
+                "POST",
+                "/api/chat",
+                json={
+                    "user_id": "default_user",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                    "thinking_mode": True,
+                },
+            ) as response:
+                body = "".join(chunk for chunk in response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('"thinking_mode": true', body)
+        self.assertTrue(stream_chat.call_args.kwargs["thinking_mode"])
 
     def test_chat_sse_emits_heartbeat_during_slow_processing(self) -> None:
         with patch.object(chat_module, "CHAT_HEARTBEAT_SECONDS", 0.001):
@@ -404,11 +496,27 @@ class ChatApiTest(unittest.TestCase):
 
         stream_chunks = [
             {"node": "router", "state_update": {"question_type": "concept", "route": "explain"}, "elapsed": 0.0},
-            {"node": "answer_delta", "state_update": {"delta": "HTTP 是", "streaming_mode": "node"}, "elapsed": 0.01},
-            {"node": "answer_delta", "state_update": {"delta": "应用层协议。", "streaming_mode": "node"}, "elapsed": 0.02},
+            {
+                "node": "answer_delta",
+                "state_update": {
+                    "delta": "HTTP 是",
+                    "streaming_mode": "token",
+                    "is_synthetic_delta": False,
+                },
+                "elapsed": 0.01,
+            },
+            {
+                "node": "answer_delta",
+                "state_update": {
+                    "delta": "应用层协议。",
+                    "streaming_mode": "token",
+                    "is_synthetic_delta": False,
+                },
+                "elapsed": 0.02,
+            },
             {
                 "node": "qa_agent_node",
-                "state_update": {"final_answer": "HTTP 是应用层协议。", "streaming_mode": "node"},
+                "state_update": {"final_answer": "HTTP 是应用层协议。", "streaming_mode": "token"},
                 "elapsed": 0.03,
             },
             {
@@ -431,6 +539,84 @@ class ChatApiTest(unittest.TestCase):
             chunks = asyncio.run(_collect_events())
 
         self.assertEqual([chunk["node"] for chunk in chunks[:3]], ["router", "answer_delta", "answer_delta"])
+        self.assertEqual(chunks[1]["state_update"]["streaming_mode"], "token")
+        self.assertFalse(chunks[1]["state_update"]["is_synthetic_delta"])
+
+    def test_stream_chat_deterministic_context_emits_real_token_delta(self) -> None:
+        async def _collect_events():
+            chunks = []
+            async for chunk in chat_service.stream_chat(
+                user_id="default_user",
+                session_id="session-deterministic-stream",
+                question="什么是 HTTP？",
+                subject_id="general",
+            ):
+                chunks.append(chunk)
+            return chunks
+
+        fake_llm = _FakeStreamingLLM(["HTTP 是", "应用层协议。"])
+        with (
+            patch("app.application.chat.orchestrator_runtime.is_graph_facts_enabled", return_value=False),
+            patch("app.persistence.repositories.graph_facts.is_graph_facts_enabled", return_value=False),
+            patch("app.domains.qa.runtime.select_execution_mode", return_value="deterministic_context"),
+            patch("app.domains.qa.runtime.get_chat_llm", return_value=fake_llm),
+        ):
+            chunks = asyncio.run(_collect_events())
+
+        delta_chunks = [chunk for chunk in chunks if chunk["node"] == "answer_delta"]
+        self.assertGreaterEqual(len(delta_chunks), 2)
+        self.assertEqual(delta_chunks[0]["state_update"]["streaming_mode"], "token")
+        self.assertFalse(delta_chunks[0]["state_update"]["is_synthetic_delta"])
+        self.assertIn("qa_agent_node", [chunk["node"] for chunk in chunks])
+
+    def test_chat_sse_emits_safe_stream_status_and_real_answer_delta(self) -> None:
+        async def _fake_token_stream(**_kwargs):
+            yield {
+                "node": "stream_status",
+                "state_update": {
+                    "stream_stage": "model_start",
+                    "stage_label": "模型执行",
+                    "detail": "模型已开始生成回答。",
+                    "safe_decision_summary": "本轮直接回答，不展示原始隐藏思维链。",
+                    "status": "running",
+                    "streaming_mode": "token",
+                },
+                "elapsed": 0.01,
+            }
+            yield {
+                "node": "answer_delta",
+                "state_update": {
+                    "delta": "HTTP 是",
+                    "streaming_mode": "token",
+                    "is_synthetic_delta": False,
+                },
+                "elapsed": 0.02,
+            }
+            yield {
+                "node": "qa_agent_node",
+                "state_update": {
+                    "final_answer": "HTTP 是应用层协议。",
+                    "streaming_mode": "token",
+                    "reasoning_summary": "安全决策摘要",
+                },
+                "elapsed": 0.03,
+            }
+
+        with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_token_stream):
+            with self.client.stream(
+                "POST",
+                "/api/chat",
+                json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
+            ) as response:
+                body = "".join(chunk for chunk in response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: status", body)
+        self.assertIn('"safe_decision_summary": "本轮直接回答，不展示原始隐藏思维链。"', body)
+        self.assertIn("event: answer_delta", body)
+        self.assertIn('"streaming_mode": "token"', body)
+        self.assertIn('"is_synthetic_delta": false', body)
+        self.assertNotIn("hidden_reasoning", body)
 
     def test_chat_sse_emits_readable_error_and_closes_on_exception(self) -> None:
         with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_stream_failure):

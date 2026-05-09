@@ -11,14 +11,20 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import DataError, IntegrityError, StatementError
 
 from app.application.practice.pack_service import create_pack_from_request
 from app.application.practice.service import get_recommendations, submit_attempt
+from app.infrastructure.llm.langsmith import trace_run
 from app.interfaces.auth.dependencies import AuthenticatedUser, require_current_user, verify_user_access
 from app.shared.schemas.contracts import PracticeRecommendation
 from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
 
 router = APIRouter()
+
+PRACTICE_ATTEMPT_CONSTRAINT_DETAIL = (
+    "题目数据包含过长或不合法字段，请重新生成题包后再作答。"
+)
 
 
 class PracticeRecommendationsResponse(BaseModel):
@@ -66,6 +72,24 @@ class PracticePackResponse(BaseModel):
     message: str = ""
 
 
+def _is_practice_attempt_constraint_error(exc: Exception) -> bool:
+    if isinstance(exc, (DataError, IntegrityError, StatementError)):
+        return True
+
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "value too long",
+            "character varying",
+            "violates check constraint",
+            "violates not-null constraint",
+            "violates foreign key constraint",
+            "violates unique constraint",
+        )
+    )
+
+
 @router.get("/users/{user_id}/practice/recommendations", response_model=PracticeRecommendationsResponse)
 async def get_practice_recommendations(
     user_id: str,
@@ -89,17 +113,67 @@ async def submit_practice_attempt(
         raise HTTPException(status_code=403, detail="不能写入其他用户的做题记录")
 
     try:
-        result = submit_attempt(
-            user_id=body.user_id,
-            session_id=body.session_id,
-            subject_id=body.subject_id,
-            quiz_item=body.quiz_item,
-            selected_option=body.selected_option,
-        )
+        with trace_run(
+            name="practice.attempt.submit",
+            run_type="chain",
+            inputs={
+                "user_id": body.user_id,
+                "session_id": body.session_id,
+                "subject_id": body.subject_id,
+                "question": body.quiz_item.question,
+                "selected_option": body.selected_option,
+                "quiz_item": body.quiz_item.model_dump(mode="json"),
+            },
+            metadata={
+                "component": "PracticeAttempt",
+                "subject_id": body.subject_id,
+                "session_id": body.session_id,
+                "source_type": body.quiz_item.source_type,
+            },
+            tags=["learning-assistant", "practice", "attempt"],
+        ) as run:
+            result = submit_attempt(
+                user_id=body.user_id,
+                session_id=body.session_id,
+                subject_id=body.subject_id,
+                quiz_item=body.quiz_item,
+                selected_option=body.selected_option,
+            )
+            run.end(
+                outputs={
+                    "is_correct": result.is_correct,
+                    "selected_option": result.selected_option or body.selected_option.strip().upper()[:1],
+                    "correct_option": result.correct_option,
+                    "explanation": result.explanation,
+                    "knowledge_point": body.quiz_item.knowledge_point,
+                    "mastery_evaluation": result.mastery_evaluation.model_dump(mode="json") if result.mastery_evaluation else None,
+                }
+            )
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc) or "这道题的数据格式不完整，请重新生成题包后再作答。",
+        ) from exc
+    except (DataError, IntegrityError, StatementError) as exc:
+        logger.warning("提交做题记录被数据库约束拒绝: {}", exc.__class__.__name__)
+        raise HTTPException(
+            status_code=400,
+            detail=PRACTICE_ATTEMPT_CONSTRAINT_DETAIL,
+        ) from exc
+    except RuntimeError as exc:
+        if _is_practice_attempt_constraint_error(exc):
+            logger.warning("提交做题记录被约束类错误拒绝: {}", exc.__class__.__name__)
+            raise HTTPException(
+                status_code=400,
+                detail=PRACTICE_ATTEMPT_CONSTRAINT_DETAIL,
+            ) from exc
+        logger.exception("提交做题记录失败")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "提交作答失败：服务端暂时无法保存这次做题记录。"
+                "请保留当前页面稍后重试，或重新生成一组题包。"
+            ),
         ) from exc
     except Exception as exc:
         logger.exception("提交做题记录失败")
@@ -131,15 +205,44 @@ async def create_practice_pack(
     if body.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="不能为其他用户生成题包")
 
-    result = create_pack_from_request(
-        user_id=body.user_id,
-        session_id=body.session_id,
-        subject_id=body.subject_id,
-        request_text=body.request_text,
-        current_practice_question=body.current_practice_question,
-        last_practice_pack=body.last_practice_pack,
-        context=body.context,
-    )
+    with trace_run(
+        name="practice.pack.create",
+        run_type="chain",
+        inputs={
+            "user_id": body.user_id,
+            "session_id": body.session_id,
+            "subject_id": body.subject_id,
+            "request_text": body.request_text,
+            "current_practice_question": body.current_practice_question or {},
+            "last_practice_pack_count": len(body.last_practice_pack),
+            "context": body.context,
+        },
+        metadata={
+            "component": "PracticePack",
+            "subject_id": body.subject_id,
+            "session_id": body.session_id,
+        },
+        tags=["learning-assistant", "practice", "pack"],
+    ) as run:
+        result = create_pack_from_request(
+            user_id=body.user_id,
+            session_id=body.session_id,
+            subject_id=body.subject_id,
+            request_text=body.request_text,
+            current_practice_question=body.current_practice_question,
+            last_practice_pack=body.last_practice_pack,
+            context=body.context,
+        )
+        run.end(
+            outputs={
+                "subject_id": result.subject_id,
+                "item_count": len(result.items),
+                "message": result.message,
+                "quiz_request": result.quiz_request.model_dump(mode="json"),
+                "generation_status": dict(result.generation_status or {}),
+                "error_count": len(result.errors or []),
+            }
+        )
     return {
         "subject_id": result.subject_id,
         "quiz_request": result.quiz_request.model_dump(mode="json"),

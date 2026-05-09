@@ -38,6 +38,13 @@ export interface QuizItem {
   source_year?: number | null;
   question_id: string;
   hint?: string;
+  subject_id?: string;
+  notebook_id?: string;
+  chapter_id?: string;
+  topic_id?: string;
+  concept_id?: string;
+  concept_name?: string;
+  source_session_id?: string;
 }
 
 export interface PracticeRecommendationPayload {
@@ -170,6 +177,111 @@ export interface KnowledgeMastery {
   updated_at: string;
 }
 
+export type LearningCenterStatus =
+  | "unstarted"
+  | "weak"
+  | "learning"
+  | "mastered";
+
+export interface LearningCenterStatusCounts {
+  unstarted: number;
+  weak: number;
+  learning: number;
+  mastered: number;
+}
+
+export interface LearningCenterConcept {
+  concept_id: string;
+  concept_name: string;
+  aliases: string[];
+  importance: "high" | "medium" | "low";
+  exam_frequency: "high" | "medium" | "low";
+  prerequisites: string[];
+  p_mastery: number;
+  status: LearningCenterStatus;
+  tested: boolean;
+  test_status: "untested" | "tested";
+  attempt_count: number;
+  correct_count: number;
+  wrong_count: number;
+  question_count: number;
+  last_practiced_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface LearningCenterTopic {
+  topic_id: string;
+  topic_name: string;
+  mastery_score: number;
+  coverage_ratio: number;
+  status_counts: LearningCenterStatusCounts;
+  weak_count: number;
+  tested_count: number;
+  untested_count: number;
+  tested_ratio: number;
+  attempt_count: number;
+  correct_count: number;
+  wrong_count: number;
+  updated_at?: string | null;
+  concepts: LearningCenterConcept[];
+}
+
+export interface LearningCenterChapter {
+  chapter_id: string;
+  chapter_name: string;
+  mastery_score: number;
+  coverage_ratio: number;
+  status_counts: LearningCenterStatusCounts;
+  weak_count: number;
+  tested_count: number;
+  untested_count: number;
+  tested_ratio: number;
+  attempt_count: number;
+  correct_count: number;
+  wrong_count: number;
+  updated_at?: string | null;
+  topics: LearningCenterTopic[];
+}
+
+export interface LearningCenterSubject {
+  subject_id: string;
+  subject_name: string;
+  mastery_score: number;
+  coverage_ratio: number;
+  status_counts: LearningCenterStatusCounts;
+  weak_count: number;
+  tested_count: number;
+  untested_count: number;
+  tested_ratio: number;
+  attempt_count: number;
+  correct_count: number;
+  wrong_count: number;
+  updated_at?: string | null;
+  chapters: LearningCenterChapter[];
+}
+
+export interface LearningCenterNextMove {
+  subject_id: string;
+  subject_name?: string | null;
+  chapter_id?: string | null;
+  chapter_name?: string | null;
+  topic_id?: string | null;
+  topic_name?: string | null;
+  concept_id: string;
+  concept_name: string;
+  reason: string;
+  status?: LearningCenterStatus | null;
+  p_mastery?: number | null;
+  recommended_action?: "qa" | "practice" | "review" | null;
+}
+
+export interface LearningCenterResponse {
+  user_id: string;
+  subjects: LearningCenterSubject[];
+  next_move?: LearningCenterNextMove | null;
+  generated_at?: string | null;
+}
+
 interface KnowledgeMasteryPayload {
   user_id: string;
   subject_id?: string | null;
@@ -296,6 +408,7 @@ export interface SSEEvent {
 export interface SendChatOptions {
   notebookId?: string;
   sessionId?: string;
+  thinkingMode?: boolean;
   idleTimeoutMs?: number;
   maxConnectRetries?: number;
   onRetry?: (attempt: number, maxRetries: number) => void;
@@ -814,6 +927,7 @@ export function sendChatSSE(
           session_id: options.sessionId,
           question,
           subject_id: options.notebookId ?? DEFAULT_NOTEBOOK_ID,
+          thinking_mode: Boolean(options.thinkingMode),
         }),
         signal: controller.signal,
       });
@@ -1173,16 +1287,36 @@ interface LatestQuizPayload {
 
 function normalizeStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.filter(
-      (item): item is string => typeof item === "string" && item.trim().length > 0
-    );
+    return value
+      .map((item) => stripMarkdownArtifacts(String(item ?? "")))
+      .filter((item) => item.length > 0);
   }
 
   if (typeof value === "string" && value.trim()) {
-    return [value.trim()];
+    return [stripMarkdownArtifacts(value)];
   }
 
   return [];
+}
+
+export function stripMarkdownArtifacts(value: string): string {
+  return String(value ?? "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith("```"))
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}#{1,6}\s*/g, "")
+        .replace(/^\s*[-*+]\s+/g, "")
+        .replace(/^\s*>\s?/g, "")
+        .replace(/\*\*|__|\*|_/g, "")
+        .trim()
+    )
+    .filter(Boolean)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function normalizeExplanationPayload(
@@ -1193,10 +1327,10 @@ export function normalizeExplanationPayload(
   }
 
   const normalized: Explanation = {
-    topic: typeof payload.topic === "string" ? payload.topic : "",
-    thinking: typeof payload.thinking === "string" ? payload.thinking : "",
+    topic: typeof payload.topic === "string" ? stripMarkdownArtifacts(payload.topic) : "",
+    thinking: typeof payload.thinking === "string" ? stripMarkdownArtifacts(payload.thinking) : "",
     steps: normalizeStringList(payload.steps),
-    mistakes: typeof payload.mistakes === "string" ? payload.mistakes : "",
+    mistakes: typeof payload.mistakes === "string" ? stripMarkdownArtifacts(payload.mistakes) : "",
     similar: normalizeStringList(payload.similar),
   };
 
@@ -1224,7 +1358,7 @@ function normalizeMessagePayload(payload: unknown): Message | null {
     quiz_clarification?: unknown;
   };
   const role = message.role === "assistant" ? "assistant" : "user";
-  const content = typeof message.content === "string" ? message.content : "";
+  const content = typeof message.content === "string" ? stripMarkdownArtifacts(message.content) : "";
   const timestamp =
     typeof message.timestamp === "number" ? message.timestamp : Date.now();
   const questionType =
@@ -1333,6 +1467,20 @@ export function fetchKnowledgeMastery(
   ).then((payload) => (Array.isArray(payload.items) ? payload.items : []));
 }
 
+export function fetchLearningCenter(
+  userId: string,
+  subjectId?: string
+): Promise<LearningCenterResponse> {
+  const params = new URLSearchParams();
+  if (subjectId) {
+    params.set("subject_id", subjectId);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<LearningCenterResponse>(
+    `/users/${userId}/learning-center${suffix}`
+  );
+}
+
 export function fetchUserProfile(userId: string): Promise<UserProfile> {
   return request<UserProfile>(`/users/${userId}/profile`);
 }
@@ -1413,7 +1561,7 @@ export function fetchPracticeRecommendations(
 export function submitPracticeAttempt(payload: {
   user_id: string;
   session_id?: string;
-  notebookId?: string;
+  subject_id?: string;
   quiz_item: QuizItem;
   selected_option: "A" | "B" | "C" | "D";
 }): Promise<PracticeAttemptResult> {
@@ -1422,7 +1570,7 @@ export function submitPracticeAttempt(payload: {
     body: JSON.stringify({
       user_id: payload.user_id,
       session_id: payload.session_id,
-      subject_id: payload.notebookId,
+      subject_id: payload.subject_id,
       quiz_item: payload.quiz_item,
       selected_option: payload.selected_option,
     }),

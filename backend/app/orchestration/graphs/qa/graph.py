@@ -9,6 +9,7 @@ from app.orchestration.graphs.qa.nodes import (
     answer_generate_node,
     answer_quality_check_node,
     compose_learning_events,
+    concept_linker_node,
     context_resolver_node,
     evidence_judge_node,
     evidence_merge_node,
@@ -36,6 +37,7 @@ def build_graph(
     graph.add_node("input_normalize", input_normalize_node)
     graph.add_node("intent_classifier", intent_classifier_node)
     graph.add_node("context_resolver", context_resolver_node)
+    graph.add_node("concept_linker", concept_linker_node)
     graph.add_node("knowledge_router", knowledge_router_node)
     graph.add_node("retrieval", lambda state: retrieval_node(state, tool_executor=tool_executor))
     graph.add_node("evidence_judge", evidence_judge_node)
@@ -56,7 +58,8 @@ def build_graph(
     graph.set_entry_point("input_normalize")
     graph.add_edge("input_normalize", "intent_classifier")
     graph.add_edge("intent_classifier", "context_resolver")
-    graph.add_edge("context_resolver", "knowledge_router")
+    graph.add_edge("context_resolver", "concept_linker")
+    graph.add_edge("concept_linker", "knowledge_router")
     graph.add_edge("knowledge_router", "retrieval")
     graph.add_edge("retrieval", "evidence_judge")
     graph.add_edge("evidence_judge", "answer_generate")

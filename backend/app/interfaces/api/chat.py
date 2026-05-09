@@ -106,6 +106,7 @@ class ChatRequest(BaseModel):
     )
     question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
     subject_id: str = Field(default=DEFAULT_SUBJECT_ID, description="知识库 ID，默认用于辅助参考")
+    thinking_mode: bool = Field(default=False, description="是否为本轮 DeepSeek V4 请求启用思考模式")
 
 
 class ChatResponse(BaseModel):
@@ -145,6 +146,12 @@ async def chat(
                     {
                         "message": "已连接学习引擎，正在判断问题类型。",
                         "session_id": request.session_id,
+                        "thinking_mode": request.thinking_mode,
+                        "safe_decision_summary": (
+                            "思考模式已启用：后端会请求模型进行更充分推理，但界面只展示安全摘要和最终回答。"
+                            if request.thinking_mode
+                            else ""
+                        ),
                     },
                     ensure_ascii=False,
                 ),
@@ -155,6 +162,7 @@ async def chat(
                 session_id=request.session_id,
                 question=request.question,
                 subject_id=request.subject_id,
+                thinking_mode=request.thinking_mode,
             )
             pending_chunk_task = asyncio.create_task(anext(chat_stream))
             heartbeat_count = 0
@@ -279,6 +287,7 @@ async def chat_sync(
             session_id=request.session_id,
             question=request.question,
             subject_id=request.subject_id,
+            thinking_mode=request.thinking_mode,
         )
 
         return ChatResponse(

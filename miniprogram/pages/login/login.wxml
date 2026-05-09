@@ -1,0 +1,75 @@
+<view class="page-bg">
+  <!-- Hero Banner -->
+  <view class="hero hero-secondary">
+    <view class="badge-tag">
+      <text class="badge-tag-text">AI 学习助手</text>
+    </view>
+    <view class="hero-title">欢迎回来 👋</view>
+    <view class="hero-subtitle">登录你的账号，继续你的学习旅程</view>
+  </view>
+
+  <!-- Form -->
+  <view class="form-section">
+    <view class="neo-box form-card">
+      <!-- Email -->
+      <view class="field-group">
+        <view class="field-label">📧 邮箱地址</view>
+        <input
+          class="neo-input"
+          type="text"
+          placeholder="you@example.com"
+          data-field="email"
+          bindinput="onInput"
+        />
+      </view>
+
+      <!-- Password -->
+      <view class="field-group">
+        <view class="field-label">🔑 密码</view>
+        <view class="input-row">
+          <input
+            class="neo-input flex-1"
+            type="{{showPassword ? 'text' : 'password'}}"
+            placeholder="至少 8 位"
+            data-field="password"
+            bindinput="onInput"
+            password="{{!showPassword}}"
+          />
+          <view class="toggle-btn" bindtap="togglePassword">
+            <text>{{showPassword ? '🙈' : '👁'}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- Error -->
+      <view wx:if="{{error}}" class="error-box">
+        <text>{{error}}</text>
+      </view>
+
+      <!-- Submit -->
+      <view
+        class="neo-btn submit-btn {{isSubmitting ? 'btn-disabled' : ''}}"
+        bindtap="handleLogin"
+      >
+        <text wx:if="{{isSubmitting}}">登录中…</text>
+        <text wx:else>立即登录 →</text>
+      </view>
+
+      <!-- Divider -->
+      <view class="divider">
+        <view class="divider-line" />
+        <text class="divider-text">OR</text>
+        <view class="divider-line" />
+      </view>
+
+      <!-- Register hint -->
+      <view class="hint-box">
+        <text class="hint-text">还没账号？先去邮箱收验证码，再回来继续注册。</text>
+      </view>
+
+      <view class="neo-btn ghost-btn" bindtap="goToRegister">
+        创建新账号 →
+      </view>
+    </view>
+  </view>
+</view>

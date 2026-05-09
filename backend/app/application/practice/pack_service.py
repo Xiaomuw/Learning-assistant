@@ -11,6 +11,7 @@ from app.domains.practice.quiz_request import (
 from app.orchestration.graphs.question_generation.adapter import LegacyPracticeQuestionCandidateGenerator
 from app.orchestration.graphs.question_generation.graph import build_production_graph
 from app.services.runtime_models import resolve_active_chat_model
+from app.knowledge.concept_registry import ConceptNode, get_concept_registry
 from app.shared.schemas.agent_graphs import SourcePolicy
 from app.shared.schemas.contracts import PracticePackResult, PracticeRecommendation
 from app.shared.schemas.subject import DEFAULT_SUBJECTS, normalize_subject_id
@@ -34,7 +35,31 @@ class PracticePackService:
             last_practice_pack=last_practice_pack,
             extra=context,
         )
+        target_concept = _concept_from_context(resolver_context)
+        if target_concept is not None:
+            resolver_context.setdefault("topic", target_concept.concept_name)
+            resolver_context.setdefault("active_topic", target_concept.concept_name)
+            resolver_context.setdefault("current_question_topic", target_concept.concept_name)
+            resolver_context.setdefault("subject_name", target_concept.subject_name)
         resolution = resolve_quiz_request(request_text, resolver_context)
+        if target_concept is not None:
+            resolution = resolution.model_copy(
+                update={
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": target_concept.concept_name,
+                    "subject_id": target_concept.subject_id,
+                    "requested_topic": target_concept.concept_name,
+                    "active_topic": target_concept.concept_name,
+                    "source": "current_context",
+                    "target_module": "practice",
+                    "need_clarification": False,
+                    "clarification_reason": None,
+                    "recommended_options": [],
+                    "reason": "canonical_concept_from_context",
+                }
+            )
         if resolution.need_clarification:
             return PracticePackResult(
                 subject_id=subject_id,
@@ -79,12 +104,7 @@ class PracticePackService:
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
                 "user_message": request_text,
                 "quiz_request": resolution.model_dump(mode="json"),
-                "concepts": [
-                    {
-                        "concept_id": resolution.topic.lower().replace(" ", "-")[:64],
-                        "name": resolution.topic,
-                    }
-                ],
+                "concepts": [_concept_state_payload(target_concept, fallback_topic=resolution.topic)],
                 "count": int(resolution.count or 5),
                 "requested_count": int(resolution.count or 5),
                 "difficulty": _difficulty_label(resolution.difficulty),
@@ -112,6 +132,8 @@ def create_pack_from_request(**kwargs: Any) -> PracticePackResult:
 
 def _practice_recommendation_from_question_item(raw_item: dict[str, Any]) -> PracticeRecommendation:
     answer_key = raw_item.get("answer_key") if isinstance(raw_item.get("answer_key"), dict) else {}
+    primary_concept_id = str(raw_item.get("primary_concept_id") or "")
+    concept = get_concept_registry().get_concept(primary_concept_id)
     return PracticeRecommendation(
         question_id=str(raw_item.get("id") or uuid4()),
         question=str(raw_item.get("stem") or ""),
@@ -123,12 +145,50 @@ def _practice_recommendation_from_question_item(raw_item: dict[str, Any]) -> Pra
         correct_option=str(answer_key.get("correct_option") or "A"),
         explanation=str(answer_key.get("explanation") or ""),
         option_rationales=dict(answer_key.get("option_rationales") or {}),
-        knowledge_point=str(raw_item.get("primary_concept_id") or ""),
+        knowledge_point=concept.concept_name if concept else primary_concept_id,
+        chapter_id=concept.chapter_id if concept else str(raw_item.get("chapter_id") or ""),
+        topic_id=concept.topic_id if concept else str(raw_item.get("topic_id") or ""),
+        concept_id=concept.concept_id if concept else primary_concept_id,
+        concept_name=concept.concept_name if concept else str(raw_item.get("concept_name") or primary_concept_id or ""),
+        concept_mapping_status="matched" if concept else ("provided" if primary_concept_id else ""),
         difficulty=str(raw_item.get("difficulty") or "基础"),
         source_type="ai_generated",
         source_name="PracticePackService",
         hint=str((raw_item.get("rubric") or {}).get("full_credit") or "") if isinstance(raw_item.get("rubric"), dict) else "",
     )
+
+
+def _concept_from_context(context: dict[str, Any]) -> ConceptNode | None:
+    concept_id = str(context.get("concept_id") or "").strip()
+    if concept_id:
+        concept = get_concept_registry().get_concept(concept_id)
+        if concept is not None:
+            return concept
+    concept_name = str(context.get("concept_name") or "").strip()
+    subject_id = str(context.get("subject_id") or context.get("notebook_id") or "").strip() or None
+    if concept_name:
+        match = get_concept_registry().match_query(concept_name, subject_id=subject_id)
+        if match.status == "matched" and match.concept_id:
+            return get_concept_registry().get_concept(match.concept_id)
+    return None
+
+
+def _concept_state_payload(concept: ConceptNode | None, *, fallback_topic: str | None) -> dict[str, str]:
+    if concept is not None:
+        return {
+            "concept_id": concept.concept_id,
+            "name": concept.concept_name,
+            "concept_name": concept.concept_name,
+            "subject_id": concept.subject_id,
+            "chapter_id": concept.chapter_id,
+            "topic_id": concept.topic_id,
+        }
+    topic = str(fallback_topic or "综合练习").strip() or "综合练习"
+    return {
+        "concept_id": topic.lower().replace(" ", "-")[:64],
+        "name": topic,
+        "concept_name": topic,
+    }
 
 
 def _difficulty_label(value: str) -> str:

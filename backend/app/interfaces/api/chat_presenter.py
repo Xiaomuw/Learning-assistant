@@ -124,6 +124,17 @@ NODE_EVENT_MAP: dict[str, dict[str, Any]] = {
         "event": "answer_delta",
         "fields": ["delta", "streaming_mode", "is_synthetic_delta"],
     },
+    "stream_status": {
+        "event": "status",
+        "fields": [
+            "stream_stage",
+            "stage_label",
+            "detail",
+            "safe_decision_summary",
+            "status",
+            "streaming_mode",
+        ],
+    },
     "qa_answer_guard_node": {
         "event": "explanation",
         "fields": [

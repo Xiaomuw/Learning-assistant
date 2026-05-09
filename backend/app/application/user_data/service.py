@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.application.errors import NotFoundError
+from app.domains.learning_center.service import get_learning_center as get_learning_center_read_model
 from app.domains.mastery.service import get_mastery
 from app.infrastructure.db.repositories.sessions import delete_chat_session_record, list_chat_session_records
 from app.infrastructure.db.repositories.users import (
@@ -13,6 +14,7 @@ from app.shared.schemas.contracts import (
     DeleteResult,
     KnowledgeMasteryResult,
     LatestQuizBundle,
+    LearningCenterResponse,
     UserMemoryRecord,
     UserProfileRecord,
 )
@@ -30,6 +32,16 @@ def get_knowledge_mastery(
     limit: int = 50,
 ) -> KnowledgeMasteryResult:
     return get_mastery(user_id=user_id, subject_id=subject_id, limit=limit)
+
+
+def get_learning_center(
+    user_id: str,
+    *,
+    subject_id: str | None = None,
+) -> LearningCenterResponse:
+    return LearningCenterResponse.model_validate(
+        get_learning_center_read_model(user_id=user_id, subject_id=subject_id)
+    )
 
 
 def get_profile(user_id: str) -> UserProfileRecord:

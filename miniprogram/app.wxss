@@ -1,0 +1,71 @@
+/* 从原项目的 globals.css 中提取的基础样式变量 */
+page {
+  --neo-bg: #fffbf0;
+  --neo-bg-darker: #f5eedc;
+  --neo-ink: #1e1e24;
+  --neo-primary: #ffeb3b;
+  --neo-secondary: #ff9e80;
+  --neo-accent: #b39ddb;
+  --neo-muted: #90a4ae;
+  --neo-error: #ff5252;
+  --neo-success: #69f0ae;
+
+  background-color: var(--neo-bg);
+  color: var(--neo-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+view, text, scroll-view, input, button, image {
+  box-sizing: border-box;
+}
+
+/* 常用新拟态 UI 类 */
+.neo-box {
+  background-color: #fff;
+  border: 3px solid var(--neo-ink);
+  border-radius: 12px;
+  box-shadow: 4px 4px 0px var(--neo-ink);
+}
+
+.neo-btn {
+  background-color: var(--neo-primary);
+  color: var(--neo-ink);
+  border: 3px solid var(--neo-ink);
+  border-radius: 8px;
+  box-shadow: 4px 4px 0px var(--neo-ink);
+  font-weight: bold;
+  padding: 10px 20px;
+  text-align: center;
+}
+
+.neo-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px var(--neo-ink);
+}
+
+.container {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Utility Classes */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: 8px; }
+.gap-4 { gap: 16px; }
+.mt-2 { margin-top: 8px; }
+.mt-4 { margin-top: 16px; }
+.mb-2 { margin-bottom: 8px; }
+.mb-4 { margin-bottom: 16px; }
+.w-full { width: 100%; }
+.text-center { text-align: center; }
+.text-sm { font-size: 14px; }
+.text-lg { font-size: 18px; }
+.font-bold { font-weight: bold; }
+.text-muted { color: var(--neo-muted); }

@@ -184,6 +184,7 @@ answer_mode: {answer_mode}
 9. 如果 source_policy=notebook 或实际使用了 notebook，必须说明“参考你的 notebook/资料”；如果资料不足，不要编造
 10. 如果 source_policy=web，说明基于最新/指定来源资料；优先概括来源名称，不暴露工具调试信息
 11. 如果 notebook_policy=skip 且问题是稳定基础概念，直接用通用知识解释，不提 notebook 或检索
+12. 所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、- 列表符号或引用符号
 """
 
 STRUCTURED_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
@@ -200,6 +201,10 @@ MANUAL_SCHEMA_PROMPT = ChatPromptTemplate.from_messages(
             "system",
             "请基于以下对话和上下文，严格输出一个 JSON 对象，字段必须为：\n"
             "topic, thinking, steps, mistakes, similar, final_answer\n"
+            "字段类型必须严格遵守：topic/thinking/mistakes/final_answer 是字符串；"
+            "steps 是字符串数组；similar 是 2 到 3 个字符串组成的数组。"
+            "如果没有易错点，mistakes 必须输出空字符串，不要输出数组。\n"
+            "所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、- 列表符号或引用符号。\n"
             "不要输出任何额外说明。",
         ),
         MessagesPlaceholder("conversation"),

@@ -5,6 +5,7 @@
 """
 
 from app.infrastructure.db.repositories.auth import (  # noqa: F401
+    consume_refresh_token_record,
     consume_email_verification_challenge_record,
     create_auth_user_record,
     create_or_refresh_email_verification_challenge_record,
@@ -28,10 +29,22 @@ from app.infrastructure.db.repositories.practice import (  # noqa: F401
     list_question_bank_item_records,
     upsert_question_bank_item_records,
 )
+from app.infrastructure.db.repositories.practice_questions import (  # noqa: F401
+    get_practice_question,
+    import_practice_questions,
+    load_practice_question_json,
+    validate_practice_questions,
+)
 from app.infrastructure.db.repositories.knowledge_stats import (  # noqa: F401
     list_knowledge_mastery_records,
     record_knowledge_attempt,
     record_knowledge_exposure,
+)
+from app.infrastructure.db.repositories.knowledge_taxonomy import (  # noqa: F401
+    delete_kb_chunks_by_source,
+    list_unmapped_chunks,
+    save_kb_chunk_record,
+    sync_knowledge_taxonomy,
 )
 from app.infrastructure.db.repositories.sessions import (  # noqa: F401
     append_chat_turn_record,

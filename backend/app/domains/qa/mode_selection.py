@@ -43,6 +43,9 @@ def select_execution_mode(request: AgentRequest, model_profile: ModelProfile) ->
     rag_ready = bool(request.runtime_context.get("rag_ready", False))
     notebook_policy = str(request.runtime_context.get("notebook_policy", "") or "").strip()
 
+    if model_profile.provider == "DeepSeek":
+        return _non_tool_answer_mode(model_profile)
+
     if model_profile.supports_tool_calling and allow_tools:
         # 模型优先：route/guard 只提供工具边界，是否真的调用工具由模型循环决定。
         return "tool_calling"

@@ -51,11 +51,22 @@ def submit_attempt(
         quiz_item=quiz_item,
         selected_option=selected_option,
     )
+    enriched_quiz_item = quiz_item
+    if result.mastery_evaluation and result.mastery_evaluation.concept_id:
+        enriched_quiz_item = quiz_item.model_copy(
+            update={
+                "chapter_id": result.mastery_evaluation.chapter_id,
+                "topic_id": result.mastery_evaluation.topic_id,
+                "concept_id": result.mastery_evaluation.concept_id,
+                "concept_name": result.mastery_evaluation.concept_name,
+                "concept_mapping_status": result.mastery_evaluation.concept_mapping_status,
+            }
+        )
     maybe_dual_write_practice_attempt(
         user_id=user_id,
         session_id=session_id,
         subject_id=subject_id,
-        quiz_item=quiz_item,
+        quiz_item=enriched_quiz_item,
         selected_option=selected_option,
         result=result,
     )

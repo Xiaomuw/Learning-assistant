@@ -15,6 +15,7 @@ from app.application.errors import ApplicationError
 from app.application.user_data.service import (
     get_latest_quiz_bundle as get_latest_quiz_bundle_service,
     get_knowledge_mastery as get_knowledge_mastery_service,
+    get_learning_center as get_learning_center_service,
     get_memory as get_memory_service,
     get_profile as get_profile_service,
     get_sessions as get_sessions_service,
@@ -23,6 +24,7 @@ from app.application.user_data.service import (
 )
 from app.interfaces.auth.dependencies import AuthenticatedUser, verify_user_access
 from app.interfaces.http_errors import to_http_exception
+from app.shared.schemas.contracts import LearningCenterResponse
 from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
 
 router = APIRouter()
@@ -105,6 +107,15 @@ async def get_knowledge_mastery(
     _: AuthenticatedUser = Depends(verify_user_access),
 ):
     return get_knowledge_mastery_service(user_id, subject_id=subject_id, limit=limit)
+
+
+@router.get("/users/{user_id}/learning-center", response_model=LearningCenterResponse)
+async def get_learning_center(
+    user_id: str,
+    subject_id: str | None = Query(default=None),
+    _: AuthenticatedUser = Depends(verify_user_access),
+):
+    return get_learning_center_service(user_id, subject_id=subject_id)
 
 
 @router.get("/users/{user_id}/profile", response_model=UserProfileResponse)

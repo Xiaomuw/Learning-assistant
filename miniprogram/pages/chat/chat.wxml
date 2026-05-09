@@ -1,0 +1,91 @@
+<view class="chat-page">
+  <!-- Header -->
+  <view class="chat-header">
+    <view class="header-left">
+      <view class="notebook-tag" bindtap="toggleNotebookPicker">
+        <text class="notebook-icon">📘</text>
+        <text class="notebook-name">{{selectedNotebookName}}</text>
+        <text class="notebook-arrow">▾</text>
+      </view>
+    </view>
+    <view class="new-chat-btn" bindtap="clearChat">
+      <text>＋ 新对话</text>
+    </view>
+  </view>
+
+  <!-- Notebook Picker Dropdown -->
+  <view wx:if="{{showNotebookPicker}}" class="notebook-picker">
+    <view
+      wx:for="{{notebooks}}"
+      wx:key="id"
+      class="notebook-item {{item.id === selectedNotebookId ? 'notebook-item-active' : ''}}"
+      data-id="{{item.id}}"
+      data-name="{{item.name}}"
+      bindtap="selectNotebook"
+    >
+      <text class="notebook-item-icon">📘</text>
+      <text class="notebook-item-name">{{item.name}}</text>
+    </view>
+  </view>
+
+  <!-- Message List -->
+  <scroll-view
+    class="message-list"
+    scroll-y="true"
+    scroll-into-view="msg-bottom"
+    enhanced="true"
+    show-scrollbar="false"
+  >
+    <view style="padding: 16px;">
+      <block wx:for="{{messages}}" wx:key="timestamp">
+        <view class="msg-row {{item.role === 'user' ? 'msg-row-user' : 'msg-row-assistant'}}">
+          <view class="msg-bubble {{item.role === 'user' ? 'bubble-user' : (item.isError ? 'bubble-error' : 'bubble-assistant')}}">
+            <text user-select="true" class="msg-text">{{item.content}}</text>
+          </view>
+        </view>
+      </block>
+
+      <!-- Streaming bubble -->
+      <view wx:if="{{isGenerating}}" class="msg-row msg-row-assistant">
+        <view class="bubble-assistant msg-bubble">
+          <!-- Status text (thinking indicator) -->
+          <view wx:if="{{!currentStreamText && currentStatusText}}" class="status-hint">
+            <view class="status-dot-wrap">
+              <view class="dot d1"></view>
+              <view class="dot d2"></view>
+              <view class="dot d3"></view>
+            </view>
+            <text class="status-text">{{currentStatusText}}</text>
+          </view>
+          <!-- Actual streaming content -->
+          <text wx:if="{{currentStreamText}}" user-select="true" class="msg-text">{{currentStreamText}}</text>
+          <text wx:if="{{currentStreamText}}" class="cursor-blink">▌</text>
+        </view>
+      </view>
+
+      <view id="msg-bottom" style="height: 20px;"></view>
+    </view>
+  </scroll-view>
+
+  <!-- Input Bar -->
+  <view class="input-bar">
+    <textarea
+      class="msg-input"
+      placeholder="输入你的问题…"
+      value="{{inputValue}}"
+      bindinput="onInput"
+      auto-height="true"
+      maxlength="2000"
+      fixed="true"
+      adjust-position="true"
+      cursor-spacing="16"
+      confirm-type="send"
+    />
+    <view
+      class="send-btn {{(!inputValue || isGenerating) ? 'send-btn-disabled' : ''}}"
+      bindtap="handleSend"
+    >
+      <text>↑</text>
+    </view>
+  </view>
+</view>

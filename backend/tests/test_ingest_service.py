@@ -4,6 +4,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +32,7 @@ class IngestServiceTest(unittest.TestCase):
                 return_value=(["HTTP content"], [{"source": "https://example.com"}], 1),
             ),
             patch(
-                "app.application.ingest.service.ingest_notebook_documents",
+                "app.application.ingest.service.ingest_notebook_documents_with_summary",
                 side_effect=RuntimeError("embedding failed"),
             ),
         ):
@@ -61,7 +62,7 @@ class IngestServiceTest(unittest.TestCase):
                 ],
             ),
             patch(
-                "app.application.ingest.service.ingest_notebook_documents",
+                "app.application.ingest.service.ingest_notebook_documents_with_summary",
                 side_effect=RuntimeError("model not found"),
             ),
         ):
@@ -132,8 +133,8 @@ class IngestServiceTest(unittest.TestCase):
                 ),
             ),
             patch(
-                "app.application.ingest.service.ingest_notebook_documents",
-                return_value=3,
+                "app.application.ingest.service.ingest_notebook_documents_with_summary",
+                return_value=SimpleNamespace(inserted_chunks=3, mapped_chunks=2, unmapped_chunks=1),
             ) as mocked_ingest,
         ):
             result = ingest_urls(
@@ -143,8 +144,39 @@ class IngestServiceTest(unittest.TestCase):
             )
 
         self.assertEqual(result.total_chunks, 3)
+        self.assertEqual(result.mapped_chunks, 2)
+        self.assertEqual(result.unmapped_chunks, 1)
         mocked_ingest.assert_called_once()
         self.assertEqual(mocked_ingest.call_args.kwargs["user_id"], "user-1")
+
+    def test_url_ingest_preserves_zero_mapped_chunks_from_summary(self) -> None:
+        with (
+            patch(
+                "app.application.ingest.service.get_subject_record",
+                return_value=object(),
+            ),
+            patch(
+                "app.application.ingest.service._build_url_ingest_payload",
+                return_value=(
+                    ["unmapped content"],
+                    [{"subject_id": "test-notebook", "doc_type": "url", "source": "https://example.com"}],
+                    1,
+                ),
+            ),
+            patch(
+                "app.application.ingest.service.ingest_notebook_documents_with_summary",
+                return_value=SimpleNamespace(inserted_chunks=1, mapped_chunks=0, unmapped_chunks=1),
+            ),
+        ):
+            result = ingest_urls(
+                subject_id="test-notebook",
+                urls=["https://example.com"],
+                user_id="user-1",
+            )
+
+        self.assertEqual(result.total_chunks, 1)
+        self.assertEqual(result.mapped_chunks, 0)
+        self.assertEqual(result.unmapped_chunks, 1)
 
 
 if __name__ == "__main__":

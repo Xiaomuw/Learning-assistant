@@ -21,6 +21,7 @@ def run_chat_sync(
     session_id: str,
     question: str,
     subject_id: str,
+    thinking_mode: bool = False,
 ) -> ChatExecutionResult:
     initial_state = build_initial_state(
         user_id=user_id,
@@ -28,6 +29,7 @@ def run_chat_sync(
         question=question,
         subject_id=subject_id,
         request_mode="sync",
+        thinking_mode=thinking_mode,
     )
     final_state = run_orchestrator_chat(initial_state, request_mode="sync")
     persist_chat_session(
@@ -55,6 +57,7 @@ async def stream_chat(
     session_id: str,
     question: str,
     subject_id: str,
+    thinking_mode: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
     initial_state = build_initial_state(
         user_id=user_id,
@@ -62,6 +65,7 @@ async def stream_chat(
         question=question,
         subject_id=subject_id,
         request_mode="sse",
+        thinking_mode=thinking_mode,
     )
     final_state: dict[str, Any] | None = None
     async for chunk in _async_stream_orchestrator_chunks(initial_state):

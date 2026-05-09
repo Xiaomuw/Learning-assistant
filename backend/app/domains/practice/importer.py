@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.infrastructure.db.repositories.practice import upsert_question_bank_item_records
+from app.knowledge.concept_registry import get_concept_registry
 from app.services.rag.indexing import index_question_bank_items
 
 
@@ -77,7 +78,7 @@ def _coerce_import_row(raw: dict[str, Any], default_subject_id: str | None = Non
     if isinstance(tags, str):
         tags = [tag.strip() for tag in re.split(r"[,，;；]", tags) if tag.strip()]
 
-    return {
+    item = {
         "id": str(raw.get("id") or raw.get("question_id") or uuid.uuid4()),
         "subject_id": str(raw.get("subject_id") or default_subject_id or "general"),
         "knowledge_point": str(raw.get("knowledge_point") or "").strip(),
@@ -90,6 +91,48 @@ def _coerce_import_row(raw: dict[str, Any], default_subject_id: str | None = Non
         "source_year": int(raw["source_year"]) if str(raw.get("source_year", "")).strip() else None,
         "difficulty": str(raw.get("difficulty") or "基础").strip() or "基础",
         "tags": tags,
+    }
+    item.update(_concept_fields_for_import_item(item, raw))
+    return item
+
+
+def _concept_fields_for_import_item(item: dict[str, Any], raw: dict[str, Any]) -> dict[str, str]:
+    explicit_concept_id = str(raw.get("concept_id") or raw.get("primary_concept_id") or "").strip()
+    registry = get_concept_registry()
+    if explicit_concept_id:
+        concept = registry.get_concept(explicit_concept_id)
+        if concept is not None:
+            return {
+                "chapter_id": concept.chapter_id,
+                "topic_id": concept.topic_id,
+                "concept_id": concept.concept_id,
+                "concept_name": concept.concept_name,
+                "concept_mapping_status": "matched",
+            }
+    match = registry.match_query(
+        "\n".join(
+            str(item.get(key) or "")
+            for key in ("knowledge_point", "question", "explanation")
+            if str(item.get(key) or "").strip()
+        ),
+        subject_id=str(item.get("subject_id") or ""),
+    )
+    if match.status == "matched" and match.concept_id:
+        concept = registry.get_concept(match.concept_id)
+        if concept is not None:
+            return {
+                "chapter_id": concept.chapter_id,
+                "topic_id": concept.topic_id,
+                "concept_id": concept.concept_id,
+                "concept_name": concept.concept_name,
+                "concept_mapping_status": "matched",
+            }
+    return {
+        "chapter_id": str(raw.get("chapter_id") or ""),
+        "topic_id": str(raw.get("topic_id") or ""),
+        "concept_id": explicit_concept_id,
+        "concept_name": str(raw.get("concept_name") or ""),
+        "concept_mapping_status": match.status,
     }
 
 

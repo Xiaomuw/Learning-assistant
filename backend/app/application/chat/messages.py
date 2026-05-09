@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from app.domains.practice.service import normalize_quiz_item
+from app.shared.markdown_cleaning import strip_markdown_artifacts, strip_markdown_list
 from app.shared.schemas.contracts import ExplanationPayload
 
 QUESTION_TYPE_LABELS = {
@@ -148,9 +149,15 @@ def build_message_process(final_state: dict[str, Any]) -> dict[str, Any] | None:
 
 def normalize_explanation_payload(raw: dict[str, Any] | None) -> ExplanationPayload:
     payload = dict(raw or {})
+    for key in ("topic", "thinking", "mistakes", "final_answer"):
+        if key in payload:
+            payload[key] = strip_markdown_artifacts(str(payload.get(key) or ""))
+    for key in ("steps", "similar"):
+        if key in payload and isinstance(payload.get(key), list):
+            payload[key] = strip_markdown_list([str(item) for item in payload.get(key) or []])
     mistakes = payload.get("mistakes", "")
     if isinstance(mistakes, list):
-        payload["mistakes"] = "；".join(str(item).strip() for item in mistakes if str(item).strip())
+        payload["mistakes"] = "；".join(strip_markdown_list([str(item) for item in mistakes]))
     return ExplanationPayload.model_validate(payload)
 
 

@@ -32,6 +32,7 @@ from app.orchestration.graphs.shared.schemas import (
     new_event_id,
 )
 from app.persistence.interfaces import LearningEventRepository, QuestionItemRepository
+from app.knowledge.concept_registry import get_concept_registry
 
 OPTION_KEYS = ("A", "B", "C", "D")
 ALLOWED_QGEN_EVENTS = {
@@ -715,9 +716,18 @@ def _primary_concept(state: QuestionGenerationState) -> ConceptRef:
     canonical_subject_topic = _canonical_subject_topic(
         str(quiz_request.get("subject_id") or state.get("subject_id") or state.get("notebook_id") or "")
     )
+    subject_id = str(quiz_request.get("subject_id") or state.get("subject_id") or state.get("notebook_id") or "")
     if canonical_subject_topic and _is_generic_topic_name(quiz_topic):
         quiz_topic = canonical_subject_topic
     if quiz_topic:
+        match = get_concept_registry().match_query(quiz_topic, subject_id=subject_id)
+        if match.status == "matched" and match.concept_id:
+            return ConceptRef(
+                concept_id=match.concept_id,
+                name=quiz_topic,
+                confidence=max(0.9, float(match.confidence or 0.0)),
+                source="concept_registry",
+            )
         return ConceptRef(
             concept_id=_stable_concept_id(quiz_topic),
             name=quiz_topic,
@@ -731,6 +741,23 @@ def _primary_concept(state: QuestionGenerationState) -> ConceptRef:
         if isinstance(first, dict):
             name = str(first.get("name") or first.get("concept_name") or first.get("concept_id") or "").strip()
             concept_id = str(first.get("concept_id") or "").strip() or _stable_concept_id(name)
+            concept = get_concept_registry().get_concept(concept_id)
+            if concept is not None:
+                return ConceptRef(
+                    concept_id=concept.concept_id,
+                    name=concept.concept_name,
+                    confidence=0.9,
+                    source="concept_registry",
+                )
+            if not first.get("concept_id"):
+                match = get_concept_registry().match_query(name, subject_id=subject_id)
+                if match.status == "matched" and match.concept_id:
+                    return ConceptRef(
+                        concept_id=match.concept_id,
+                        name=name,
+                        confidence=max(0.8, float(match.confidence or 0.0)),
+                        source="concept_registry",
+                    )
             return ConceptRef(concept_id=concept_id, name=name or "综合练习", confidence=0.8, source="state")
         text = str(first).strip()
         return ConceptRef(concept_id=_stable_concept_id(text), name=text or "综合练习", confidence=0.7, source="state")
@@ -1157,12 +1184,18 @@ def _question_item_payload_with_context(item: Any, state: QuestionGenerationStat
         payload = dict(item or {})
     quiz_request = state.get("quiz_request") if isinstance(state.get("quiz_request"), dict) else {}
     subject_id = str(quiz_request.get("subject_id") or state.get("subject_id") or state.get("notebook_id") or "").strip()
+    concept = get_concept_registry().get_concept(str(payload.get("primary_concept_id") or ""))
     payload.update(
         {
             "user_id": str(state.get("user_id") or ""),
             "subject_id": subject_id,
             "notebook_id": str(state.get("notebook_id") or subject_id or ""),
             "graph_run_id": str(state.get("run_id") or state.get("graph_run_id") or ""),
+            "chapter_id": concept.chapter_id if concept else str(payload.get("chapter_id") or ""),
+            "topic_id": concept.topic_id if concept else str(payload.get("topic_id") or ""),
+            "concept_id": concept.concept_id if concept else str(payload.get("primary_concept_id") or ""),
+            "concept_name": concept.concept_name if concept else str(payload.get("concept_name") or payload.get("primary_concept_id") or ""),
+            "concept_mapping_status": "matched" if concept else str(payload.get("concept_mapping_status") or ""),
         }
     )
     return payload

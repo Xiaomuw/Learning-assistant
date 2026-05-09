@@ -80,6 +80,18 @@ def _raw_retrieved_count(result: AgentExecutionResult) -> int:
     return len(result.retrieved_docs)
 
 
+def _doc_preview(doc: dict[str, Any]) -> dict[str, Any]:
+    metadata = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
+    content = str(doc.get("content") or doc.get("document") or doc.get("text") or "")
+    return {
+        "id": str(doc.get("id") or metadata.get("id") or "")[:120],
+        "source_type": str(doc.get("source_type") or metadata.get("source_type") or metadata.get("retrieval_source") or ""),
+        "source_name": str(metadata.get("source_name") or metadata.get("title") or doc.get("source_name") or ""),
+        "score": doc.get("score") if doc.get("score") is not None else metadata.get("score"),
+        "content_preview": content[:500],
+    }
+
+
 def build_qa_trace_tags(
     *,
     request_mode: str,
@@ -111,6 +123,9 @@ def build_qa_trace_metadata(
         "supports_structured_output": model_profile.supports_structured_output,
         "context_window": model_profile.context_window,
         "supported_modalities": list(model_profile.supported_modalities),
+        "thinking_mode": bool(request.runtime_context.get("thinking_mode", False)),
+        "reasoning_visibility": "safe_summary_only",
+        "raw_reasoning_content_logged": False,
     }
 
 
@@ -127,6 +142,11 @@ def build_qa_trace_inputs(
         "subject_name": request.subject_name,
         "question_type": request.question_type,
         "question": request.question,
+        "thinking_mode": bool(request.runtime_context.get("thinking_mode", False)),
+        "route": str(request.runtime_context.get("route") or ""),
+        "source_policy": str(request.runtime_context.get("source_policy") or ""),
+        "notebook_policy": str(request.runtime_context.get("notebook_policy") or ""),
+        "search_policy": str(request.runtime_context.get("search_policy") or ""),
     }
 
 
@@ -142,12 +162,20 @@ def build_qa_trace_outputs(result: AgentExecutionResult) -> dict[str, Any]:
         "verified_context_count": len(result.retrieved_docs),
         "raw_retrieved_count": _raw_retrieved_count(result),
         "retrieval_diagnosis": result.retrieval_diagnosis.get("diagnosis", ""),
+        "safe_reasoning_summary": result.reasoning_summary,
+        "reasoning_visibility": "safe_summary_only",
+        "final_answer": result.final_answer,
         "final_answer_empty": not bool(str(result.final_answer or "").strip()),
         "final_answer_length": len(str(result.final_answer or "")),
+        "tool_decision_rounds": result.tool_decision_rounds,
+        "retrieved_doc_previews": [_doc_preview(item) for item in result.retrieved_docs[:5] if isinstance(item, dict)],
         "primary_model_id": result.primary_model_id,
         "fallback_model_id": result.fallback_model_id,
         "fallback_used": result.fallback_used,
         "fallback_reason": result.fallback_reason,
+        "streaming_mode": result.streaming_mode,
+        "streaming_token_count": result.streaming_token_count,
+        "streaming_degraded_reason": result.streaming_degraded_reason,
     }
     payload.update(_tool_stats(result.tool_calls))
     return payload
@@ -161,10 +189,16 @@ def build_qa_result_metadata(result: AgentExecutionResult) -> dict[str, Any]:
         "tool_decision_rounds_count": len(result.tool_decision_rounds),
         "source_usage": result.source_usage,
         "retrieval_diagnosis": result.retrieval_diagnosis.get("diagnosis", ""),
+        "safe_reasoning_summary": result.reasoning_summary,
+        "reasoning_visibility": "safe_summary_only",
+        "final_answer_length": len(str(result.final_answer or "")),
         "primary_model_id": result.primary_model_id,
         "fallback_model_id": result.fallback_model_id,
         "fallback_used": result.fallback_used,
         "fallback_reason": result.fallback_reason,
+        "streaming_mode": result.streaming_mode,
+        "streaming_token_count": result.streaming_token_count,
+        "streaming_degraded_reason": result.streaming_degraded_reason,
     }
     payload.update(_tool_stats(result.tool_calls))
     return payload

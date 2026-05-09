@@ -39,7 +39,7 @@ export default function HelpPage() {
               <div className="neo-card bg-white p-4">
                 <p className="font-black">1. 选择系统默认库</p>
                 <p className="mt-2 text-sm font-bold leading-relaxed">
-                  408、数学和通用学科库由系统统一维护，新用户登录后即可直接使用。
+                  数据结构与算法、计算机网络、计算机组成原理、操作系统原理等默认库由系统统一维护，新用户登录后即可直接选择学习。
                 </p>
               </div>
               <div className="neo-card bg-white p-4">

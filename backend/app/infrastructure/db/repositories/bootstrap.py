@@ -10,6 +10,7 @@ from app.infrastructure.db.repositories._shared import (
     seed_default_app_settings,
     seed_default_subjects,
 )
+from app.infrastructure.db.repositories.knowledge_taxonomy import sync_knowledge_taxonomy
 from app.infrastructure.db.repositories.users import save_user_memory_record
 
 
@@ -18,6 +19,7 @@ def init_database() -> None:
     migrated_columns = ensure_schema_compatibility()
     seed_default_subjects()
     seed_default_app_settings()
+    synced_taxonomy = sync_knowledge_taxonomy()
     migrated_subjects = migrate_legacy_subjects()
     migrated_memories = migrate_legacy_memories(save_user_memory_record)
     if migrated_columns:
@@ -26,3 +28,5 @@ def init_database() -> None:
         logger.info(f"✅ 已迁移旧版学科数据 {migrated_subjects} 条")
     if migrated_memories:
         logger.info(f"✅ 已迁移旧版学习记忆 {migrated_memories} 条")
+    if synced_taxonomy:
+        logger.info(f"✅ 已同步知识点 taxonomy {synced_taxonomy} 条")

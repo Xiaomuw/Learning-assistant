@@ -14,8 +14,6 @@ from app.orchestration.graphs.eval_runner import (
     run_graph_eval_case,
 )
 
-load_dotenv(Path(__file__).resolve().parents[3] / ".env")
-
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FORBIDDEN_PAYLOAD_KEYS = {
     "question",
@@ -31,6 +29,12 @@ _FORBIDDEN_PAYLOAD_KEYS = {
 
 def is_langsmith_dataset_sync_enabled() -> bool:
     return str(os.getenv("GRAPH_EVAL_LANGSMITH", "")).strip().lower() in _TRUE_VALUES
+
+
+def load_langsmith_eval_env() -> None:
+    """Load backend .env only for the explicit LangSmith eval CLI path."""
+
+    load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
 
 
 def get_eval_dataset_name() -> str:
@@ -186,6 +190,10 @@ def tool_policy_precision(*, inputs: dict[str, Any] | None = None, outputs: dict
     if not case_name.startswith("qa_"):
         return _score("tool_policy_precision", 1, "not_applicable")
     output = outputs or {}
+    if case_name == "qa_concept_filtered_retrieval":
+        if int(output.get("tool_request_count") or 0) == 1:
+            return _score("tool_policy_precision", 1, "concept_filtered_retrieval_passed")
+        return _score("tool_policy_precision", 0, "missing_concept_filtered_request")
     if int(output.get("tool_request_count") or 0) > 0:
         return _score("tool_policy_precision", 0, "unexpected_tool_request")
     return _score("tool_policy_precision", 1, "tool_policy_passed")
@@ -286,6 +294,7 @@ def _find_forbidden_keys(value: Any) -> set[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_langsmith_eval_env()
     parser = argparse.ArgumentParser(description="Sync or run graph evals with LangSmith.")
     parser.add_argument("--sync", action="store_true", help="create/update the LangSmith dataset")
     parser.add_argument("--run", action="store_true", help="run LangSmith remote evaluators")

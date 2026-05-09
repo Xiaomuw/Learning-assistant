@@ -35,7 +35,7 @@ def run_orchestrator_chat(
         with trace_run(
             name=f"chat.orchestrator.{request_mode}",
             run_type="chain",
-            inputs={"has_user_message": bool(state.get("question") or state.get("user_message"))},
+            inputs=_trace_inputs(state, request_mode=request_mode),
             metadata={
                 "component": "LearningOrchestratorGraph",
                 "entry": request_mode,
@@ -90,6 +90,8 @@ def stream_orchestrator_chat(
     """
 
     state = dict(initial_state)
+    if request_mode == "sse":
+        state["stream_answer_tokens"] = True
     graph_run_id = str(state.get("run_id") or f"orchestrator-{uuid4()}")
     repos = build_graph_fact_repositories() if is_graph_facts_enabled() else None
     t0 = time.perf_counter()
@@ -104,7 +106,7 @@ def stream_orchestrator_chat(
         with trace_run(
             name=f"chat.orchestrator.{request_mode}",
             run_type="chain",
-            inputs={"has_user_message": bool(state.get("question") or state.get("user_message"))},
+            inputs=_trace_inputs(state, request_mode=request_mode),
             metadata={
                 "component": "LearningOrchestratorGraph",
                 "entry": request_mode,
@@ -112,17 +114,30 @@ def stream_orchestrator_chat(
                 "session_id": str(state.get("session_id") or ""),
                 "subject_id": normalize_subject_id(state.get("subject_id")),
                 "graph_run_id": graph_run_id,
-                "streaming_mode": "node",
+                "streaming_mode": "mixed",
             },
-            tags=["learning-assistant", "orchestrator", f"entry:{request_mode}", "streaming:node"],
+            tags=["learning-assistant", "orchestrator", f"entry:{request_mode}", "streaming:mixed"],
         ) as run:
             compiled = build_orchestrator_graph(
                 audit_repository=repos.graph_runs if repos is not None else None
             ).compile()
-            for raw_update in compiled.stream(graph_input, stream_mode="updates"):
-                if not isinstance(raw_update, dict):
+            for raw_update in compiled.stream(
+                graph_input,
+                stream_mode=["updates", "custom"],
+                version="v2",
+            ):
+                custom_chunk = _custom_chunk_from_stream_part(
+                    raw_update,
+                    elapsed=time.perf_counter() - t0,
+                )
+                if custom_chunk is not None:
+                    yield custom_chunk
                     continue
-                for node_name, node_update in raw_update.items():
+
+                update_payload = _updates_from_stream_part(raw_update)
+                if not isinstance(update_payload, dict):
+                    continue
+                for node_name, node_update in update_payload.items():
                     if not isinstance(node_update, dict):
                         continue
                     graph_state.update(node_update)
@@ -235,11 +250,13 @@ def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
         "session_memory_context": str(state.get("session_memory_context") or ""),
         "long_term_context": str(state.get("long_term_context") or ""),
         "model_name": str(state.get("model_name") or ""),
+        "thinking_mode": bool(state.get("thinking_mode", False)),
         "allow_tools": _source_policy_from_chat_state(state) != SourcePolicy.NOTEBOOK_ONLY.value,
         "allow_search": _source_policy_from_chat_state(state) in {
             SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
             SourcePolicy.OPEN_TOOLS.value,
         },
+        "stream_answer_tokens": bool(state.get("stream_answer_tokens")),
     }
 
 
@@ -263,15 +280,19 @@ def _chat_state_from_orchestrator_result(
     if not reasoning_summary and retrieval_skipped_reason == "stable_concept_model_first":
         reasoning_summary = "判断为稳定概念，本轮未调用知识库或搜索，直接按教学讲解回答。"
     quiz_items = _quiz_items_from_child_payload(child_payload)
-    explanation = normalize_explanation_payload(
-        {
-            "topic": _topic(response, initial_state),
-            "thinking": response.answer,
-            "steps": list(response.coach_actions or []),
-            "mistakes": "",
-            "similar": [item.name for item in response.concepts[1:3]],
-        }
-    ).model_dump()
+    raw_explanation = response_ui.get("explanation") if isinstance(response_ui.get("explanation"), dict) else {}
+    if raw_explanation:
+        explanation = normalize_explanation_payload(raw_explanation).model_dump()
+    else:
+        explanation = normalize_explanation_payload(
+            {
+                "topic": _topic(response, initial_state),
+                "thinking": response.answer,
+                "steps": [],
+                "mistakes": "",
+                "similar": [item.name for item in response.concepts[1:3]],
+            }
+        ).model_dump()
     return {
         **initial_state,
         "question_type": question_type,
@@ -302,6 +323,9 @@ def _chat_state_from_orchestrator_result(
         "model_attempts": list(response_ui.get("model_attempts") or [])
         if isinstance(response_ui.get("model_attempts"), list)
         else [],
+        "streaming_mode": str(response_ui.get("streaming_mode") or "node"),
+        "streaming_token_count": int(response_ui.get("streaming_token_count") or 0),
+        "streaming_degraded_reason": str(response_ui.get("streaming_degraded_reason") or ""),
         "graph_runtime": {
             "mode": "orchestrator",
             "graph_type": GraphType.ORCHESTRATOR.value,
@@ -405,7 +429,9 @@ def _final_answer_chunk(final_state: dict[str, Any], *, node: str, elapsed: floa
         "fallback_used": bool(final_state.get("fallback_used", False)),
         "fallback_reason": str(final_state.get("fallback_reason") or ""),
         "model_attempts": list(final_state.get("model_attempts") or []),
-        "streaming_mode": "node",
+        "streaming_mode": str(final_state.get("streaming_mode") or "node"),
+        "streaming_token_count": int(final_state.get("streaming_token_count") or 0),
+        "streaming_degraded_reason": str(final_state.get("streaming_degraded_reason") or ""),
         "model_latency_ms": latency_ms,
     }
     if node == "graph_error_node":
@@ -416,6 +442,8 @@ def _final_answer_chunk(final_state: dict[str, Any], *, node: str, elapsed: floa
 def _answer_delta_chunks(answer_chunk: dict[str, Any]) -> list[dict[str, Any]]:
     state_update = answer_chunk.get("state_update") if isinstance(answer_chunk.get("state_update"), dict) else {}
     if answer_chunk.get("node") != "qa_agent_node":
+        return []
+    if state_update.get("streaming_mode") == "token":
         return []
     text = str(state_update.get("final_answer") or "").strip()
     if not text:
@@ -458,9 +486,57 @@ def _split_answer_for_delta(text: str) -> list[str]:
 
 def _streaming_reasoning_summary(final_state: dict[str, Any]) -> str:
     summary = str(final_state.get("reasoning_summary") or "").strip()
+    if str(final_state.get("streaming_mode") or "") == "token":
+        suffix = "当前为安全实时流式：回答内容逐步展示，处理过程只展示可审计决策摘要，不暴露原始隐藏思维链。"
+        return f"{summary}\n\n{suffix}" if summary else suffix
     if summary:
         return f"{summary}\n\n当前为节点级流式：模型/工具节点完成后立即展示结果；本路径未暴露原始思维链。"
     return "当前为节点级流式：模型/工具节点完成后立即展示结果；本路径未暴露原始思维链。"
+
+
+def _updates_from_stream_part(raw_update: Any) -> dict[str, Any] | None:
+    if not isinstance(raw_update, dict):
+        return None
+    if raw_update.get("type") == "updates":
+        data = raw_update.get("data")
+        return data if isinstance(data, dict) else None
+    if "type" in raw_update and "data" in raw_update:
+        return None
+    return raw_update
+
+
+def _custom_chunk_from_stream_part(raw_update: Any, *, elapsed: float) -> dict[str, Any] | None:
+    if not isinstance(raw_update, dict) or raw_update.get("type") != "custom":
+        return None
+    data = raw_update.get("data")
+    if not isinstance(data, dict):
+        return None
+    event_name = str(data.get("event") or "").strip()
+    payload = data.get("data") if isinstance(data.get("data"), dict) else data
+    if event_name == "answer_delta":
+        return {
+            "node": "answer_delta",
+            "state_update": {
+                "delta": str(payload.get("delta") or ""),
+                "streaming_mode": str(payload.get("streaming_mode") or "token"),
+                "is_synthetic_delta": bool(payload.get("is_synthetic_delta", False)),
+            },
+            "elapsed": elapsed,
+        }
+    if event_name == "status":
+        return {
+            "node": "stream_status",
+            "state_update": {
+                "stream_stage": str(payload.get("stream_stage") or "model_progress"),
+                "stage_label": str(payload.get("stage_label") or "实时进度"),
+                "detail": str(payload.get("detail") or ""),
+                "safe_decision_summary": str(payload.get("safe_decision_summary") or ""),
+                "status": str(payload.get("status") or "running"),
+                "streaming_mode": str(payload.get("streaming_mode") or "token"),
+            },
+            "elapsed": elapsed,
+        }
+    return None
 
 
 def _quiz_items_from_child_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -492,6 +568,9 @@ def _quiz_items_from_child_payload(payload: dict[str, Any]) -> list[dict[str, An
                 "explanation": str(answer_key.get("explanation") or ""),
                 "option_rationales": dict(answer_key.get("option_rationales") or {}),
                 "knowledge_point": str(raw_item.get("primary_concept_id") or ""),
+                "concept_id": str(raw_item.get("primary_concept_id") or ""),
+                "concept_name": str(raw_item.get("concept_name") or raw_item.get("primary_concept_id") or ""),
+                "concept_mapping_status": "matched" if raw_item.get("primary_concept_id") else "",
                 "difficulty": str(raw_item.get("difficulty") or "基础"),
                 "source_type": source_type,
                 "source_name": source_name,
@@ -677,13 +756,37 @@ def _error_orchestrator_result(
 
 def _trace_outputs(result: dict[str, Any]) -> dict[str, Any]:
     child_payload = _child_payload(result)
+    final_response = result.get("final_response") if isinstance(result.get("final_response"), dict) else {}
+    response_ui = final_response.get("ui_payload") if isinstance(final_response.get("ui_payload"), dict) else {}
     return {
         "intent": _intent(result),
         "target_graph_type": str((result.get("intent_decision") or {}).get("target_graph_type") or ""),
-        "final_answer_empty": not bool(str((result.get("final_response") or {}).get("answer") or "").strip()),
+        "final_answer": str(final_response.get("answer") or ""),
+        "final_answer_empty": not bool(str(final_response.get("answer") or "").strip()),
+        "safe_reasoning_summary": str(response_ui.get("reasoning_summary") or ""),
+        "reasoning_visibility": "safe_summary_only",
         "learning_event_count": len(list(child_payload.get("learning_events") or [])),
         "tool_result_count": len(list(child_payload.get("tool_results") or [])),
         "error_count": len(list(result.get("errors") or [])),
+    }
+
+
+def _trace_inputs(state: dict[str, Any], *, request_mode: str) -> dict[str, Any]:
+    question = str(state.get("contextual_question") or state.get("question") or state.get("user_message") or "")
+    return {
+        "request_mode": request_mode,
+        "has_user_message": bool(question),
+        "question": question,
+        "user_id": str(state.get("user_id") or ""),
+        "session_id": str(state.get("session_id") or state.get("thread_id") or ""),
+        "subject_id": normalize_subject_id(state.get("subject_id")),
+        "subject_name": str(state.get("subject_name") or DEFAULT_SUBJECTS[0]["name"]),
+        "model_name": str(state.get("model_name") or ""),
+        "thinking_mode": bool(state.get("thinking_mode", False)),
+        "source_policy": _source_policy_from_chat_state(state),
+        "short_term_context": str(state.get("short_term_context") or ""),
+        "session_memory_context": str(state.get("session_memory_context") or ""),
+        "long_term_context": str(state.get("long_term_context") or ""),
     }
 
 
