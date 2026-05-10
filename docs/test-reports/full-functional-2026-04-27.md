@@ -1,5 +1,7 @@
 # 全项目功能验收报告
 
+> 历史报告：本文中的 `scripts/check_do_model_access.py` 和 DigitalOcean 表述记录的是当时环境；当前项目已删除该脚本与 DigitalOcean 官方 SDK 依赖。
+
 日期：2026-04-27  
 范围：Browser Use 端到端验收 + 必要 API 补充验证  
 排除项：不完成邮箱验证码注册闭环；仅真实发送 1 封验证码邮件

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 from uuid import uuid4
 
@@ -41,6 +42,24 @@ ALLOWED_QGEN_EVENTS = {
     LearningEventType.QUESTION_GENERATION_DEGRADED.value,
     LearningEventType.QUESTION_GENERATION_FAILED.value,
 }
+
+
+def _repair_model_skip_reason(status: dict[str, Any]) -> str:
+    if status.get("ai_generation_failed") or status.get("empty_generation"):
+        return "degraded_generation"
+    if status.get("ai_generation_skipped"):
+        return "live_ai_skipped"
+    if int(status.get("fallback_count") or 0) > 0:
+        return "generation_fallback_used"
+    timeout = status.get("model_timeout_seconds")
+    elapsed_ms = int(status.get("generate_candidates_elapsed_ms") or 0)
+    try:
+        timeout_ms = int(float(timeout) * 1000)
+    except (TypeError, ValueError):
+        timeout_ms = 0
+    if timeout_ms > 0 and elapsed_ms >= timeout_ms:
+        return "generation_budget_exceeded"
+    return ""
 
 
 def build_blueprint_node(state: QuestionGenerationState) -> dict[str, Any]:
@@ -134,6 +153,7 @@ def make_generate_candidates_node(generator: QuestionCandidateGenerator):
         candidates: list[QuestionCandidate] = []
         adapter_status: dict[str, Any] = {"generation_source": generator.__class__.__name__, "generated_count": 0}
         last_error: Exception | None = None
+        started_at = time.perf_counter()
         for attempt in range(1, max_attempts + 1):
             try:
                 generation_runner = getattr(generator, "generate_with_status", None)
@@ -177,6 +197,7 @@ def make_generate_candidates_node(generator: QuestionCandidateGenerator):
             int(adapter_status.get("retry_count") or 0),
             int(status.get("quality_retry_count") or 0),
         )
+        status["generate_candidates_elapsed_ms"] = int(max(0.0, (time.perf_counter() - started_at) * 1000))
         status["max_generation_attempts"] = max_attempts
         status["generated_count"] = len(candidates)
         if not candidates:
@@ -347,9 +368,18 @@ def make_repair_candidates_node(repairer: QuestionCandidateRepairer | None = Non
         forbidden_signatures = [_candidate_signature(candidate) for candidate in base_candidates]
         repair_status: dict[str, Any] = {}
         repaired_candidates: list[QuestionCandidate] = []
+        started_at = time.perf_counter()
+        skip_reason = _repair_model_skip_reason(status)
+        active_repairer = fallback_repairer if skip_reason else candidate_repairer
+        if skip_reason:
+            status["repair_model_skipped"] = True
+            status["repair_skip_reason"] = skip_reason
+            status["repair_model_used"] = False
+        else:
+            status.setdefault("repair_model_skipped", False)
 
         try:
-            repair_runner = getattr(candidate_repairer, "repair_with_status", None)
+            repair_runner = getattr(active_repairer, "repair_with_status", None)
             if callable(repair_runner):
                 result = repair_runner(
                     blueprint=blueprint,
@@ -361,14 +391,14 @@ def make_repair_candidates_node(repairer: QuestionCandidateRepairer | None = Non
                 repaired_candidates = list(getattr(result, "candidates", []) or [])
                 repair_status = dict(getattr(result, "status", {}) or {})
             else:
-                repaired_candidates = candidate_repairer.repair(
+                repaired_candidates = active_repairer.repair(
                     blueprint=blueprint,
                     source_refs=source_refs,
                     candidates=candidates,
                     issues=report.issues,
                     forbidden_signatures=forbidden_signatures,
                 )
-                repair_status = {"repair_source": candidate_repairer.__class__.__name__}
+                repair_status = {"repair_source": active_repairer.__class__.__name__}
         except Exception as exc:
             status["repair_degraded"] = True
             status["repair_error_type"] = exc.__class__.__name__
@@ -405,12 +435,18 @@ def make_repair_candidates_node(repairer: QuestionCandidateRepairer | None = Non
                     int(repair_status.get("repair_fallback_count") or 0),
                     repair_fallback_count,
                 ),
+                "repair_candidates_elapsed_ms": int(max(0.0, (time.perf_counter() - started_at) * 1000)),
                 "generated_count": len(merged_candidates),
                 "max_quality_repair_attempts": _bounded_repair_attempts(
                     status.get("max_quality_repair_attempts") or state.get("max_quality_repair_attempts")
                 ),
             }
         )
+        if skip_reason:
+            status["repair_model_skipped"] = True
+            status["repair_skip_reason"] = skip_reason
+            status["repair_model_used"] = False
+            status["repair_degraded"] = True
         if not repaired_candidates or repair_fallback_count > 0 or len(merged_candidates) < blueprint.count:
             status["repair_degraded"] = True
         if len(merged_candidates) < blueprint.count:

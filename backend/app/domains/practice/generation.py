@@ -13,13 +13,18 @@ from app.domains.practice.common import (
     format_user_style_instruction,
     normalize_quiz_item,
 )
-from app.domains.practice.llm import get_generation_llm
+from app.domains.practice.llm import get_generation_llm, resolve_practice_generation_model
 from app.domains.practice.schemas import GeneratedQuizListOutput
 from app.infrastructure.db.repositories.practice import (
     list_practice_recommendation_records,
     list_question_bank_item_records,
 )
 from app.infrastructure.db.repositories.users import get_user_memory_record
+from app.infrastructure.llm.config import (
+    get_practice_generation_timeout_seconds,
+    get_practice_repair_timeout_seconds,
+    is_practice_recommendation_live_ai_enabled,
+)
 from app.infrastructure.llm.structured import invoke_with_schema
 from app.shared.schemas.contracts import PracticeRecommendation
 
@@ -110,18 +115,28 @@ def _get_user_memory(user_id: str) -> dict[str, Any]:
     return get_user_memory_record(user_id).model_dump()
 
 
-def _invoke_generation_chain(payload: dict[str, Any], *, model_name: str | None = None) -> GeneratedQuizListOutput:
+def _invoke_generation_chain(
+    payload: dict[str, Any],
+    *,
+    model_name: str | None = None,
+    purpose: str = "generation",
+) -> GeneratedQuizListOutput:
+    timeout_seconds = (
+        get_practice_repair_timeout_seconds()
+        if purpose == "repair"
+        else get_practice_generation_timeout_seconds()
+    )
     return invoke_with_schema(
         PRACTICE_GENERATION_PROMPT,
         get_generation_llm(
             temperature=0.7,
-            model_name=model_name,
-            timeout_seconds=12.0,
+            model_name=resolve_practice_generation_model(model_name),
+            timeout_seconds=timeout_seconds,
             max_retries=0,
         ),
         GeneratedQuizListOutput,
         payload,
-        model_name=model_name,
+        model_name=resolve_practice_generation_model(model_name),
     )
 
 
@@ -507,8 +522,11 @@ def build_mixed_practice_items_with_status(
     model_name: str | None = None,
     rag_context: str = "（本轮未检索到额外知识库材料）",
     knowledge_points: list[str] | None = None,
+    allow_live_ai: bool = True,
 ) -> PracticeGenerationResult:
     requested_count = max(1, count)
+    effective_model_name = resolve_practice_generation_model(model_name)
+    model_timeout_seconds = get_practice_generation_timeout_seconds()
     effective_points = [point for point in list(knowledge_points or []) if str(point).strip()]
     if not effective_points:
         effective_points = [topic]
@@ -566,6 +584,10 @@ def build_mixed_practice_items_with_status(
                 "fallback_count": 0,
                 "partial": False,
                 "ai_generation_failed": False,
+                "ai_generation_skipped": False,
+                "ai_model_used": False,
+                "model_name": effective_model_name,
+                "model_timeout_seconds": model_timeout_seconds,
                 "degraded_reason": "；".join(degraded_reasons),
                 **question_bank_status,
             },
@@ -574,40 +596,45 @@ def build_mixed_practice_items_with_status(
     missing_count = requested_count - len(picked)
     user_style_instruction = format_user_style_instruction(user_style_name, user_style_prompt)
     ai_generation_failed = False
+    ai_generation_skipped = False
+    generated_items: list[dict[str, Any]] = []
 
-    try:
-        generated = _invoke_generation_chain(
-            {
-                "count": missing_count,
-                "topic": topic,
-                "difficulty": difficulty,
-                "subject_name": subject_name,
-                "user_style_instruction": user_style_instruction,
-                "short_term_context": short_term_context,
-                "session_memory_context": session_memory_context,
-                "long_term_context": long_term_context,
-                "rag_context": rag_context or "（本轮未检索到额外知识库材料）",
-                "original_question": original_question or "（无原始问题）",
-            },
-            model_name=model_name,
-        )
-        generated_items = [
-            normalize_quiz_item(
+    if allow_live_ai:
+        try:
+            generated = _invoke_generation_chain(
                 {
-                    **item.model_dump(),
-                    "question_id": f"ai-{uuid.uuid4()}",
-                    "source_type": "ai_generated",
-                    "source_name": "",
-                    "source_year": None,
-                }
+                    "count": missing_count,
+                    "topic": topic,
+                    "difficulty": difficulty,
+                    "subject_name": subject_name,
+                    "user_style_instruction": user_style_instruction,
+                    "short_term_context": short_term_context,
+                    "session_memory_context": session_memory_context,
+                    "long_term_context": long_term_context,
+                    "rag_context": rag_context or "（本轮未检索到额外知识库材料）",
+                    "original_question": original_question or "（无原始问题）",
+                },
+                model_name=effective_model_name,
             )
-            for item in generated.items[:missing_count]
-        ]
-    except Exception as exc:
-        logger.error(f"❌ AI 选择题生成失败: {exc}")
-        ai_generation_failed = True
-        degraded_reasons.append(f"AI 选择题生成失败: {exc.__class__.__name__}")
-        generated_items = []
+            generated_items = [
+                normalize_quiz_item(
+                    {
+                        **item.model_dump(),
+                        "question_id": f"ai-{uuid.uuid4()}",
+                        "source_type": "ai_generated",
+                        "source_name": "",
+                        "source_year": None,
+                    }
+                )
+                for item in generated.items[:missing_count]
+            ]
+        except Exception as exc:
+            logger.error(f"❌ AI 选择题生成失败: {exc}")
+            ai_generation_failed = True
+            degraded_reasons.append(f"AI 选择题生成失败: {exc.__class__.__name__}")
+    else:
+        ai_generation_skipped = True
+        degraded_reasons.append("实时 AI 出题已跳过，使用备用题补齐。")
 
     normalized_picked = [normalize_quiz_item(item) for item in picked]
     deduped_items = dedupe_quiz_items([*normalized_picked, *generated_items])
@@ -640,6 +667,10 @@ def build_mixed_practice_items_with_status(
             "fallback_count": fallback_count,
             "partial": len(final_items) < requested_count,
             "ai_generation_failed": ai_generation_failed,
+            "ai_generation_skipped": ai_generation_skipped,
+            "ai_model_used": allow_live_ai,
+            "model_name": effective_model_name,
+            "model_timeout_seconds": model_timeout_seconds,
             "degraded_reason": "；".join(degraded_reasons),
             **question_bank_status,
         },
@@ -665,6 +696,8 @@ def repair_practice_items_with_status(
     rag_context: str = "（本轮未检索到额外知识库材料）",
 ) -> PracticeGenerationResult:
     requested_count = max(1, count)
+    effective_model_name = resolve_practice_generation_model(model_name)
+    repair_timeout_seconds = get_practice_repair_timeout_seconds()
     issue_context = "；".join(str(item).strip() for item in quality_issues if str(item).strip())
     forbidden_context = "；".join(str(item).strip() for item in forbidden_stems if str(item).strip())
     repair_question = "\n".join(
@@ -696,7 +729,8 @@ def repair_practice_items_with_status(
                 "rag_context": rag_context or "（本轮未检索到额外知识库材料）",
                 "original_question": repair_question,
             },
-            model_name=model_name,
+            model_name=effective_model_name,
+            purpose="repair",
         )
         generated_items = [
             normalize_quiz_item(
@@ -740,6 +774,9 @@ def repair_practice_items_with_status(
             "requested_count": requested_count,
             "generated_count": len(final_items),
             "repair_model_used": not ai_generation_failed,
+            "repair_model_name": effective_model_name,
+            "repair_model_timeout_seconds": repair_timeout_seconds,
+            "repair_model_skipped": False,
             "repair_generated_count": len(generated_items),
             "repair_fallback_count": fallback_count,
             "repair_degraded": bool(ai_generation_failed or fallback_count),
@@ -798,6 +835,7 @@ def build_recommended_practice_items(
         long_term_context=long_term_context,
         model_name=model_name,
         knowledge_points=[focus_topic],
+        allow_live_ai=is_practice_recommendation_live_ai_enabled(),
     )
     deduped_items = dedupe_quiz_items([
         *[normalize_quiz_item(item) for item in recommended],

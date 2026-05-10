@@ -141,6 +141,90 @@ class PracticeApiTest(unittest.TestCase):
         self.assertEqual(payload["selected_option"], "A")
         self.assertEqual(payload["correct_option"], "C")
 
+    def test_submit_practice_attempt_accepts_lowercase_option(self) -> None:
+        with patch(
+            "app.interfaces.api.practice.submit_attempt",
+            return_value=PracticeSubmissionResult(
+                is_correct=True,
+                selected_option="A",
+                correct_option="A",
+                explanation="HTTP 默认端口是 80。",
+                option_rationales={"A": "正确"},
+                memory=UserMemoryRecord(
+                    weak_points=[],
+                    error_count={},
+                    recent_topics=["HTTP"],
+                    last_session="session-1@2026-04-16T00:00:00Z",
+                ),
+            ),
+        ) as service:
+            response = self.client.post(
+                "/api/practice/attempts",
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-1",
+                    "subject_id": "general",
+                    "quiz_item": {
+                        "question_id": "ai-1",
+                        "question": "HTTP 默认端口是？",
+                        "options": [
+                            {"key": "A", "text": "80"},
+                            {"key": "B", "text": "53"},
+                            {"key": "C", "text": "20"},
+                            {"key": "D", "text": "443"},
+                        ],
+                        "correct_option": "A",
+                        "explanation": "HTTP 默认端口是 80。",
+                        "option_rationales": {"A": "正确"},
+                        "knowledge_point": "HTTP",
+                        "difficulty": "基础",
+                        "source_type": "ai_generated",
+                        "source_name": "",
+                        "source_year": None,
+                    },
+                    "selected_option": "a",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["selected_option"], "A")
+        self.assertEqual(service.call_args.kwargs["selected_option"], "A")
+
+    def test_submit_practice_attempt_rejects_invalid_option_before_service(self) -> None:
+        for selected_option in ("", "Z"):
+            with self.subTest(selected_option=selected_option):
+                with patch("app.interfaces.api.practice.submit_attempt") as service:
+                    response = self.client.post(
+                        "/api/practice/attempts",
+                        json={
+                            "user_id": "default_user",
+                            "session_id": "session-1",
+                            "subject_id": "general",
+                            "quiz_item": {
+                                "question_id": "ai-1",
+                                "question": "HTTP 默认端口是？",
+                                "options": [
+                                    {"key": "A", "text": "80"},
+                                    {"key": "B", "text": "53"},
+                                    {"key": "C", "text": "20"},
+                                    {"key": "D", "text": "443"},
+                                ],
+                                "correct_option": "A",
+                                "explanation": "HTTP 默认端口是 80。",
+                                "option_rationales": {"A": "正确"},
+                                "knowledge_point": "HTTP",
+                                "difficulty": "基础",
+                                "source_type": "ai_generated",
+                                "source_name": "",
+                                "source_year": None,
+                            },
+                            "selected_option": selected_option,
+                        },
+                    )
+
+                self.assertEqual(response.status_code, 422)
+                service.assert_not_called()
+
     def test_submit_practice_attempt_maps_legacy_constraint_runtime_error_to_400(self) -> None:
         with patch(
             "app.interfaces.api.practice.submit_attempt",

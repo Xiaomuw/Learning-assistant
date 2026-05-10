@@ -30,13 +30,11 @@ from app.infrastructure.llm.clients import (
 )
 from app.infrastructure.llm.config import (
     DEFAULT_CHAT_MODEL,
-    DEFAULT_DO_BASE_URL,
     ensure_model_env_aliases,
     get_embedding_check_ctx_length as _get_embedding_check_ctx_length,
     get_embedding_model_connection,
     get_model_access_key,
     get_openai_compatible_base_url,
-    get_pydo_client,
 )
 from app.infrastructure.llm.profile import get_model_profile as _get_model_profile
 from app.shared.schemas.model_profile import ModelProfile

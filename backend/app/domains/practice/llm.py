@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from app.infrastructure.llm.provider import DEFAULT_CHAT_MODEL, get_chat_llm
+from app.infrastructure.llm.config import get_practice_generation_model
+from app.infrastructure.llm.provider import get_chat_llm
+
+
+def resolve_practice_generation_model(model_name: str | None = None) -> str:
+    return (model_name or get_practice_generation_model()).strip() or get_practice_generation_model()
 
 
 def get_generation_llm(
@@ -11,9 +16,9 @@ def get_generation_llm(
     max_retries: int | None = None,
 ):
     return get_chat_llm(
-        default_model=DEFAULT_CHAT_MODEL,
+        default_model=get_practice_generation_model(),
         temperature=temperature,
-        model_override=model_name,
+        model_override=resolve_practice_generation_model(model_name),
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
     )

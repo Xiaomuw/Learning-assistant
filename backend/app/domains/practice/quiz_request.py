@@ -247,7 +247,9 @@ def _has_quiz_intent(message: str, context: dict[str, Any]) -> bool:
         lowered,
     ):
         return True
-    if re.search(r"(出|来|生成|做|练|考|测试).{0,12}(题|练习|测验)", message):
+    if re.search(r"(出|来|生成|做|练|考|测试).{0,30}(题|练习|测验|单选|选择)", message):
+        return True
+    if re.search(r"(?:围绕|关于|针对|有关).{1,40}(?:出|生成|做|练|考|测试|题|练习|测验|单选|选择)", message):
         return True
     if "做题" in message:
         return True
@@ -528,6 +530,7 @@ def _extract_subtopic_after_subject_alias(message: str) -> str:
 
 def _extract_chinese_specific_topic(message: str) -> str:
     patterns = (
+        r"(?:围绕|关于|针对|有关)\s*[「『《“\"]?([^」』》”，，。！？,.!?：:]{1,40}?)[」』》”\"]?\s*(?:出|生成|来|做|考|测试|刷|练|$)",
         r"(?:围绕|关于|针对|有关)\s*([^，。！？,.!?：:]{1,40})",
         r"(?:出|生成|来|做|考|测试|刷)\s*(?:一些|几道|点)?\s*([^，。！？,.!?：:]{1,40})",
         r"(?:帮我|给我|请)?\s*([^，。！？,.!?：:]{1,40}?)(?:相关|有关)?$",
@@ -573,11 +576,12 @@ def _clean_extracted_topic(topic: str) -> str:
     cleaned = str(topic or "")
     cleaned = re.sub(r"(?:请只给.*|只给.*|不要.*|并且.*)$", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|a|an|\d+)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(?:408\s*风格|408|考研风格|真题风格|风格)", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"(?:单选|选择|多选|判断|简答|问答|practice|quiz|mcq|question|questions)", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s*(?:出|生成|来|做|考|测试|刷)?\s*道$", "", cleaned)
     cleaned = re.sub(r"(?:\s|^)(?:出|生成|来|做|考|测试|刷|给我|帮我|请)+$", "", cleaned)
     cleaned = re.sub(r"(?:类型|方向|方面|有关|相关|的|里|里的|给我)+$", "", cleaned)
-    cleaned = cleaned.strip(" ：:，,。.!！?？、；;\t\n\r")
+    cleaned = cleaned.strip(" 「」『』《》“”\"'：:，,。.!！?？、；;\t\n\r")
     return " ".join(cleaned.split()).strip()
 
 
@@ -590,6 +594,10 @@ def _subject_id_for_topic(topic: str) -> str | None:
         return "data-structure"
     if any(term in compact for term in ("http", "https", "tcp", "udp", "dns", "ip", "端口", "路由")):
         return "computer-network"
+    if any(term in compact for term in ("cpu", "alu", "cache", "寄存器", "指令", "流水线", "总线", "存储器", "补码", "中断")):
+        return "computer-organization"
+    if any(term in compact for term in ("进程", "线程", "调度", "死锁", "虚拟内存", "内存管理", "文件系统", "系统调用", "同步", "互斥", "信号量")):
+        return "operating-system"
     return None
 
 

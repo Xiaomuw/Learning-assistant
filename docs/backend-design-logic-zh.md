@@ -86,19 +86,17 @@ flowchart LR
 - 主问答链路里再决定是否用内部工具、外部 MCP、结构化输出或 fallback。
 - 最终把结果沉淀到记忆层和会话层。
 
-### 3.1 当前主图的实际分流
+### 3.1 当前 Graph 的实际分流
 
 主定义在：
-- [backend/app/orchestration/graph/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graph/graph.py)
+- [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py)
 
 当前路径是：
 
-- `concept / problem`：`preflight_node -> router -> qa_agent_node -> memory_node -> finalize_node -> END`
-- `review`：`preflight_node -> router -> qa_agent_node -> quiz_gen -> memory_node -> finalize_node -> END`
-- `practice`：`preflight_node -> router -> quiz_gen -> memory_node -> finalize_node -> END`
-- `mcq_problem`：`preflight_node -> router -> mcq_solver -> memory_node -> finalize_node -> END`
-- `meta / smalltalk`：`preflight_node -> router -> meta_node -> finalize_node -> END`
-- 图级异常：`... -> graph_error_node -> finalize_node -> END`
+- `concept / problem / review`：`LearningOrchestratorGraph -> QAGraph -> response_composer`
+- `practice`：`LearningOrchestratorGraph -> QuestionGenerationGraph -> response_composer`
+- `mastery`：`LearningOrchestratorGraph -> MasteryEvaluationGraph -> response_composer`
+- 请求守卫或子图异常：`LearningOrchestratorGraph -> fallback / response_composer`
 
 这种设计的价值在于：
 
@@ -161,7 +159,7 @@ flowchart LR
    - 短期记忆
    - 中期会话摘要
    - 长期学习画像
-4. 调用 `stream_workflow()` 或 `run_workflow()`
+4. 调用 `stream_chat()` 或 `run_chat_sync()`，内部进入 `LearningOrchestratorGraph`
 5. 将节点输出映射为 SSE 事件或 sync 响应
 6. 将会话、题包、摘要、学习结果写回数据库
 
@@ -177,7 +175,8 @@ flowchart LR
 
 主问答核心不再是旧的 `retriever -> explainer` 直串，而是：
 
-- [backend/app/orchestration/agents/qa_agent.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/agents/qa_agent.py)
+- [backend/app/orchestration/graphs/qa/adapter.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/qa/adapter.py)
+- [backend/app/orchestration/graphs/qa/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/qa/graph.py)
 - [backend/app/domains/qa/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/domains/qa/runtime.py)
 
 ### 6.1 执行顺序
@@ -388,8 +387,8 @@ flowchart LR
 
 1. [backend/app/main.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/main.py)
 2. [backend/app/interfaces/api/chat.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/interfaces/api/chat.py)
-3. [backend/app/orchestration/graph/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graph/graph.py)
-4. [backend/app/orchestration/agents/*.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/agents)
+3. [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py)
+4. [backend/app/orchestration/graphs/qa/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/qa/graph.py)
 5. [backend/app/domains/qa/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/domains/qa/runtime.py)
 6. [backend/app/domains/memory/service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/domains/memory/service.py)
 7. [backend/app/services/rag/rag_service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/rag/rag_service.py)

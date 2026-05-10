@@ -152,6 +152,7 @@ export default function PracticePage() {
   const [isPracticeCompleted, setIsPracticeCompleted] = useState(false);
   const [practiceCompletedAt, setPracticeCompletedAt] = useState<number | null>(null);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const submitInFlightRef = useRef(false);
 
   useEffect(() => {
     setLearningCenterTarget(parseLearningCenterPracticeTarget());
@@ -428,10 +429,18 @@ export default function PracticePage() {
   }
 
   async function handleSubmit() {
-    if (!user || !currentQuiz || !selectedOption || feedback) {
+    if (
+      !user ||
+      !currentQuiz ||
+      !selectedOption ||
+      feedback ||
+      isSubmitting ||
+      submitInFlightRef.current
+    ) {
       return;
     }
 
+    submitInFlightRef.current = true;
     setSubmitError("");
     setIsSubmitting(true);
     try {
@@ -449,7 +458,9 @@ export default function PracticePage() {
 
       const nextFeedback: AttemptFeedback = {
         submittedOption: result.selected_option ?? submittedOption,
-        isCorrect: (result.selected_option ?? submittedOption) === result.correct_option && result.is_correct,
+        isCorrect:
+          (result.selected_option ?? submittedOption) === result.correct_option &&
+          result.is_correct,
         correctOption: result.correct_option,
         explanation: result.explanation,
         optionRationales: result.option_rationales,
@@ -487,6 +498,7 @@ export default function PracticePage() {
           : "提交作答失败，请稍后重试。"
       );
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -520,13 +532,14 @@ export default function PracticePage() {
     }
 
     setPackError("");
+    setSubmitError("");
     setIsGeneratingPack(true);
     try {
       const result = await createPracticePack({
         user_id: user.id,
         session_id: currentSessionId,
         subject_id: learningCenterTarget.subjectId,
-        request_text: `针对「${learningCenterTarget.conceptName}」生成 408 单选题`,
+        request_text: `针对「${learningCenterTarget.conceptName}」生成 5 道 408 风格单选题`,
         current_practice_question: currentQuiz,
         last_practice_pack: quizList,
         context: {
@@ -582,11 +595,12 @@ export default function PracticePage() {
   }
 
   async function handleGenerateMore() {
-    if (!user || !currentQuiz || isGeneratingPack) {
+    if (!user || !currentQuiz || isGeneratingPack || isSubmitting) {
       return;
     }
 
     setPackError("");
+    setSubmitError("");
     setIsGeneratingPack(true);
     try {
       const quizMeta = loadStoredQuizMeta();
@@ -622,11 +636,18 @@ export default function PracticePage() {
       if (Array.isArray(result.items) && result.items.length > 0) {
         setLearningStoreUser(user.id);
         const nextQuizList = appendStoredQuiz(result.items, {
-          topic: result.quiz_request.active_topic || result.quiz_request.topic || result.items[0]?.knowledge_point,
+          topic:
+            result.quiz_request.active_topic ||
+            result.quiz_request.topic ||
+            result.items[0]?.knowledge_point,
           subjectId: result.quiz_request.subject_id || activeNotebookId,
           sessionId: currentSessionId,
           shouldSwitchTopic: true,
         });
+        if (nextQuizList.length <= quizList.length) {
+          setPackError("这次没有生成新的题，请稍后再试一次。");
+          return;
+        }
         const shouldJumpToNewItems = isPracticeCompleted || isLastQuestion;
         const nextIndex = shouldJumpToNewItems
           ? Math.min(quizList.length, Math.max(0, nextQuizList.length - 1))
@@ -836,7 +857,7 @@ export default function PracticePage() {
                 <button
                   type="button"
                   onClick={handleGenerateMore}
-                  disabled={isGeneratingPack}
+                  disabled={isGeneratingPack || isSubmitting}
                   className="neo-button-secondary w-full justify-center disabled:opacity-70"
                 >
                   <Sparkles size={16} strokeWidth={2.8} />

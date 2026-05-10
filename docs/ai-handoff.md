@@ -37,10 +37,10 @@
 
 LangGraph：
 
-- 本地 FastAPI 使用 `backend/app/orchestration/graph/graph.py`
+- 本地 FastAPI 使用 `backend/app/orchestration/graphs/orchestrator/graph.py`
 - Platform sidecar 使用 `backend/langgraph.json` 和 `backend/app/orchestration/platform/*`
 - 当前正式图名是 `learning_assistant`
-- 当前核心拓扑是 `preflight_node -> router -> rag_node/分支节点 -> qa_agent_node/专项节点 -> memory_node/graph_error_node -> finalize_node -> END`
+- 当前核心拓扑是 `LearningOrchestratorGraph -> QAGraph / QuestionGenerationGraph / MasteryEvaluationGraph -> response_composer`
 
 ## 不要做什么
 
@@ -61,7 +61,6 @@ cd backend
 ./.venv313/bin/python scripts/check_environment.py
 ./.venv313/bin/python -m compileall app tests scripts
 ./.venv313/bin/python -m unittest discover -s tests
-./.venv313/bin/python scripts/check_do_model_access.py
 ```
 
 前端：
@@ -87,28 +86,23 @@ npm run dev -- --hostname 127.0.0.1 --port 3000
 ## 当前核心流程
 
 - 登录注册：`interfaces/auth/router.py -> application/auth/service.py -> infrastructure/auth + db repositories`
-- 聊天问答：`interfaces/api/chat.py -> application/chat/* -> orchestration/workflow -> graph -> rag_node -> qa_agent -> domains/qa/runtime.py`
-- RAG：`orchestration/agents/rag.py -> services/rag/rag_service.py -> services/rag/{retriever,vector_store}.py`
+- 聊天问答：`interfaces/api/chat.py -> application/chat/* -> orchestration/graphs/orchestrator -> QAGraph -> domains/qa/runtime.py`
+- RAG：`orchestration/graphs/qa -> services/tooling -> services/rag/{retriever,vector_store,rag_service}.py`
 - Notebook 入库：`interfaces/api/upload.py or subjects.py -> application/ingest or notebooks -> services/notebook_knowledge_base.py`
 - 练习：`interfaces/api/practice.py -> application/practice/service.py -> domains/practice/*`
 - 掌握度：聊天 exposure 和做题 attempt 更新 `domains/mastery/service.py` 与 `user_knowledge_stats`
 
-LangGraph 节点边界：
+Graph 边界：
 
-- `preflight_node`：只做输入规范化、空问题/超长问题/缺失 ID 的图级校验。
-- `router`：只做问题分类。
-- `rag_node`：只做 notebook 检索、诊断和 RAG 上下文写入，失败时 fail-open。
-- `qa_agent_node`：只进入 QA runtime，复用 `rag_node` 产出的上下文并负责最终回答。
-- `quiz_gen`：只做题包生成。
-- `mcq_solver`：只做聊天页单选题判题。
-- `meta_node`：只做寒暄和系统/能力类问题。
-- `memory_node`：只更新记忆；失败只写 warning，不覆盖主回答。
-- `graph_error_node`：只处理未被 runtime 降级吸收的图级异常。
-- `finalize_node`：统一写 `finalized`、`final_response_type`、`route_decision`。
+- `LearningOrchestratorGraph`：只负责请求守卫、上下文加载、意图路由、子图调用、响应组合与审计。
+- `QAGraph`：只负责问答、证据判断、工具 fallback、grounding 和 `LearningEvent`。
+- `QuestionGenerationGraph`：只负责出题、验证、质量检查和题目持久化。
+- `MasteryEvaluationGraph`：只负责消费 `LearningEvent` / attempts 并更新 mastery。
+- `qa_agent_node` 等名称只作为 SSE/presenter 兼容事件名保留，不代表旧 Python agents 包仍在运行。
 
 ## 外部依赖
 
-- DigitalOcean Model Access：OpenAI-compatible chat / embedding。
+- DeepSeek / OpenAI-compatible chat provider；embedding 独立使用当前配置的 Google 或 OpenAI-compatible provider。
 - SMTP：邮箱验证码注册，未配置时注册发码会明确失败。
 - LangSmith：可选 tracing，主业务 fail-open。
 - MCP：可选 HTTP MCP，主业务 fail-open。

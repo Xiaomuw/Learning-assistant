@@ -52,7 +52,6 @@ cd backend
 ./.venv313/bin/python scripts/check_environment.py
 ./.venv313/bin/python -m compileall app tests scripts
 ./.venv313/bin/python -m unittest discover -s tests
-./.venv313/bin/python scripts/check_do_model_access.py
 ```
 
 ```bash

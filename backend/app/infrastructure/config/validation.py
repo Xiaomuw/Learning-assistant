@@ -83,7 +83,7 @@ def collect_environment_warnings() -> list[str]:
     embedding_provider = (os.getenv("EMBEDDING_PROVIDER") or "google").strip().lower()
     if not embedding_base_url and "inference.do-ai.run" in openai_base_url.lower():
         warnings.append(
-            "当前 embedding 默认复用 DigitalOcean inference endpoint；若出现 model not found，"
+            "当前 embedding 默认复用 chat endpoint；若该 OpenAI-compatible provider 不提供 embedding，"
             "请配置 OPENAI_EMBEDDING_BASE_URL / OPENAI_EMBEDDING_API_KEY / OPENAI_EMBEDDING_MODEL。"
         )
     if (

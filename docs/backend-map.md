@@ -11,13 +11,12 @@
 1. [backend/app/main.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/main.py)
 2. [backend/app/interfaces/api/chat.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/interfaces/api/chat.py)
 3. [backend/app/application/chat/service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/application/chat/service.py)
-4. `backend/app/application/chat/{state_builder,workflow_adapter,persistence,messages}.py`
-5. [backend/app/orchestration/graph/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graph/graph.py)
-6. [backend/app/orchestration/workflow/runner.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/workflow/runner.py)
-7. `backend/app/orchestration/agents/*`
-8. `backend/app/domains/*` / `backend/app/services/*` / `backend/app/infrastructure/*`
-9. [backend/app/services/runtime_models.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/runtime_models.py)
-10. [backend/app/infrastructure/ingest/pdf.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/infrastructure/ingest/pdf.py)
+4. `backend/app/application/chat/{state_builder,orchestrator_runtime,persistence,messages}.py`
+5. [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py)
+6. `backend/app/orchestration/graphs/{qa,question_generation,mastery}`
+7. `backend/app/domains/*` / `backend/app/services/*` / `backend/app/infrastructure/*`
+8. [backend/app/services/runtime_models.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/runtime_models.py)
+9. [backend/app/infrastructure/ingest/pdf.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/infrastructure/ingest/pdf.py)
 
 启动排障优先补一眼：
 
@@ -36,9 +35,7 @@ backend/
 │   │   └── auth/     # 登录注册、JWT、cookie、邮箱验证码、SMTP 的 HTTP 翻译层
 │   ├── application/  # auth / chat / notebooks / ingest / model_config 等用例编排
 │   ├── orchestration/
-│   │   ├── agents/   # LangGraph 节点函数
-│   │   ├── graph/    # 图结构、条件分流、节点装配
-│   │   ├── workflow/ # runner、runtime、compiled graph 生命周期
+│   │   ├── graphs/   # orchestrator / QA / question generation / mastery graphs
 │   │   └── platform/ # LangGraph Platform sidecar graph / lifespan
 │   ├── domains/
 │   │   ├── practice/ # 题库、推荐、做题记录
@@ -46,7 +43,6 @@ backend/
 │   │   └── memory/   # 短期 / 中期 / 长期记忆装配与更新
 │   ├── services/
 │   │   ├── rag/          # RAG loader/splitter/embedding/vector/retriever/service
-│   │   ├── retrieval/    # 迁移期薄兼容壳；新增代码不要使用
 │   │   └── runtime_models.py # 当前活动模型选择
 │   ├── infrastructure/
 │   │   ├── llm/      # model provider、profile、LangSmith
@@ -58,7 +54,6 @@ backend/
 ├── tests/
 ├── scripts/
 ├── storage/
-│   ├── chroma_data/
 │   └── data/
 └── main.py           # 启动转发入口 -> app.main:app
 ```
@@ -71,20 +66,13 @@ flowchart LR
     B --> C["app/application/chat/service.py"]
     B --> P["app/interfaces/api/chat_presenter.py<br/>SSE 事件映射"]
     C --> C1["state_builder.py<br/>构建 AgentState"]
-    C --> C2["workflow_adapter.py<br/>隔离 workflow 调用"]
+    C --> C2["orchestrator_runtime.py<br/>调用 LearningOrchestratorGraph"]
     C --> C3["persistence.py<br/>会话与记忆持久化"]
     C --> C4["messages.py<br/>持久化消息与过程面板"]
     C1 --> D["app/domains/memory/service.py<br/>组装短期/中期/长期记忆"]
-    C2 --> E["app/orchestration/workflow/runner.py"]
-    E --> F["app/orchestration/graph/graph.py"]
-    F --> F1["preflight_node<br/>输入校验 / 规范化"]
-    F1 --> G["app/orchestration/agents/router.py"]
-    G --> RAG["app/orchestration/agents/rag.py"]
-    RAG --> H["app/orchestration/agents/qa_agent.py"]
-    G --> I["app/orchestration/agents/quiz.py"]
-    G --> J["app/orchestration/agents/memory.py"]
-    J --> F2["finalize_node<br/>响应类型 / 路径摘要"]
-    H --> K["app/domains/qa/runtime.py"]
+    C2 --> E["app/orchestration/graphs/orchestrator"]
+    E --> F["QAGraph / QuestionGenerationGraph / MasteryEvaluationGraph"]
+    F --> K["app/domains/qa/runtime.py<br/>或 practice/mastery domain"]
     K --> L["app/services/tools/runtime.py"]
     K --> M["app/services/rag/rag_service.py"]
     K --> N["app/infrastructure/llm/provider.py"]
@@ -96,21 +84,20 @@ flowchart LR
 - `app/interfaces/api/chat.py` 是薄控制器，只做 HTTP 入参、鉴权、SSE 包装和响应映射
 - `app/interfaces/api/chat_presenter.py` 只做 SSE 节点事件到 HTTP 事件的映射
 - `app/interfaces/auth/router.py` 现在只做 HTTP / cookie 翻译，认证编排已下沉到 `app/application/auth/service.py`
-- `app/application/chat/service.py` 是 chat use case façade，只协调 state builder、workflow adapter 和 persistence
+- `app/application/chat/service.py` 是 chat use case façade，只协调 state builder、orchestrator runtime 和 persistence
 - `app/application/chat/state_builder.py` 负责把请求上下文装配成 `AgentState`
-- `app/application/chat/workflow_adapter.py` 负责隔离 `orchestration.workflow` 调用
+- `app/application/chat/orchestrator_runtime.py` 负责调用 `LearningOrchestratorGraph`
 - `app/application/chat/persistence.py` 负责会话消息、latest quiz 和记忆快照持久化
 - `app/application/chat/messages.py` 负责持久化 assistant message 与过程面板结构
 - `app/application/*` 现在不再直接抛 `HTTPException`；应用层错误统一留给 `interfaces/*` 做 HTTP 映射
 - `app/services/runtime_models.py` 是“当前活动模型”的唯一决策入口
 - `app/orchestration/*` 负责图编排和节点调度
-- 当前 LangGraph 主拓扑是 `preflight_node -> router -> rag_node/分支节点 -> qa_agent_node/专项节点 -> memory_node / graph_error_node -> finalize_node -> END`
+- 当前 LangGraph 主拓扑是 `LearningOrchestratorGraph -> QAGraph / QuestionGenerationGraph / MasteryEvaluationGraph -> response_composer`
 - `app/orchestration/platform/*` 只服务 LangGraph Platform sidecar，不挂载现有 FastAPI 业务路由
 - `app/domains/*` 负责 QA / memory / practice 的领域逻辑
 - `app/domains/qa/runtime.py` 是主问答 façade；mode selection、tool loop、answer generation、fallback 已拆到 `app/domains/qa/*`
 - `app/domains/practice/service.py` 是兼容 façade；出题、判题、attempt、导入分别在 `app/domains/practice/*`
 - `app/services/rag/*` 是 RAG 正式入口：loader、splitter、embeddings、vector_store、retriever、rag_service
-- `app/services/retrieval/*` 仅是迁移期薄兼容壳，不作为新增代码入口
 - `app/services/tools/*` 是 QA 工具 registry / executor / internal tools / MCP tools 的正式入口
 - `app/infrastructure/ingest/*` 负责 PDF / URL 内容提取
 - `app/infrastructure/llm/provider.py` 是 LLM façade；环境配置、模型目录和客户端工厂已拆到 `config.py`、`catalog.py`、`clients.py`
@@ -142,7 +129,7 @@ flowchart LR
 - 新代码一律以 `app.*` 为事实来源
 - `backend/tests` 和 `backend/scripts` 只允许导入正式 `app.*` 入口
 - 结构守卫会阻止旧顶层目录重新出现
-- 结构守卫会阻止 `app.infrastructure.llm.selection`、`app.infrastructure.tools`、`app.services.retrieval.store`、`app.interfaces.mcp` 等 deprecated façade 回流
+- 结构守卫会阻止 `app.orchestration.agents`、`app.services.retrieval`、`app.infrastructure.llm.selection`、`app.infrastructure.tools`、`app.interfaces.mcp` 等 deprecated façade 回流
 
 ## 7. 相关文档
 

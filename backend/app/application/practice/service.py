@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from app.application.practice.graph_facts import maybe_dual_write_practice_attempt
+from app.application.practice.graph_facts import (
+    maybe_dual_write_practice_attempt,
+    update_graph_mastery_from_practice_attempt,
+)
 from app.domains.memory.service import build_request_context
 from app.domains.practice.service import (
     build_recommended_practice_items,
     record_practice_attempt_and_update_memory,
 )
+from app.domains.practice.llm import resolve_practice_generation_model
 from app.infrastructure.db.repositories.subjects import get_subject_record
-from app.services.runtime_models import resolve_active_chat_model
 from app.shared.schemas.contracts import PracticeRecommendation, PracticeRecommendationsResult, PracticeSubmissionResult
 from app.shared.schemas.subject import DEFAULT_SUBJECTS, normalize_subject_id
 
@@ -27,7 +30,7 @@ def get_recommendations(*, user_id: str, subject_id: str | None, limit: int) -> 
         session_memory_context=context["session_memory_context"],
         long_term_context=context["long_term_context"],
         limit=limit,
-        model_name=resolve_active_chat_model(),
+        model_name=resolve_practice_generation_model(),
     )
     return PracticeRecommendationsResult(
         subject_id=normalized_subject_id,
@@ -50,6 +53,7 @@ def submit_attempt(
         subject_id=subject_id,
         quiz_item=quiz_item,
         selected_option=selected_option,
+        graph_mastery_update=update_graph_mastery_from_practice_attempt,
     )
     enriched_quiz_item = quiz_item
     if result.mastery_evaluation and result.mastery_evaluation.concept_id:

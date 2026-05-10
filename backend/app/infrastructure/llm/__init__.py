@@ -8,7 +8,6 @@ from app.infrastructure.llm.provider import (  # noqa: F401
     get_embeddings,
     get_model_access_key,
     get_openai_compatible_base_url,
-    get_pydo_client,
     is_supported_chat_model,
     list_selectable_chat_models,
     validate_chat_model_access,

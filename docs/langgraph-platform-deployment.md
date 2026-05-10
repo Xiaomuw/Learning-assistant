@@ -26,9 +26,9 @@ cd backend
 验证重点：
 
 - Studio 能看到 `learning_assistant`
-- 节点包含 `router / rag_node / qa_agent_node / quiz_gen / mcq_solver / meta_node / memory_node / graph_error_node`
-- `smalltalk / concept / review / practice / mcq_problem` 都能启动 run
-- 模拟节点异常时进入 `graph_error_node`
+- 节点包含 `request_guard / load_learner_context / intent_router / invoke_child_graph / response_composer / persist_audit_event`
+- `concept / problem / review / practice / mastery` 都能启动 run
+- 模拟子图异常时由 Orchestrator 进入 fallback / response composer
 
 ## Cloud 部署
 
@@ -67,7 +67,7 @@ Cloud 不能访问本机 `127.0.0.1:5432`。`DATABASE_URL` 必须指向 LangSmit
 ## 错误策略
 
 - QA runtime 内部可降级的 tool / structured / RAG 错误不会上抛成图级失败
-- 核心节点未处理异常会写入脱敏 `graph_error` 并进入 `graph_error_node`
+- 子图未处理异常会写入脱敏 graph error，并由 Orchestrator 组合安全响应
 - `memory_node` 失败只写入 `graph_warnings`，不覆盖已经生成的回答
 - state 和响应中不写入 API key、数据库 DSN、邮箱等敏感信息
 

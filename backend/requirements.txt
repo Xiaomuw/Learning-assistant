@@ -27,7 +27,6 @@ beautifulsoup4==4.13.3         # Web scraping / URL doc ingestion
 requests==2.32.3               # Web requests
 SQLAlchemy>=2.0.36             # ORM / PostgreSQL persistence
 alembic>=1.13.3                # Graph-era facts schema migrations
-pydo                           # DigitalOcean 官方 SDK
 openpyxl>=3.1.5                # Excel 题库导入
 
 # ---------- Embedding ----------

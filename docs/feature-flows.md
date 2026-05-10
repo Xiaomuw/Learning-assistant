@@ -52,35 +52,25 @@ flowchart TD
 flowchart TD
     A["POST /api/chat 或 /api/chat/sync"] --> B["interfaces/api/chat.py"]
     B --> C["application/chat/state_builder.py"]
-    C --> D["orchestration/workflow/runner.py"]
-    D --> E0["LangGraph preflight_node"]
-    E0 --> E["router"]
-    E --> F{"question_type"}
-    F -->|"concept / problem"| RAG["rag_node"]
-    RAG --> G["qa_agent_node"]
-    F -->|"review"| G
-    F -->|"mcq_problem"| H["mcq_solver"]
-    F -->|"practice"| I["quiz_gen"]
-    F -->|"meta / smalltalk"| J["meta_node"]
+    C --> D["application/chat/orchestrator_runtime.py"]
+    D --> E["LearningOrchestratorGraph"]
+    E --> F{"intent"}
+    F -->|"concept / problem / review"| G["QAGraph"]
+    F -->|"practice"| I["QuestionGenerationGraph"]
+    F -->|"mastery"| H["MasteryEvaluationGraph"]
+    F -->|"fallback"| J["response_composer"]
     G --> K["domains/qa/runtime.py"]
     K --> L["model profile + middleware"]
-    L --> M["tool loop / deterministic RAG fallback"]
-    M --> N["services/rag/rag_service.py"]
+    L --> M["tool loop / grounding / fallback"]
+    M --> N["services/tooling + services/rag"]
     N --> O["PGVector"]
     K --> P["answer_generation / postprocess"]
-    P -->|"concept / problem"| Q["memory_node"]
-    P -->|"review"| I
-    Q --> Z["finalize_node"]
-    H --> Q
-    I --> Q
+    P --> Z["response_composer"]
+    I --> Z
+    H --> Z
     J --> Z
     Z --> R["chat_sessions / user_memories / user_knowledge_stats"]
-    E0 -.空问题 / 图级异常.-> X["graph_error_node"]
-    E -.异常.-> X
-    G -.异常.-> X
-    H -.异常.-> X
-    I -.异常.-> X
-    X --> Z
+    E -.空问题 / 子图异常.-> J
 ```
 
 事实型 RAG 问题要求：

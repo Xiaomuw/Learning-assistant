@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import DataError, IntegrityError, StatementError
 
 from app.application.practice.pack_service import create_pack_from_request
@@ -38,6 +38,14 @@ class PracticeAttemptRequest(BaseModel):
     subject_id: str = DEFAULT_SUBJECT_ID
     quiz_item: PracticeRecommendation
     selected_option: str = Field(min_length=1, max_length=1)
+
+    @field_validator("selected_option", mode="before")
+    @classmethod
+    def normalize_selected_option(cls, value: Any) -> str:
+        option = str(value or "").strip().upper()
+        if option not in {"A", "B", "C", "D"}:
+            raise ValueError("selected_option 必须是 A/B/C/D")
+        return option
 
 
 class PracticeAttemptResponse(BaseModel):

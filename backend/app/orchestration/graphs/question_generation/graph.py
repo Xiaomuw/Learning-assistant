@@ -81,7 +81,11 @@ def build_production_graph(
     candidate_generator: QuestionCandidateGenerator | None = None,
     candidate_repairer: QuestionCandidateRepairer | None = None,
 ) -> StateGraph:
-    repairer = candidate_repairer or LegacyPracticeQuestionCandidateGenerator()
+    repairer = candidate_repairer or (
+        candidate_generator
+        if candidate_generator is not None and hasattr(candidate_generator, "repair")
+        else LegacyPracticeQuestionCandidateGenerator()
+    )
     if not is_graph_facts_enabled():
         return build_graph(candidate_generator=candidate_generator, candidate_repairer=repairer)
     repos = build_graph_fact_repositories()

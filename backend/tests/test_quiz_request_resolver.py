@@ -90,6 +90,16 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.question_type, "single_choice")
         self.assertEqual(result.count, 5)
 
+    def test_chinese_quoted_topic_with_408_style_generates_pack(self) -> None:
+        result = resolve_quiz_request("针对「栈」生成 5 道 408 风格单选题", {})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "栈")
+        self.assertEqual(result.subject_id, "data-structure")
+        self.assertEqual(result.source, "explicit_user_input")
+        self.assertEqual(result.question_type, "single_choice")
+        self.assertEqual(result.count, 5)
+
     def test_explicit_data_structure_single_choice_keeps_subject_topic(self) -> None:
         result = resolve_quiz_request("给我出5道数据结构的单选题", {"last_topic": "HTTP"})
 
@@ -181,6 +191,20 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.requested_topic, "计算机网络")
         self.assertEqual(result.question_type, "single_choice")
         self.assertEqual(result.count, 2)
+
+    def test_specific_operating_system_topic_maps_subject_id(self) -> None:
+        result = resolve_quiz_request("出进程调度的题目", {})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "进程调度")
+        self.assertEqual(result.subject_id, "operating-system")
+
+    def test_specific_computer_organization_topic_maps_subject_id(self) -> None:
+        result = resolve_quiz_request("出流水线的题目", {})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.topic, "流水线")
+        self.assertEqual(result.subject_id, "computer-organization")
 
     def test_ai_refill_uses_current_practice_question(self) -> None:
         result = resolve_quiz_request(

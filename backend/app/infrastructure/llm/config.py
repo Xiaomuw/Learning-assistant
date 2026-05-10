@@ -3,9 +3,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from pydo import Client
-
-DEFAULT_DO_BASE_URL = "https://inference.do-ai.run/v1"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_CHAT_MODEL = "deepseek-v4-pro"
@@ -15,6 +12,8 @@ DEFAULT_FALLBACK_CHAT_MODEL = "deepseek-v4-flash"
 DEFAULT_NVIDIA_GLM_MODEL = "z-ai/glm4.7"
 DEFAULT_LLM_TIMEOUT_SECONDS = 45.0
 DEFAULT_LLM_MAX_RETRIES = 1
+DEFAULT_PRACTICE_GENERATION_TIMEOUT_SECONDS = 6.0
+DEFAULT_PRACTICE_REPAIR_TIMEOUT_SECONDS = 4.0
 MODEL_SWITCHING_STATUS_DEVELOPMENT = "development"
 MODEL_SWITCHING_STATUS_AVAILABLE = "available"
 
@@ -57,6 +56,23 @@ def get_llm_max_retries() -> int:
         return DEFAULT_LLM_MAX_RETRIES
 
 
+def _get_float_env(name: str, default: float, *, minimum: float) -> float:
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        return max(minimum, float(raw))
+    except ValueError:
+        return default
+
+
+def _get_bool_env(name: str, *, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def is_model_switching_enabled() -> bool:
     raw = os.getenv("MODEL_SWITCHING_ENABLED")
     if raw is None:
@@ -73,6 +89,33 @@ def get_fallback_chat_model() -> str:
         os.getenv("FALLBACK_CHAT_MODEL", DEFAULT_FALLBACK_CHAT_MODEL).strip()
         or DEFAULT_FALLBACK_CHAT_MODEL
     )
+
+
+def get_practice_generation_model() -> str:
+    return (
+        os.getenv("PRACTICE_GENERATION_MODEL", get_fallback_chat_model()).strip()
+        or get_fallback_chat_model()
+    )
+
+
+def get_practice_generation_timeout_seconds() -> float:
+    return _get_float_env(
+        "PRACTICE_GENERATION_TIMEOUT_SECONDS",
+        DEFAULT_PRACTICE_GENERATION_TIMEOUT_SECONDS,
+        minimum=1.0,
+    )
+
+
+def get_practice_repair_timeout_seconds() -> float:
+    return _get_float_env(
+        "PRACTICE_REPAIR_TIMEOUT_SECONDS",
+        DEFAULT_PRACTICE_REPAIR_TIMEOUT_SECONDS,
+        minimum=1.0,
+    )
+
+
+def is_practice_recommendation_live_ai_enabled() -> bool:
+    return _get_bool_env("PRACTICE_RECOMMENDATION_LIVE_AI", default=False)
 
 
 def get_model_switching_status() -> str:
@@ -297,10 +340,3 @@ def get_embedding_check_ctx_length() -> bool:
     if "inference.do-ai.run" in embedding_url or "dashscope" in embedding_url:
         return False
     return True
-
-
-def get_pydo_client() -> Client:
-    token = get_model_access_key()
-    if not token:
-        raise RuntimeError("未找到 MODEL_ACCESS_KEY / OPENAI_API_KEY")
-    return Client(token=token)

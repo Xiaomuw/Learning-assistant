@@ -20,6 +20,7 @@ from app.application.chat.orchestrator_runtime import (
     _quiz_items_from_child_payload,
     _stream_chunk_from_orchestrator_update,
 )
+from app.application.practice.graph_facts import update_graph_mastery_from_practice_attempt
 from app.domains.practice.attempts import record_practice_attempt_and_update_memory
 from app.domains.practice.common import normalize_practice_source_type, normalize_quiz_item
 from app.shared.schemas.contracts import MasteryEvaluationResult, PracticeRecommendation
@@ -226,8 +227,8 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                 "app.domains.practice.attempts._create_practice_attempt",
                 return_value={"id": "legacy-attempt-1", "created_at": "2026-05-09T00:00:00Z"},
             ),
-            patch("app.domains.practice.attempts.build_graph_fact_repositories", return_value=FakeRepos()),
-            patch("app.domains.practice.attempts.build_mastery_graph", return_value=FakeGraph()) as graph_builder,
+            patch("app.application.practice.graph_facts.build_graph_fact_repositories", return_value=FakeRepos()),
+            patch("app.application.practice.graph_facts.build_mastery_graph_with_repositories", return_value=FakeGraph()) as graph_builder,
             patch(
                 "app.domains.practice.attempts._get_user_memory",
                 return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
@@ -259,6 +260,7 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                     source_type="ai_generated",
                 ),
                 selected_option="C",
+                graph_mastery_update=update_graph_mastery_from_practice_attempt,
             )
 
         self.assertEqual(graph_attempt_payloads[0]["id"], "practice:legacy-attempt-1")

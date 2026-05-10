@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
-
-from loguru import logger
+from typing import Any, Callable
 
 from app.domains.memory.session_summary import normalize_session_memory
 from app.domains.mastery.evaluation import evaluate_practice_answer
@@ -13,8 +11,6 @@ from app.infrastructure.db.repositories.sessions import (
     update_chat_session_memory_record,
 )
 from app.infrastructure.db.repositories.users import get_user_memory_record, save_user_memory_record
-from app.orchestration.graphs.mastery.graph import build_graph as build_mastery_graph
-from app.persistence.repositories.graph_facts import build_graph_fact_repositories, is_graph_facts_enabled
 from app.shared.schemas.contracts import PracticeRecommendation, PracticeSubmissionResult, UserMemoryRecord
 from app.knowledge.concept_registry import get_concept_registry
 
@@ -49,6 +45,7 @@ def record_practice_attempt_and_update_memory(
     subject_id: str,
     quiz_item: PracticeRecommendation,
     selected_option: str,
+    graph_mastery_update: Callable[..., None] | None = None,
 ) -> PracticeSubmissionResult:
     normalized_item = PracticeRecommendation.model_validate(quiz_item)
     concept_payload = _concept_payload_for_quiz_item(normalized_item, subject_id=subject_id)
@@ -80,14 +77,15 @@ def record_practice_attempt_and_update_memory(
         concept_mapping_status=normalized_item.concept_mapping_status,
         source_type=normalize_practice_source_type(normalized_item.source_type),
     )
-    _update_graph_mastery_from_practice_attempt(
-        legacy_attempt=legacy_attempt,
-        user_id=user_id,
-        subject_id=subject_id or "general",
-        quiz_item=normalized_item,
-        selected_option=selected,
-        is_correct=is_correct,
-    )
+    if graph_mastery_update is not None:
+        graph_mastery_update(
+            legacy_attempt=legacy_attempt,
+            user_id=user_id,
+            subject_id=subject_id or "general",
+            quiz_item=normalized_item,
+            selected_option=selected,
+            is_correct=is_correct,
+        )
 
     memory = _get_user_memory(user_id)
     weak_points = list(memory.get("weak_points", []) or [])
@@ -164,83 +162,6 @@ def record_practice_attempt_and_update_memory(
         mastery_evaluation=mastery_evaluation,
         personalized_feedback=mastery_evaluation.feedback,
     )
-
-
-def _update_graph_mastery_from_practice_attempt(
-    *,
-    legacy_attempt: Any,
-    user_id: str,
-    subject_id: str,
-    quiz_item: PracticeRecommendation,
-    selected_option: str,
-    is_correct: bool,
-) -> None:
-    if not is_graph_facts_enabled():
-        return
-    concept_id = str(quiz_item.concept_id or "").strip()
-    concept = get_concept_registry().get_concept(concept_id)
-    if concept is None:
-        return
-
-    legacy_attempt_id = _value_from_record(legacy_attempt, "id")
-    if not legacy_attempt_id:
-        return
-
-    graph_attempt_id = _graph_attempt_id_for_practice_attempt(legacy_attempt_id)
-    payload = {
-        "id": graph_attempt_id,
-        "attempt_id": graph_attempt_id,
-        "user_id": user_id,
-        "subject_id": subject_id or concept.subject_id,
-        "concept_id": concept.concept_id,
-        "knowledge_point": concept.concept_id,
-        "concept_name": concept.concept_name,
-        "chapter_id": concept.chapter_id,
-        "topic_id": concept.topic_id,
-        "question_id": str(quiz_item.question_id or ""),
-        "selected_option": selected_option,
-        "correct_option": quiz_item.correct_option,
-        "is_correct": bool(is_correct),
-        "score": 1.0 if is_correct else 0.0,
-        "confidence": 1.0,
-        "source": "practice_attempt",
-        "source_event_id": legacy_attempt_id,
-        "created_at": _value_from_record(legacy_attempt, "created_at"),
-    }
-    try:
-        repos = build_graph_fact_repositories()
-        repos.attempts.create_attempt(payload)
-        build_mastery_graph(
-            learning_event_repository=repos.learning_events,
-            attempt_repository=None,
-            mastery_repository=repos.mastery_snapshots,
-        ).compile().invoke(
-            {
-                "run_id": f"practice-mastery:{legacy_attempt_id}",
-                "user_id": user_id,
-                "notebook_id": subject_id or concept.subject_id,
-                "attempt_payloads": [payload],
-            }
-        )
-    except Exception as exc:
-        logger.warning("Graph-era mastery update failed open for practice attempt {}: {}", legacy_attempt_id, exc.__class__.__name__)
-
-
-def _value_from_record(record: Any, key: str) -> str:
-    if isinstance(record, dict):
-        value = record.get(key)
-    else:
-        value = getattr(record, key, "")
-    return str(value or "").strip()
-
-
-def _graph_attempt_id_for_practice_attempt(legacy_attempt_id: str) -> str:
-    graph_attempt_id = f"practice:{legacy_attempt_id}"
-    if len(graph_attempt_id) <= 100:
-        return graph_attempt_id
-    import hashlib
-
-    return f"practice:{hashlib.sha1(legacy_attempt_id.encode('utf-8')).hexdigest()[:32]}"
 
 
 def _concept_payload_for_quiz_item(item: PracticeRecommendation, *, subject_id: str) -> dict[str, str]:

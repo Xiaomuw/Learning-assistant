@@ -8,9 +8,9 @@ from app.domains.practice.quiz_request import (
     context_from_practice_question,
     resolve_quiz_request,
 )
+from app.domains.practice.llm import resolve_practice_generation_model
 from app.orchestration.graphs.question_generation.adapter import LegacyPracticeQuestionCandidateGenerator
 from app.orchestration.graphs.question_generation.graph import build_production_graph
-from app.services.runtime_models import resolve_active_chat_model
 from app.knowledge.concept_registry import ConceptNode, get_concept_registry
 from app.shared.schemas.agent_graphs import SourcePolicy
 from app.shared.schemas.contracts import PracticePackResult, PracticeRecommendation
@@ -92,7 +92,7 @@ class PracticePackService:
             subject_id=subject_id,
             subject_name=subject_name,
             original_question=request_text,
-            model_name=resolve_active_chat_model(),
+            model_name=resolve_practice_generation_model(),
         )
         result = build_production_graph(candidate_generator=generator).compile().invoke(
             {

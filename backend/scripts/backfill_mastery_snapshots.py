@@ -21,7 +21,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.domains.practice.attempts import _graph_attempt_id_for_practice_attempt
+from app.application.practice.graph_facts import graph_attempt_id_for_practice_attempt
 from app.infrastructure.db.database import session_scope
 from app.infrastructure.db.models import GraphAttemptModel, PracticeAttemptModel
 from app.infrastructure.db.repositories.bootstrap import init_database
@@ -52,7 +52,7 @@ def backfill(*, user_id: str | None = None, subject_id: str | None = None, limit
         if concept is None:
             result["skipped_unmapped"] += 1
             continue
-        graph_attempt_id = _graph_attempt_id_for_practice_attempt(attempt.id)
+        graph_attempt_id = graph_attempt_id_for_practice_attempt(attempt.id)
         if _graph_attempt_exists(graph_attempt_id):
             result["skipped_existing"] += 1
             continue

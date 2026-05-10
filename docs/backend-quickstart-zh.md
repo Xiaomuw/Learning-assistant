@@ -13,7 +13,7 @@
 - [backend/app/main.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/main.py)
 - [backend/app/infrastructure/db/database.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/infrastructure/db/database.py)
 - [backend/app/services/rag/rag_service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/rag/rag_service.py)
-- [backend/app/orchestration/workflow/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/workflow/runtime.py)
+- [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py)
 
 补充说明：
 
@@ -26,4 +26,4 @@
 - 向量库：PGVector
 - LangGraph 线程态：PostgresSaver
 - 不再支持 SQLite 自动回退
-- 历史 MySQL / Chroma 只通过迁移脚本导入
+- 历史 MySQL 只通过结构化迁移脚本导入；Chroma 仅作为历史背景，不再维护项目内迁移脚本

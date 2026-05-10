@@ -17,7 +17,7 @@
 4. [backend/app/main.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/main.py)
 5. [backend/app/interfaces/api/chat.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/interfaces/api/chat.py)
 6. [backend/app/application/chat/service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/application/chat/service.py)
-7. [backend/app/orchestration/graph/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graph/graph.py)
+7. [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py)
 8. [backend/app/domains/qa/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/domains/qa/runtime.py)
 
 ## 1. 最终结构图
@@ -87,7 +87,7 @@ flowchart LR
 - [backend/app/application/auth/service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/application/auth/service.py)
 - [backend/app/application/chat/service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/application/chat/service.py)
 - `backend/app/application/chat/state_builder.py`
-- `backend/app/application/chat/workflow_adapter.py`
+- `backend/app/application/chat/orchestrator_runtime.py`
 - `backend/app/application/chat/persistence.py`
 - `backend/app/application/chat/messages.py`
 - [backend/app/application/notebooks/service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/application/notebooks/service.py)
@@ -192,7 +192,7 @@ flowchart LR
 - 普通业务代码、测试、脚本必须走正式 `app.*` 入口
 - 不再新增 compatibility suite 来保护旧路径
 - `app.infrastructure.db.repositories` 包根只导出正式 record 仓储能力，不再导出旧 helper
-- `app.infrastructure.llm.selection`、`app.infrastructure.tools`、`app.services.retrieval.store`、`app.interfaces.mcp` 不允许恢复
+- `app.orchestration.agents`、`app.services.retrieval`、`app.infrastructure.llm.selection`、`app.infrastructure.tools`、`app.interfaces.mcp` 不允许恢复
 - 架构守卫会阻止旧目录和 deprecated façade 回流
 
 ## 4. 现在的主问答链路
@@ -203,19 +203,16 @@ flowchart LR
     B --> C["application/chat/service.py"]
     B --> P["interfaces/api/chat_presenter.py"]
     C --> C1["state_builder.py"]
-    C --> C2["workflow_adapter.py"]
+    C --> C2["orchestrator_runtime.py"]
     C --> C3["persistence.py"]
     C --> C4["messages.py"]
     C1 --> D["domains/memory/service.py"]
-    C2 --> E["orchestration/workflow/runner.py"]
-    E --> F["orchestration/graph/graph.py"]
-    F --> G["orchestration/agents/router.py"]
-    G --> H["orchestration/agents/qa_agent.py"]
-    H --> I["domains/qa/runtime.py"]
+    C2 --> E["orchestration/graphs/orchestrator"]
+    E --> H["QAGraph / QuestionGenerationGraph / MasteryEvaluationGraph"]
+    H --> I["domains/qa/runtime.py 或 practice/mastery domain"]
     I --> J["services/rag/rag_service.py"]
     I --> K["services/tools/runtime.py"]
     I --> L["infrastructure/llm/provider.py"]
-    H --> M["orchestration/agents/memory.py"]
 ```
 
 阅读重点：
@@ -224,7 +221,7 @@ flowchart LR
 - `interfaces/api/chat_presenter.py` 负责 SSE 节点事件映射
 - `application/chat/service.py` 负责 use case façade
 - `application/chat/state_builder.py` 负责 `AgentState` 装配
-- `application/chat/workflow_adapter.py` 负责 workflow 调用隔离
+- `application/chat/orchestrator_runtime.py` 负责调用 LearningOrchestratorGraph
 - `application/chat/persistence.py` 负责会话、latest quiz、记忆快照持久化
 - `application/chat/messages.py` 负责持久化消息和过程面板结构
 - `orchestration/*` 负责 LangGraph 执行

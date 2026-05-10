@@ -67,7 +67,8 @@ class ArchitectureBoundaryTest(unittest.TestCase):
             APP_ROOT / "infrastructure" / "llm" / "selection.py",
             APP_ROOT / "infrastructure" / "tools",
             APP_ROOT / "interfaces" / "mcp",
-            APP_ROOT / "services" / "retrieval" / "store.py",
+            APP_ROOT / "services" / "retrieval",
+            APP_ROOT / "orchestration" / "agents",
             APP_ROOT / "interfaces" / "auth" / "email_sender.py",
             APP_ROOT / "interfaces" / "auth" / "security.py",
             APP_ROOT / "interfaces" / "auth" / "verification.py",
@@ -225,7 +226,14 @@ class ArchitectureBoundaryTest(unittest.TestCase):
             "app.infrastructure.tools",
             "app.infrastructure.tools.runtime",
             "app.interfaces.mcp",
-            "app.services.retrieval.store",
+            "app.orchestration.agents",
+            "app.services.retrieval",
+        }
+        deprecated_prefixes = {
+            "app.infrastructure.tools",
+            "app.interfaces.mcp",
+            "app.orchestration.agents",
+            "app.services.retrieval",
         }
         offenders: list[str] = []
         roots = [APP_ROOT, BACKEND_ROOT / "scripts", BACKEND_ROOT / "tests"]
@@ -233,7 +241,14 @@ class ArchitectureBoundaryTest(unittest.TestCase):
         for root in roots:
             for path in _python_files(root):
                 refs = _import_references(path)
-                bad_imports = sorted({ref for ref in refs if ref in deprecated_facades})
+                bad_imports = sorted(
+                    {
+                        ref
+                        for ref in refs
+                        if ref in deprecated_facades
+                        or any(ref.startswith(f"{facade}.") for facade in deprecated_prefixes)
+                    }
+                )
                 if bad_imports:
                     offenders.append(f"{path.relative_to(BACKEND_ROOT)} -> {', '.join(bad_imports)}")
 

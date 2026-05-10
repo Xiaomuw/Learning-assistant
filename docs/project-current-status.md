@@ -14,7 +14,7 @@
 - 前端：Next.js 14 App Router
 - 数据库：PostgreSQL
 - 向量库：PGVector
-- 模型：OpenAI-compatible provider，当前本地配置使用 DigitalOcean Model Access
+- 模型：DeepSeek / OpenAI-compatible chat provider，embedding 独立使用当前配置的 Google 或 OpenAI-compatible provider
 
 产品语义叫 **notebook / 笔记本**。后端 wire / DB 里仍有 `subject_id`，这是兼容字段，不是新的产品语义。
 
@@ -60,26 +60,13 @@
 - `smalltalk`
 - `mcq_problem`
 
-当前正式图名是 `learning_assistant`，核心拓扑为：
+当前正式图名是 `learning_assistant`，生产入口为 `LearningOrchestratorGraph`，核心拓扑为：
 
 ```text
-preflight_node -> router -> 分支节点 -> memory_node / graph_error_node -> finalize_node -> END
+LearningOrchestratorGraph -> QAGraph / QuestionGenerationGraph / MasteryEvaluationGraph -> response_composer
 ```
 
-主问答链路覆盖 `concept / problem / review`：
-
-1. `preflight_node` 做输入规范化、空问题/超长问题/缺失 ID 的图级校验。
-2. `router` 分类。
-3. `rag_node` 先完成 notebook 检索与质量诊断。
-4. `qa_agent_node` 进入 QA runtime，并复用 RAG 上下文生成回答。
-5. QA runtime 读取 model profile。
-6. QA runtime 执行 preprocess middleware。
-7. QA runtime 选择 direct / tool / structured / fallback。
-8. QA runtime 执行 postprocess middleware。
-9. `memory_node` 更新记忆。
-10. `finalize_node` 统一写入 `finalized / final_response_type / route_decision`。
-
-`review` 会额外经过 `quiz_gen` 生成练习题包。
+主问答链路覆盖 `concept / problem / review`：Orchestrator 先做请求守卫、上下文加载和意图路由，再调用 QAGraph。QAGraph 负责 evidence 判断、工具 fallback、QA runtime 调用和 `LearningEvent` 产出。出题和掌握度分别由 `QuestionGenerationGraph` 与 `MasteryEvaluationGraph` 处理。
 
 ### 工具、MCP 与 LangSmith
 
@@ -112,7 +99,7 @@ preflight_node -> router -> 分支节点 -> memory_node / graph_error_node -> fi
 backend/app/
 ├── interfaces/      # HTTP 路由、鉴权、SSE、请求/响应 DTO
 ├── application/     # auth / chat / notebooks / ingest / model_config / practice / user_data
-├── orchestration/   # LangGraph agents / graph / workflow / platform
+├── orchestration/   # LangGraph enterprise graphs / platform
 ├── domains/         # qa / memory / practice / mastery
 ├── services/        # rag / tools / notebook_knowledge_base / runtime_models
 ├── infrastructure/  # db / llm / auth / ingest / mcp / config
@@ -202,7 +189,6 @@ cd backend
 ./.venv313/bin/python scripts/check_environment.py
 ./.venv313/bin/python -m compileall app tests scripts
 ./.venv313/bin/python -m unittest discover -s tests
-./.venv313/bin/python scripts/check_do_model_access.py
 ```
 
 ```bash

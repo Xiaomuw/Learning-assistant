@@ -69,10 +69,7 @@
 - [migrate_structured_data_to_postgres.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/scripts/migrate_structured_data_to_postgres.py)
   - 支持 MySQL / SQLite / PostgreSQL 作为源库
   - 保留主键、时间戳、JSON 结构
-- [migrate_chroma_to_pgvector.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/scripts/migrate_chroma_to_pgvector.py)
-  - 支持本地目录或远程 Chroma
-  - 优先直接复用旧 embedding
-  - 缺失时回退重算 embedding
+- Chroma 只作为历史迁移来源保留在文档背景中；当前项目内不再维护 Chroma 到 PGVector 的迁移脚本。
 
 ## 8. 推荐环境变量
 

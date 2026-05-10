@@ -10,10 +10,10 @@ flowchart LR
     F --> P["前端代理 /api"]
     P --> B["FastAPI"]
     B --> A["app/application/*"]
-    A --> G["LangGraph StateGraph"]
-    G --> QA["Q&A Runtime"]
-    G --> Q["Quiz Agent"]
-    G --> M["Memory Agent"]
+    A --> G["LearningOrchestratorGraph"]
+    G --> QA["QAGraph"]
+    G --> Q["QuestionGenerationGraph"]
+    G --> M["MasteryEvaluationGraph"]
     B --> DB["PostgreSQL"]
     G --> V["PGVector"]
     G --> C["PostgresSaver"]
@@ -36,7 +36,7 @@ app.main
 - `app/orchestration/*` 只负责图编排、节点装配、runner、checkpointer 生命周期
 - `app/domains/*` 只负责 QA / memory / practice 领域逻辑
 - `app/infrastructure/db/repositories/__init__.py` 只导出正式 record 仓储能力，真实实现已拆到 `db/repositories/*`
-- `app/services/retrieval/store.py` 已删除；正式 RAG 入口是 `app/services/rag/{loader,splitter,embeddings,vector_store,retriever,rag_service}.py`
+- `app/services/retrieval/*` 已删除；正式 RAG 入口是 `app/services/rag/{loader,splitter,embeddings,vector_store,retriever,rag_service}.py`
 - `app/infrastructure/llm/provider.py` 是模型与 Embedding façade；真实实现拆在 `config.py / catalog.py / clients.py`
 - `app/services/tools/runtime.py` 是 QA 工具聚合入口；registry、internal tools、MCP tools 已拆到 `app/services/tools/*`
 - `app/services/notebook_knowledge_base.py` 是 notebook 知识库 gateway，负责文档计数、知识库删除和内容写入
@@ -59,7 +59,7 @@ app.main
 
 ### 3.3 LangGraph
 
-- 工作流运行时由 [backend/app/orchestration/workflow/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/workflow/runtime.py) 管理
+- 生产入口由 [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py) 管理
 - 使用 `PostgresSaver` 编译 graph
 - `session_id` 同时作为 LangGraph `thread_id`
 - `chat_sessions` 仍然是前端历史页的事实来源，不被 checkpointer 替代
@@ -68,12 +68,10 @@ app.main
 
 ### 4.1 路径
 
-- `concept / problem` → `preflight_node -> router -> qa_agent_node -> memory_node -> finalize_node`
-- `practice` → `preflight_node -> router -> quiz_gen -> memory_node -> finalize_node`
-- `review` → `preflight_node -> router -> qa_agent_node -> quiz_gen -> memory_node -> finalize_node`
-- `mcq_problem` → `preflight_node -> router -> mcq_solver -> memory_node -> finalize_node`
-- `meta / smalltalk` → `preflight_node -> router -> meta_node -> finalize_node`
-- 图级异常 → `graph_error_node -> finalize_node`
+- `concept / problem / review` → `LearningOrchestratorGraph -> QAGraph -> response_composer`
+- `practice` → `LearningOrchestratorGraph -> QuestionGenerationGraph -> response_composer`
+- `mastery` → `LearningOrchestratorGraph -> MasteryEvaluationGraph -> response_composer`
+- 请求守卫或子图异常 → `LearningOrchestratorGraph` 的 fallback / response composer 生成安全响应
 
 ### 4.2 三层记忆
 
@@ -91,10 +89,8 @@ app.main
 
 ### 5.2 向量数据
 
-- 源端为 Chroma
-- 目标端为 PGVector
-- 通过 [migrate_chroma_to_pgvector.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/scripts/migrate_chroma_to_pgvector.py) 执行
-- 优先复用原 embedding，缺失时才重算
+- 当前运行时向量库为 PGVector。
+- Chroma 只作为历史迁移背景保留，不再提供项目内迁移脚本。
 
 ## 6. 运维默认栈
 

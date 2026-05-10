@@ -949,6 +949,125 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertIn("HTTP", saved_payload)
         self.assertIn("DNS", saved_payload)
 
+    def test_operating_system_subject_generates_aligned_questions_without_repair(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-os-subject-fast",
+                "user_id": "u1",
+                "user_message": "出5道操作系统题",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "操作系统原理",
+                    "requested_topic": "操作系统原理",
+                    "active_topic": "操作系统原理",
+                    "subject_id": "operating-system",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 5,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        status = result["generation_status"]
+        saved_payload = json.dumps(question_repo.created, ensure_ascii=False)
+        self.assertTrue(report.passed)
+        self.assertEqual(len(question_repo.created), 5)
+        self.assertEqual(status["generation_source"], "deterministic_adapter")
+        self.assertEqual(status.get("repair_attempt_count", 0), 0)
+        self.assertGreaterEqual(status["generate_candidates_elapsed_ms"], 0)
+        self.assertIn("进程", saved_payload)
+        self.assertIn("死锁", saved_payload)
+        self.assertIn("虚拟内存", saved_payload)
+
+    def test_computer_organization_subject_generates_aligned_questions_without_repair(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-co-subject-fast",
+                "user_id": "u1",
+                "user_message": "出5道计算机组成题",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "intent": "quiz_generation",
+                    "topic": "计算机组成原理",
+                    "requested_topic": "计算机组成原理",
+                    "active_topic": "计算机组成原理",
+                    "subject_id": "computer-organization",
+                    "source": "explicit_user_input",
+                    "question_type": "single_choice",
+                    "difficulty": "easy",
+                    "count": 5,
+                    "target_module": "practice",
+                    "reason": "explicit_topic_in_user_input",
+                },
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        status = result["generation_status"]
+        saved_payload = json.dumps(question_repo.created, ensure_ascii=False)
+        self.assertTrue(report.passed)
+        self.assertEqual(len(question_repo.created), 5)
+        self.assertEqual(status["generation_source"], "deterministic_adapter")
+        self.assertEqual(status.get("repair_attempt_count", 0), 0)
+        self.assertGreaterEqual(status["generate_candidates_elapsed_ms"], 0)
+        self.assertIn("流水线", saved_payload)
+        self.assertIn("Cache", saved_payload)
+        self.assertIn("补码", saved_payload)
+
+    def test_specific_os_and_organization_topics_stay_on_fast_path(self) -> None:
+        cases = [
+            ("进程调度", "operating-system", "进程调度"),
+            ("流水线", "computer-organization", "流水线"),
+        ]
+        for topic, subject_id, expected_text in cases:
+            with self.subTest(topic=topic):
+                question_repo = MockQuestionItemRepository()
+                result = build_graph(question_item_repository=question_repo).compile().invoke(
+                    {
+                        "run_id": f"run-qgen-specific-{subject_id}",
+                        "user_id": "u1",
+                        "user_message": f"出5道{topic}题",
+                        "graph_type": GraphType.QUESTION_GENERATION.value,
+                        "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                        "quiz_request": {
+                            "is_quiz_request": True,
+                            "action": "generate_practice_pack",
+                            "intent": "quiz_generation",
+                            "topic": topic,
+                            "requested_topic": topic,
+                            "active_topic": topic,
+                            "subject_id": subject_id,
+                            "source": "explicit_user_input",
+                            "question_type": "single_choice",
+                            "difficulty": "easy",
+                            "count": 5,
+                            "target_module": "practice",
+                            "reason": "explicit_topic_in_user_input",
+                        },
+                    }
+                )
+
+                report = QualityReport.model_validate(result["quality_report"])
+                status = result["generation_status"]
+                saved_payload = json.dumps(question_repo.created, ensure_ascii=False)
+                self.assertTrue(report.passed)
+                self.assertEqual(len(question_repo.created), 5)
+                self.assertEqual(status.get("repair_attempt_count", 0), 0)
+                self.assertIn(expected_text, saved_payload)
+
     def test_empty_generation_repairs_with_deterministic_fallback(self) -> None:
         question_repo = MockQuestionItemRepository()
         event_repo = MockLearningEventRepository()
@@ -985,6 +1104,53 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
                 LearningEventType.QUESTION_GENERATED.value,
             ],
         )
+
+    def test_degraded_generation_skips_model_repairer(self) -> None:
+        class DegradedGenerator:
+            def generate_with_status(self, *, blueprint: ItemBlueprint, source_refs: list[SourceRef]):
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "candidates": [],
+                        "status": {
+                            "generation_source": "practice_generation",
+                            "ai_generation_failed": True,
+                            "fallback_count": 1,
+                            "model_name": "deepseek-v4-flash",
+                            "model_timeout_seconds": 6.0,
+                        },
+                    },
+                )()
+
+        class ExplodingModelRepairer:
+            def repair_with_status(self, **_: Any):
+                raise AssertionError("model repair should be skipped after degraded generation")
+
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(
+            candidate_generator=DegradedGenerator(),
+            candidate_repairer=ExplodingModelRepairer(),
+            question_item_repository=question_repo,
+            learning_event_repository=MockLearningEventRepository(),
+        ).compile().invoke(
+            {
+                "run_id": "run-qgen-skip-model-repair",
+                "user_id": "u1",
+                "user_message": "帮我出题练习 HTTP",
+                "graph_type": GraphType.QUESTION_GENERATION.value,
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "concepts": [{"concept_id": "http", "name": "HTTP"}],
+            }
+        )
+
+        report = QualityReport.model_validate(result["quality_report"])
+        status = result["generation_status"]
+        self.assertTrue(report.passed)
+        self.assertEqual(len(question_repo.created), 1)
+        self.assertTrue(status["repair_model_skipped"])
+        self.assertEqual(status["repair_skip_reason"], "degraded_generation")
+        self.assertFalse(status["repair_model_used"])
 
     def test_candidate_generation_retries_once_before_quality_gate(self) -> None:
         class FlakyGenerator:
