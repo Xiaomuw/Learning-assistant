@@ -23,6 +23,7 @@ from app.infrastructure.db.models import (
     QuestionBankItemModel,
     UserKnowledgeStatModel,
 )
+from app.knowledge.concept_registry import get_concept_registry
 from app.persistence.repositories.graph_facts import (
     SqlAttemptRepository,
     SqlConceptRepository,
@@ -70,15 +71,15 @@ def backfill_graph_facts(
         question_rows = list(session.scalars(select(QuestionBankItemModel)).all())
 
     for row in attempts:
-        concept_id = _stable_concept_id(row.knowledge_point)
+        concept = _legacy_concept(row.knowledge_point, row.subject_id)
         _upsert_concept(
             result=result,
             execute=execute,
             repo=concept_repo,
             session_factory=session_factory,
-            concept_id=concept_id,
-            name=row.knowledge_point or concept_id,
-            subject_id=row.subject_id,
+            concept_id=concept["concept_id"],
+            name=concept["concept_name"],
+            subject_id=concept["subject_id"],
             source="legacy_practice_attempt",
         )
         _write_if_missing(
@@ -88,7 +89,7 @@ def backfill_graph_facts(
             exists=lambda item_id=_stable_record_id("legacy-practice", row.id): _exists(
                 session_factory, GraphAttemptModel, item_id
             ),
-            write=lambda item=row, item_id=_stable_record_id("legacy-practice", row.id), cid=concept_id: attempt_repo.create_attempt(
+            write=lambda item=row, item_id=_stable_record_id("legacy-practice", row.id), cid=concept["concept_id"]: attempt_repo.create_attempt(
                 {
                     "id": item_id,
                     "user_id": item.user_id,
@@ -112,24 +113,24 @@ def backfill_graph_facts(
         )
 
     for row in mastery_rows:
-        concept_id = _stable_concept_id(row.knowledge_point)
+        concept = _legacy_concept(row.knowledge_point, row.subject_id)
         _upsert_concept(
             result=result,
             execute=execute,
             repo=concept_repo,
             session_factory=session_factory,
-            concept_id=concept_id,
-            name=row.knowledge_point or concept_id,
-            subject_id=row.subject_id,
+            concept_id=concept["concept_id"],
+            name=concept["concept_name"],
+            subject_id=concept["subject_id"],
             source="legacy_knowledge_stats",
         )
-        snapshot_id = _stable_record_id("legacy-knowledge", row.user_id, row.subject_id, concept_id)
+        snapshot_id = _stable_record_id("legacy-knowledge", row.user_id, concept["subject_id"], concept["concept_id"])
         _write_if_missing(
             result=result,
             execute=execute,
             table="mastery_snapshots",
             exists=lambda item_id=snapshot_id: _exists(session_factory, MasterySnapshotModel, item_id),
-            write=lambda item=row, item_id=snapshot_id, cid=concept_id: mastery_repo.upsert_snapshot(
+            write=lambda item=row, item_id=snapshot_id, cid=concept["concept_id"]: mastery_repo.upsert_snapshot(
                 {
                     "id": item_id,
                     "user_id": item.user_id,
@@ -155,15 +156,15 @@ def backfill_graph_facts(
         )
 
     for row in question_rows:
-        concept_id = _stable_concept_id(row.knowledge_point)
+        concept = _legacy_concept(row.knowledge_point, row.subject_id)
         _upsert_concept(
             result=result,
             execute=execute,
             repo=concept_repo,
             session_factory=session_factory,
-            concept_id=concept_id,
-            name=row.knowledge_point or concept_id,
-            subject_id=row.subject_id,
+            concept_id=concept["concept_id"],
+            name=concept["concept_name"],
+            subject_id=concept["subject_id"],
             source="legacy_question_bank",
         )
         question_id = _stable_record_id("legacy-question", row.id)
@@ -172,10 +173,10 @@ def backfill_graph_facts(
             execute=execute,
             table="question_items",
             exists=lambda item_id=question_id: _exists(session_factory, GraphQuestionItemModel, item_id),
-            write=lambda item=row, item_id=question_id, cid=concept_id: question_repo.create_question_item(
+            write=lambda item=row, item_id=question_id, cid=concept["concept_id"], sid=concept["subject_id"]: question_repo.create_question_item(
                 {
                     "id": item_id,
-                    "subject_id": item.subject_id,
+                    "subject_id": sid,
                     "primary_concept_id": cid,
                     "stem": item.stem,
                     "options": list(item.options_json or []),
@@ -280,6 +281,38 @@ def _stable_concept_id(value: str) -> str:
     normalized = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff_-]+", "-", str(value or "").strip().lower())
     normalized = normalized.strip("-_")[:120]
     return normalized or "general"
+
+
+def _legacy_concept(knowledge_point: str | None, subject_id: str | None) -> dict[str, str]:
+    registry = get_concept_registry()
+    raw_subject_id = str(subject_id or "").strip()
+    raw_knowledge_point = str(knowledge_point or "").strip()
+    exact = registry.get_concept(raw_knowledge_point)
+    if exact is not None:
+        return {
+            "concept_id": exact.concept_id,
+            "concept_name": exact.concept_name,
+            "subject_id": exact.subject_id,
+        }
+
+    subject_hint = raw_subject_id if raw_subject_id in registry.subjects else None
+    match = registry.match_query(
+        " ".join(part for part in [raw_subject_id, raw_knowledge_point] if part),
+        subject_id=subject_hint,
+    )
+    if match.is_mapped and match.concept_id:
+        return {
+            "concept_id": match.concept_id,
+            "concept_name": match.concept_name or raw_knowledge_point or match.concept_id,
+            "subject_id": match.subject_id or subject_hint or raw_subject_id or "general",
+        }
+
+    stable_id = _stable_concept_id(raw_knowledge_point)
+    return {
+        "concept_id": stable_id,
+        "concept_name": raw_knowledge_point or stable_id,
+        "subject_id": subject_hint or raw_subject_id or "general",
+    }
 
 
 def _stable_record_id(prefix: str, *parts: Any, max_length: int = 100) -> str:

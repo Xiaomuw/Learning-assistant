@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -559,6 +559,7 @@ class LearningEventModel(Base):
     user_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     concept_id: Mapped[str | None] = mapped_column(String(160), index=True, nullable=True, default=None)
     graph_run_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False, default="")
+    hash_key: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True, default=None)
     payload: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
@@ -568,6 +569,13 @@ class LearningEventModel(Base):
 
     __table_args__ = (
         Index("idx_learning_events_user_created", "user_id", "created_at"),
+        Index(
+            "uq_learning_events_hash_key",
+            "hash_key",
+            unique=True,
+            postgresql_where=text("hash_key IS NOT NULL AND hash_key <> ''"),
+            sqlite_where=text("hash_key IS NOT NULL AND hash_key <> ''"),
+        ),
     )
 
 

@@ -349,6 +349,45 @@ class QARuntimeTest(unittest.TestCase):
 
         self.assertEqual(qa_runtime_module._stream_delta_to_text(chunk), "最终回答")
 
+    def test_streamed_answer_schema_sanitizes_markdown_and_splits_steps(self) -> None:
+        request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="data-structure",
+            subject_name="数据结构与算法",
+            subject_description="",
+            question="B+ 树是什么？",
+            question_type="concept",
+            model_name="test-model",
+        )
+        raw_answer = (
+            "#### 一、B+ 树是什么？\n"
+            "**B+ 树**是一种多路平衡搜索树。\n"
+            "---\n"
+            "> 它常用于数据库索引。\n"
+            "- 所有真实数据都在叶子节点。\n"
+            "- 叶子节点之间通常用链表相连。"
+        )
+
+        answer = qa_runtime_module._streamed_answer_schema(raw_answer, request)
+        combined = "\n".join(
+            [
+                answer.thinking,
+                *answer.steps,
+                answer.final_answer,
+            ]
+        )
+
+        self.assertGreater(len(answer.steps), 1)
+        self.assertNotEqual(answer.thinking, answer.steps[0])
+        self.assertIn("核心概念", answer.thinking)
+        self.assertLess(len(answer.final_answer), len(raw_answer))
+        self.assertNotIn("####", combined)
+        self.assertNotIn("**", combined)
+        self.assertNotIn("---", combined)
+        self.assertNotIn("> ", combined)
+        self.assertNotIn("- 所有", combined)
+
     def test_invoke_with_schema_parses_plain_json_fallback(self) -> None:
         from langchain_core.messages import AIMessage
         from langchain_core.prompts import ChatPromptTemplate

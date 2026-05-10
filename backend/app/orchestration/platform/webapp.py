@@ -19,12 +19,8 @@ from app.infrastructure.config.validation import (  # noqa: E402
     collect_environment_warnings,
     validate_startup_environment,
 )
-from app.infrastructure.db.database import current_database_backend, ensure_postgres_extensions  # noqa: E402
-from app.infrastructure.db.repositories.bootstrap import init_database  # noqa: E402
-from app.infrastructure.llm.langsmith import initialize_langsmith  # noqa: E402
+from app.infrastructure.db.readiness import assert_database_readiness  # noqa: E402
 from app.infrastructure.llm.provider import ensure_model_env_aliases  # noqa: E402
-from app.infrastructure.mcp import initialize_mcp  # noqa: E402
-from app.shared.schemas.subject import DEFAULT_SUBJECT_ID  # noqa: E402
 
 
 ensure_model_env_aliases()
@@ -38,20 +34,22 @@ async def lifespan(app: FastAPI):
     for warning in collect_environment_warnings():
         logger.warning(f"⚠️ {warning}")
 
-    ensure_postgres_extensions()
-    init_database()
-    initialize_langsmith()
-    initialize_mcp()
+    db_report = assert_database_readiness()
+    logger.info(
+        "✅ Platform database readiness passed | "
+        f"backend={db_report.database_backend} | "
+        f"alembic={','.join(db_report.alembic_current_revisions)} | "
+        f"tables={db_report.required_table_count} | "
+        f"indexes={db_report.required_index_count} | "
+        f"vector_extension={db_report.vector_extension_ready}"
+    )
 
-    try:
-        from app.services.rag.vector_store import ensure_vector_store_ready
+    from app.orchestration.graphs.orchestrator.graph import build_graph
 
-        ensure_vector_store_ready(subject_id=DEFAULT_SUBJECT_ID)
-        logger.info("✅ Platform PGVector gateway ready")
-    except Exception as exc:
-        logger.warning(f"⚠️ Platform PGVector gateway initialization skipped: {exc}")
+    build_graph().compile()
+    logger.info("✅ Platform LearningOrchestratorGraph compiled")
 
-    logger.info(f"✅ Platform sidecar ready, database={current_database_backend()}")
+    logger.info("✅ Platform sidecar ready")
     try:
         yield
     finally:

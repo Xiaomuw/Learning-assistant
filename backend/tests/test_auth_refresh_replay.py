@@ -16,16 +16,18 @@ os.environ.setdefault(
 )
 
 from app.application.auth import service as auth_service  # noqa: E402
-from app.application.errors import UnauthorizedError  # noqa: E402
+from app.application.errors import UnauthorizedError, ValidationError  # noqa: E402
 from app.shared.schemas.contracts import AuthSessionResult, AuthUserView  # noqa: E402
 
 
 class AuthRefreshReplayTest(unittest.TestCase):
     def setUp(self) -> None:
         auth_service._refresh_replay_cache.clear()
+        auth_service._register_code_ip_attempts.clear()
 
     def tearDown(self) -> None:
         auth_service._refresh_replay_cache.clear()
+        auth_service._register_code_ip_attempts.clear()
 
     def test_refresh_token_short_replay_returns_same_session_once(self) -> None:
         user = AuthUserView(
@@ -67,6 +69,30 @@ class AuthRefreshReplayTest(unittest.TestCase):
         self.assertEqual(first, issued_session)
         self.assertEqual(replay, issued_session)
         issue_session.assert_called_once_with(user)
+
+    def test_register_code_ip_rate_limit_blocks_bursts(self) -> None:
+        with (
+            patch.object(auth_service, "_REGISTER_CODE_IP_WINDOW_SECONDS", 60),
+            patch.object(auth_service, "_REGISTER_CODE_IP_MAX_REQUESTS", 2),
+        ):
+            auth_service._enforce_register_code_ip_rate_limit("127.0.0.1")
+            auth_service._enforce_register_code_ip_rate_limit("127.0.0.1")
+            with self.assertRaises(auth_service.RateLimitError):
+                auth_service._enforce_register_code_ip_rate_limit("127.0.0.1")
+
+    def test_complete_registration_rejects_weak_password_before_code_verification(self) -> None:
+        with (
+            patch("app.application.auth.service.get_user_auth_record_by_email", return_value=None),
+            patch("app.application.auth.service.verify_register_code") as verify_code,
+        ):
+            with self.assertRaises(ValidationError):
+                auth_service.complete_registration(
+                    email="weak@example.com",
+                    code="123456",
+                    password="password123",
+                )
+
+        verify_code.assert_not_called()
 
 
 if __name__ == "__main__":

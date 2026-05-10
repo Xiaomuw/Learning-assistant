@@ -15,6 +15,23 @@ REFRESH_TOKEN_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "7"))
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
 JWT_ALGORITHM = "HS256"
 
+_COMMON_WEAK_PASSWORDS = {
+    "12345678",
+    "123456789",
+    "1234567890",
+    "11111111",
+    "00000000",
+    "password",
+    "password1",
+    "password12",
+    "password123",
+    "qwerty123",
+    "qwer1234",
+    "admin123",
+    "admin1234",
+    "learningassistant",
+}
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -27,6 +44,21 @@ def _normalize_password(password: str) -> bytes:
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(_normalize_password(password), bcrypt.gensalt()).decode("utf-8")
+
+
+def validate_password_policy(password: str) -> None:
+    raw_password = str(password or "")
+    effective_password = raw_password.strip()
+    if len(effective_password) < 8:
+        raise ValueError("密码至少需要 8 位有效字符")
+    if len(raw_password) > 128:
+        raise ValueError("密码不能超过 128 个字符")
+
+    normalized = "".join(effective_password.lower().split())
+    if normalized in _COMMON_WEAK_PASSWORDS:
+        raise ValueError("密码过于常见，请换一个更安全的密码")
+    if len(set(normalized)) <= 1:
+        raise ValueError("密码不能由同一个字符重复组成")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
@@ -91,4 +123,3 @@ def decode_token(token: str, expected_type: str) -> dict[str, Any]:
         raise ValueError("登录凭证类型不匹配")
 
     return payload
-

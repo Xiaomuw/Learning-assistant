@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bot,
   BrainCircuit,
@@ -30,6 +30,8 @@ function getStageIcon(stage: MessageProcessStage) {
     case "execution":
     case "stream_status":
       return Bot;
+    case "reasoning_stream":
+      return BrainCircuit;
     case "answer":
     case "answer_stream":
       return Sparkles;
@@ -66,10 +68,19 @@ function fallbackReasonLabel(reason?: string) {
 export default function MessageProcessPanel({
   process,
 }: MessageProcessPanelProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(() => Boolean(process.reasoningTrace?.trim()));
 
   const stageCount = process.stages.length;
   const toolCount = process.toolCalls?.length ?? 0;
+  const reasoningTrace = process.reasoningTrace ?? "";
+  const hasReasoningTrace = reasoningTrace.trim().length > 0;
+
+  useEffect(() => {
+    if (hasReasoningTrace) {
+      setIsOpen(true);
+    }
+  }, [hasReasoningTrace]);
+
   const summary = useMemo(() => {
     if (process.currentStage?.trim()) {
       return process.currentStage.trim();
@@ -118,7 +129,11 @@ export default function MessageProcessPanel({
                   const Icon = getStageIcon(stage);
                   const isLastStage = idx === process.stages.length - 1;
                   // If there is execution or tools after this, the last stage still needs a line
-                  const hasNextSection = !!process.execution || toolCount > 0 || !!process.reasoningSummary;
+                  const hasNextSection =
+                    !!process.execution ||
+                    toolCount > 0 ||
+                    hasReasoningTrace ||
+                    !!process.reasoningSummary;
                   const showLine = !isLastStage || hasNextSection;
 
                   return (
@@ -155,7 +170,7 @@ export default function MessageProcessPanel({
             {/* 模型执行 */}
             {process.execution && (
               <div className="relative flex items-start gap-3">
-                {(toolCount > 0 || !!process.reasoningSummary) && (
+                {(toolCount > 0 || hasReasoningTrace || !!process.reasoningSummary) && (
                   <div className="absolute bottom-[-16px] left-3 top-7 z-0 w-[2px] bg-neo-ink/20"></div>
                 )}
                 <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-neo-ink bg-neo-secondary">
@@ -227,7 +242,7 @@ export default function MessageProcessPanel({
             {/* 工具调用 */}
             {toolCount > 0 && (
               <div className="relative flex items-start gap-3">
-                {!!process.reasoningSummary && (
+                {(hasReasoningTrace || !!process.reasoningSummary) && (
                   <div className="absolute bottom-[-16px] left-3 top-7 z-0 w-[2px] bg-neo-ink/20"></div>
                 )}
                 <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-neo-ink bg-white">
@@ -266,6 +281,31 @@ export default function MessageProcessPanel({
                         )}
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 原始思考调试流 */}
+            {hasReasoningTrace && (
+              <div className="relative flex items-start gap-3">
+                {!!process.reasoningSummary && (
+                  <div className="absolute bottom-[-16px] left-3 top-7 z-0 w-[2px] bg-neo-ink/20"></div>
+                )}
+                <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-neo-ink bg-neo-muted">
+                  <BrainCircuit size={12} strokeWidth={2.8} />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col pt-0.5">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-bold">模型思考过程</span>
+                    <span className="rounded-sm border border-neo-ink bg-white px-1.5 py-0.5 text-[10px] font-black">
+                      调试，仅本轮
+                    </span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border-2 border-neo-ink/20 bg-white/70 p-3">
+                    <p className="whitespace-pre-wrap break-words text-xs font-medium leading-relaxed text-neo-ink/80">
+                      {reasoningTrace}
+                    </p>
                   </div>
                 </div>
               </div>

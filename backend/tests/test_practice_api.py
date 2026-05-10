@@ -225,6 +225,78 @@ class PracticeApiTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 422)
                 service.assert_not_called()
 
+    def test_submit_practice_attempt_rejects_malformed_quiz_item_before_service(self) -> None:
+        for quiz_item in (
+            {
+                "question_id": "ai-1",
+                "question": "HTTP 默认端口是？",
+                "options": [
+                    {"key": "A", "text": "80"},
+                    {"key": "B", "text": "53"},
+                    {"key": "C", "text": "20"},
+                ],
+                "correct_option": "A",
+                "explanation": "HTTP 默认端口是 80。",
+                "option_rationales": {"A": "正确"},
+                "knowledge_point": "HTTP",
+                "difficulty": "基础",
+                "source_type": "ai_generated",
+                "source_name": "",
+                "source_year": None,
+            },
+            {
+                "question_id": "ai-1",
+                "question": "HTTP 默认端口是？",
+                "options": [
+                    {"key": "A", "text": "80"},
+                    {"key": "B", "text": "53"},
+                    {"key": "C", "text": "20"},
+                    {"key": "D", "text": "443"},
+                ],
+                "correct_option": "Z",
+                "explanation": "HTTP 默认端口是 80。",
+                "option_rationales": {"A": "正确"},
+                "knowledge_point": "HTTP",
+                "difficulty": "基础",
+                "source_type": "ai_generated",
+                "source_name": "",
+                "source_year": None,
+            },
+            {
+                "question_id": "ai-1",
+                "question": "   ",
+                "options": [
+                    {"key": "A", "text": "80"},
+                    {"key": "B", "text": "53"},
+                    {"key": "C", "text": "20"},
+                    {"key": "D", "text": "443"},
+                ],
+                "correct_option": "A",
+                "explanation": "HTTP 默认端口是 80。",
+                "option_rationales": {"A": "正确"},
+                "knowledge_point": "HTTP",
+                "difficulty": "基础",
+                "source_type": "ai_generated",
+                "source_name": "",
+                "source_year": None,
+            },
+        ):
+            with self.subTest(correct_option=quiz_item["correct_option"], option_count=len(quiz_item["options"])):
+                with patch("app.interfaces.api.practice.submit_attempt") as service:
+                    response = self.client.post(
+                        "/api/practice/attempts",
+                        json={
+                            "user_id": "default_user",
+                            "session_id": "session-1",
+                            "subject_id": "general",
+                            "quiz_item": quiz_item,
+                            "selected_option": "A",
+                        },
+                    )
+
+                self.assertEqual(response.status_code, 422)
+                service.assert_not_called()
+
     def test_submit_practice_attempt_maps_legacy_constraint_runtime_error_to_400(self) -> None:
         with patch(
             "app.interfaces.api.practice.submit_attempt",

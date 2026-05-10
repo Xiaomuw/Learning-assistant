@@ -12,9 +12,12 @@ _LINK_PATTERN = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _INLINE_CODE_PATTERN = re.compile(r"`([^`]+)`")
 _EMPHASIS_PATTERN = re.compile(r"(\*\*|__|\*|_)")
 _HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s*")
+_INLINE_HEADING_PATTERN = re.compile(r"(?<!\S)#{1,6}\s*")
 _BULLET_PATTERN = re.compile(r"^\s*[-*+]\s+")
+_ORDERED_LIST_PATTERN = re.compile(r"^\s*\d+[\.)、]\s+")
 _QUOTE_PATTERN = re.compile(r"^\s*>\s?")
 _HORIZONTAL_RULE_PATTERN = re.compile(r"^\s*(-{3,}|\*{3,}|_{3,})\s*$")
+_INLINE_HORIZONTAL_RULE_PATTERN = re.compile(r"(?<!\S)(?:-{3,}|\*{3,}|_{3,})(?!\S)")
 
 
 def strip_markdown_artifacts(value: str) -> str:
@@ -27,6 +30,8 @@ def strip_markdown_artifacts(value: str) -> str:
     text = _LINK_PATTERN.sub(r"\1", text)
     text = _INLINE_CODE_PATTERN.sub(r"\1", text)
     text = _EMPHASIS_PATTERN.sub("", text)
+    text = _INLINE_HEADING_PATTERN.sub("", text)
+    text = _INLINE_HORIZONTAL_RULE_PATTERN.sub(" ", text)
 
     cleaned_lines: list[str] = []
     in_fence = False
@@ -39,6 +44,7 @@ def strip_markdown_artifacts(value: str) -> str:
             continue
         line = _HEADING_PATTERN.sub("", line)
         line = _BULLET_PATTERN.sub("", line)
+        line = _ORDERED_LIST_PATTERN.sub("", line)
         line = _QUOTE_PATTERN.sub("", line)
         cleaned_lines.append(line.strip())
 

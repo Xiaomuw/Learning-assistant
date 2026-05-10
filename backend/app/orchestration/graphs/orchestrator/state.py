@@ -14,4 +14,6 @@ class OrchestratorState(BaseLearningState, total=False):
     quiz_request: dict[str, Any]
     quiz_clarification: dict[str, Any]
     child_graph_output: dict[str, Any]
+    learning_event_persist_status: dict[str, Any]
+    persisted_learning_event_ids: list[str]
     audit_events: list[dict[str, Any]]

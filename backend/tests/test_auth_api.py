@@ -112,7 +112,7 @@ class AuthApiTest(unittest.TestCase):
             json={
                 "email": "auth-user@example.com",
                 "code": code,
-                "password": "password123",
+                "password": "Str0ngPass123!",
                 "display_name": "鉴权用户",
             },
         )
@@ -129,7 +129,7 @@ class AuthApiTest(unittest.TestCase):
             json={
                 "email": "auth-user@example.com",
                 "code": code,
-                "password": "password123",
+                "password": "Str0ngPass123!",
             },
         )
         self.assertEqual(reuse_response.status_code, 409)
@@ -146,7 +146,7 @@ class AuthApiTest(unittest.TestCase):
 
         login_response = self.client.post(
             "/api/auth/login",
-            json={"email": "auth-user@example.com", "password": "password123"},
+            json={"email": "auth-user@example.com", "password": "Str0ngPass123!"},
         )
         self.assertEqual(login_response.status_code, 200)
 
@@ -158,8 +158,8 @@ class AuthApiTest(unittest.TestCase):
         change_password_response = self.client.post(
             "/api/auth/change-password",
             json={
-                "current_password": "password123",
-                "new_password": "password456",
+                "current_password": "Str0ngPass123!",
+                "new_password": "Str0ngPass456!",
             },
         )
         self.assertEqual(change_password_response.status_code, 200)
@@ -172,24 +172,24 @@ class AuthApiTest(unittest.TestCase):
 
         old_password_login = self.client.post(
             "/api/auth/login",
-            json={"email": "auth-user@example.com", "password": "password123"},
+            json={"email": "auth-user@example.com", "password": "Str0ngPass123!"},
         )
         self.assertEqual(old_password_login.status_code, 401)
 
         new_password_login = self.client.post(
             "/api/auth/login",
-            json={"email": "auth-user@example.com", "password": "password456"},
+            json={"email": "auth-user@example.com", "password": "Str0ngPass456!"},
         )
         self.assertEqual(new_password_login.status_code, 200)
 
-    def test_send_code_rejects_registered_email_and_cooldown(self) -> None:
+    def test_send_code_hides_registered_email_and_keeps_cooldown(self) -> None:
         _, code = self._send_code("cooldown@example.com")
         complete_response = self.client.post(
             "/api/auth/register",
             json={
                 "email": "cooldown@example.com",
                 "code": code,
-                "password": "password123",
+                "password": "Str0ngPass123!",
             },
         )
         self.assertEqual(complete_response.status_code, 201)
@@ -199,7 +199,8 @@ class AuthApiTest(unittest.TestCase):
                 "/api/auth/register/send-code",
                 json={"email": "cooldown@example.com"},
             )
-            self.assertEqual(duplicate_response.status_code, 409)
+            self.assertEqual(duplicate_response.status_code, 200)
+            self.assertIn("如果该邮箱可以注册", duplicate_response.json()["message"])
             self.assertFalse(mocked_sender.called)
 
         with patch("app.application.auth.service.send_register_verification_email"):
@@ -223,7 +224,7 @@ class AuthApiTest(unittest.TestCase):
             json={
                 "email": "attempts@example.com",
                 "code": "999999",
-                "password": "password123",
+                "password": "Str0ngPass123!",
             },
         )
         self.assertEqual(wrong_response.status_code, 400)
@@ -236,7 +237,7 @@ class AuthApiTest(unittest.TestCase):
                 json={
                     "email": "attempts@example.com",
                     "code": "888888",
-                    "password": "password123",
+                    "password": "Str0ngPass123!",
                 },
             )
         self.assertEqual(response.status_code, 400)
@@ -245,7 +246,7 @@ class AuthApiTest(unittest.TestCase):
         expired_expires_at = self.verification.utcnow() - timedelta(minutes=1)
         self.auth_repos.create_or_refresh_email_verification_challenge_record(
             email="expired@example.com",
-            code_hash=self.security.hash_token("123456"),
+            code_hash=self.verification.hash_verification_code("123456"),
             expires_at=expired_expires_at,
             purpose=self.verification.REGISTER_VERIFICATION_PURPOSE,
             max_attempts=self.verification.REGISTER_MAX_ATTEMPTS,
@@ -255,7 +256,7 @@ class AuthApiTest(unittest.TestCase):
             json={
                 "email": "expired@example.com",
                 "code": "123456",
-                "password": "password123",
+                "password": "Str0ngPass123!",
             },
         )
         self.assertEqual(expired_response.status_code, 400)
@@ -268,14 +269,14 @@ class AuthApiTest(unittest.TestCase):
             json={
                 "email": "wrong-pass@example.com",
                 "code": code,
-                "password": "password123",
+                "password": "Str0ngPass123!",
             },
         )
         self.assertEqual(register_response.status_code, 201)
 
         response = self.client.post(
             "/api/auth/login",
-            json={"email": "wrong-pass@example.com", "password": "bad-password"},
+            json={"email": "wrong-pass@example.com", "password": "WrongPass123!"},
         )
         self.assertEqual(response.status_code, 401)
 
@@ -368,7 +369,7 @@ class AuthApiTest(unittest.TestCase):
             json={
                 "email": "cookie-user@example.com",
                 "code": code,
-                "password": "password123",
+                "password": "Str0ngPass123!",
             },
         )
         self.assertEqual(register_response.status_code, 201)

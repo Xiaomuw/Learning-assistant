@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.exc import DataError, IntegrityError, StatementError
 
 from app.application.practice.pack_service import create_pack_from_request
@@ -25,6 +25,7 @@ router = APIRouter()
 PRACTICE_ATTEMPT_CONSTRAINT_DETAIL = (
     "题目数据包含过长或不合法字段，请重新生成题包后再作答。"
 )
+PRACTICE_OPTION_KEYS = ("A", "B", "C", "D")
 
 
 class PracticeRecommendationsResponse(BaseModel):
@@ -43,9 +44,38 @@ class PracticeAttemptRequest(BaseModel):
     @classmethod
     def normalize_selected_option(cls, value: Any) -> str:
         option = str(value or "").strip().upper()
-        if option not in {"A", "B", "C", "D"}:
+        if option not in PRACTICE_OPTION_KEYS:
             raise ValueError("selected_option 必须是 A/B/C/D")
         return option
+
+    @model_validator(mode="after")
+    def normalize_quiz_item_for_submission(self) -> "PracticeAttemptRequest":
+        question = str(self.quiz_item.question or "").strip()
+        if not question:
+            raise ValueError("quiz_item.question 不能为空")
+
+        option_map: dict[str, str] = {}
+        for option in self.quiz_item.options or []:
+            key = str(option.get("key") or "").strip().upper()[:1]
+            text = str(option.get("text") or "").strip()
+            if key in PRACTICE_OPTION_KEYS and text:
+                option_map[key] = text
+
+        if set(option_map) != set(PRACTICE_OPTION_KEYS):
+            raise ValueError("quiz_item.options 必须完整包含 A/B/C/D 四个选项")
+
+        correct_option = str(self.quiz_item.correct_option or "").strip().upper()[:1]
+        if correct_option not in PRACTICE_OPTION_KEYS:
+            raise ValueError("quiz_item.correct_option 必须是 A/B/C/D")
+
+        self.quiz_item = self.quiz_item.model_copy(
+            update={
+                "question": question,
+                "options": [{"key": key, "text": option_map[key]} for key in PRACTICE_OPTION_KEYS],
+                "correct_option": correct_option,
+            }
+        )
+        return self
 
 
 class PracticeAttemptResponse(BaseModel):

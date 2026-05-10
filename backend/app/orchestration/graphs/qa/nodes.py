@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from uuid import uuid4
 
@@ -18,8 +19,8 @@ from app.orchestration.graphs.shared.schemas import (
     SourcePolicy,
     ToolCapability,
     ToolResult,
+    ToolStatus,
 )
-from app.persistence.interfaces import LearningEventRepository
 from app.knowledge.concept_registry import get_concept_registry
 from app.services.tooling.executor import ToolExecutor
 from app.services.tooling.schemas import ToolExecutionRequest, ToolRiskLevel
@@ -32,6 +33,7 @@ PARTIAL_EVIDENCE_SCORE = 0.55
 STRONG_EVIDENCE_SCORE = 0.70
 MAX_KNOWLEDGE_ROUTES = 3
 MAX_WEB_REPAIRS = 1
+MAX_ANSWER_REPAIR_ATTEMPTS = 1
 
 
 def input_normalize_node(state: QAGraphState) -> dict[str, Any]:
@@ -72,12 +74,20 @@ def input_normalize_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
-def intent_classifier_node(state: QAGraphState) -> dict[str, Any]:
-    """Classify the QA request into the ChatQuestionGraph intent set."""
+def qa_intent_classifier_node(state: QAGraphState) -> dict[str, Any]:
+    """Classify QA-local sub-intent without overriding Orchestrator graph routing."""
 
     question = _normalized_question(state)
-    intent = _infer_intent(question)
+    raw_intent = _infer_intent(question)
+    intent = _qa_scoped_intent(raw_intent)
     question_type = _question_type_from_intent(intent, question)
+    parent_decision = dict(state.get("parent_intent_decision") or {})
+    parent_intent = str(parent_decision.get("intent") or "")
+    alignment_status = "no_parent_intent"
+    if parent_intent:
+        alignment_status = "aligned" if parent_intent == "qa" else "parent_routed_to_qa_child"
+    if raw_intent != intent:
+        alignment_status = "cross_graph_signal_recorded"
     qa_request = {
         **dict(state.get("qa_request") or {}),
         "question": question,
@@ -86,12 +96,27 @@ def intent_classifier_node(state: QAGraphState) -> dict[str, Any]:
     return {
         "intent_result": {
             "intent": intent,
+            "raw_intent": raw_intent,
             "confidence": _intent_confidence(intent),
             "reason": _intent_reason(intent),
+            "parent_intent": parent_intent,
+            "alignment_status": alignment_status,
         },
         "question_type": question_type,
         "qa_request": qa_request,
+        "intent_alignment": {
+            "parent_intent": parent_intent,
+            "raw_internal_intent": raw_intent,
+            "qa_scoped_intent": intent,
+            "status": alignment_status,
+        },
     }
+
+
+def intent_classifier_node(state: QAGraphState) -> dict[str, Any]:
+    """Backward-compatible alias for the QA-local intent classifier."""
+
+    return qa_intent_classifier_node(state)
 
 
 def context_resolver_node(state: QAGraphState) -> dict[str, Any]:
@@ -253,112 +278,288 @@ def knowledge_router_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
-def retrieval_node(
+def internal_retrieval_node(
     state: QAGraphState,
     *,
     tool_executor: ToolExecutor | None = None,
 ) -> dict[str, Any]:
-    """Retrieve notebook evidence for each selected knowledge base through capability tools."""
+    """Retrieve only internal/notebook evidence for selected knowledge bases."""
 
+    _emit_status(
+        stream_stage="internal_retrieval",
+        stage_label="知识库检索",
+        detail="正在检索内部知识库和课程资料。",
+    )
     routes = list(state.get("knowledge_routes") or [])
+    question = _resolved_question(state)
+    source_policy = _source_policy(state)
     existing_usable = [
-        item for item in _collect_evidence(state) if item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE
+        item
+        for item in _collect_evidence(state)
+        if item.source_type in {"notebook", "course"} and item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE
     ]
     if existing_usable:
         return {
             "retrieval_report": {
+                "stage": "internal_retrieval",
                 "route_count": len(routes),
                 "requested_count": 0,
                 "result_count": 0,
                 "reason": "preloaded_evidence_available",
-            }
-        }
-    if not routes:
-        return {
-            "retrieval_report": {
-                "route_count": 0,
-                "requested_count": 0,
-                "result_count": 0,
-                "reason": str(state.get("retrieval_skipped_reason") or "no_knowledge_route"),
-            }
+                "web_requested_count": 0,
+            },
+            "web_search_attempted": False,
+            "web_search_reason": "not_requested_before_evidence_judge",
         }
 
-    source_policy = _source_policy(state)
-    question = _resolved_question(state)
     existing_requests = list(state.get("tool_requests") or [])
     existing_results = [item.model_dump(mode="json") for item in _collect_tool_results(state)]
-    requests = [
-        _tool_request(
-            state,
-            capability=ToolCapability.NOTEBOOK_RETRIEVE,
-            question=question,
-            route=route,
-            risk_level=ToolRiskLevel.LOW,
-            source_policy=source_policy,
+    request_routes: list[tuple[ToolExecutionRequest, dict[str, Any] | None, str]] = []
+    for route in routes:
+        request_routes.append(
+            (
+                _tool_request(
+                    state,
+                    capability=ToolCapability.NOTEBOOK_RETRIEVE,
+                    question=question,
+                    route=route,
+                    risk_level=ToolRiskLevel.LOW,
+                    source_policy=source_policy,
+                ),
+                route,
+                "notebook",
+            )
         )
-        for route in routes
-    ]
+    requests = [item[0] for item in request_routes]
     request_payloads = [item.model_dump(mode="json") for item in requests]
+
+    if not requests:
+        return {
+            "retrieval_report": {
+                "stage": "internal_retrieval",
+                "route_count": len(routes),
+                "requested_count": 0,
+                "result_count": 0,
+                "reason": str(state.get("retrieval_skipped_reason") or "no_retrieval_request"),
+                "web_requested_count": 0,
+            },
+            "web_search_attempted": False,
+            "web_search_reason": "not_requested_before_evidence_judge",
+            "web_search_iteration": int(state.get("web_search_iteration") or 0),
+        }
 
     if tool_executor is None:
         return {
             "tool_requests": [*existing_requests, *request_payloads],
             "retrieval_report": {
+                "stage": "internal_retrieval",
                 "route_count": len(routes),
                 "requested_count": len(requests),
                 "result_count": len(existing_results),
+                "reason": "planned_without_executor",
+                "web_requested_count": 0,
             },
+            "web_search_attempted": False,
+            "web_search_reason": "not_requested_before_evidence_judge",
+            "web_search_iteration": int(state.get("web_search_iteration") or 0),
         }
 
     new_results: list[ToolResult] = []
-    for request, route in zip(requests, routes, strict=False):
-        result = tool_executor.execute(request)
-        new_results.append(_tag_tool_result_evidence(result, route=route, retrieval_source="notebook"))
+    new_errors: list[dict[str, Any]] = []
+    for request, route, retrieval_source in request_routes:
+        try:
+            result = tool_executor.execute(request)
+        except Exception as exc:  # noqa: BLE001 - retrieval failure must not abort the QA graph
+            result = _tool_error_result(request, exc)
+            new_errors.append(
+                GraphError(
+                    code="qa_retrieval_tool_failed",
+                    message=exc.__class__.__name__,
+                    node="internal_retrieval",
+                    severity=GraphErrorSeverity.WARNING,
+                    metadata={"capability": request.capability.value},
+                ).model_dump(mode="json")
+            )
+        new_results.append(_tag_tool_result_evidence(result, route=route, retrieval_source=retrieval_source))
 
     merged_results = [*existing_results, *[item.model_dump(mode="json") for item in new_results]]
     return {
         "tool_requests": [*existing_requests, *request_payloads],
         "tool_results": merged_results,
+        "errors": [*list(state.get("errors") or []), *new_errors],
         "retrieval_report": {
+            "stage": "internal_retrieval",
             "route_count": len(routes),
             "requested_count": len(requests),
             "result_count": len(new_results),
             "success_count": len([item for item in new_results if item.status.value == "success"]),
+            "error_count": len(new_errors),
+            "web_requested_count": 0,
         },
+        "web_search_attempted": False,
+        "web_search_reason": "not_requested_before_evidence_judge",
+        "web_search_iteration": int(state.get("web_search_iteration") or 0),
+    }
+
+
+def retrieval_node(
+    state: QAGraphState,
+    *,
+    tool_executor: ToolExecutor | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible alias for the internal retrieval stage."""
+
+    return internal_retrieval_node(state, tool_executor=tool_executor)
+
+
+def web_search_if_needed_node(
+    state: QAGraphState,
+    *,
+    tool_executor: ToolExecutor | None = None,
+) -> dict[str, Any]:
+    """Run web search only after internal evidence is judged insufficient."""
+
+    source_policy = _source_policy(state)
+    gate = dict(state.get("evidence_gate") or {})
+    question = _resolved_question(state)
+    reason = str(gate.get("reason") or "evidence_judge_not_sufficient")
+    existing_requests = list(state.get("tool_requests") or [])
+    existing_results = [item.model_dump(mode="json") for item in _collect_tool_results(state)]
+    retrieval_report = dict(state.get("retrieval_report") or {})
+    allowed = source_policy in {
+        SourcePolicy.OPEN_TOOLS.value,
+        SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
+    }
+    should_run_web = bool(not gate.get("sufficient") and allowed)
+
+    if not should_run_web:
+        blocked_reason = "internal_evidence_sufficient" if gate.get("sufficient") else "source_policy_disallows_web"
+        if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+            blocked_reason = "source_policy_notebook_only"
+        _emit_status(
+            stream_stage="web_search_if_needed",
+            stage_label="联网补充",
+            detail="内部证据已足够或当前策略不允许联网，本轮不触发 web_search。",
+            status="skipped",
+        )
+        return {
+            "retrieval_report": {
+                **retrieval_report,
+                "web_requested_count": 0,
+                "web_result_count": 0,
+                "web_search_stage": "skipped",
+                "web_search_reason": blocked_reason,
+            },
+            "web_search_attempted": False,
+            "web_search_reason": blocked_reason,
+            "web_search_iteration": int(state.get("web_search_iteration") or 0),
+        }
+
+    _emit_status(
+        stream_stage="web_search_if_needed",
+        stage_label="联网补充",
+        detail="内部证据不足，正在按 source_policy 补充联网信息。",
+    )
+    request = _tool_request(
+        state,
+        capability=ToolCapability.WEB_SEARCH,
+        question=question,
+        route=None,
+        risk_level=ToolRiskLevel.MEDIUM,
+        source_policy=source_policy,
+    )
+    request_payload = request.model_dump(mode="json")
+    if tool_executor is None:
+        return {
+            "tool_requests": [*existing_requests, request_payload],
+            "retrieval_report": {
+                **retrieval_report,
+                "web_requested_count": 1,
+                "web_result_count": 0,
+                "web_search_stage": "planned_without_executor",
+                "web_search_reason": reason,
+            },
+            "web_search_attempted": False,
+            "web_search_reason": "planned_without_executor",
+            "web_search_iteration": int(state.get("web_search_iteration") or 0),
+        }
+
+    new_errors: list[dict[str, Any]] = []
+    try:
+        result = tool_executor.execute(request)
+    except Exception as exc:  # noqa: BLE001 - web fallback must fail open
+        result = _tool_error_result(request, exc)
+        new_errors.append(
+            GraphError(
+                code="qa_retrieval_tool_failed",
+                message=exc.__class__.__name__,
+                node="web_search_if_needed",
+                severity=GraphErrorSeverity.WARNING,
+                metadata={"capability": request.capability.value},
+            ).model_dump(mode="json")
+        )
+
+    tagged = _tag_tool_result_evidence(result, route=None, retrieval_source="web")
+    usable_web_evidence = [
+        item
+        for item in tagged.evidence
+        if item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE
+    ]
+    return {
+        "tool_requests": [*existing_requests, request_payload],
+        "tool_results": [*existing_results, tagged.model_dump(mode="json")],
+        "web_evidence": [item.model_dump(mode="json") for item in usable_web_evidence],
+        "errors": [*list(state.get("errors") or []), *new_errors],
+        "retrieval_report": {
+            **retrieval_report,
+            "web_requested_count": 1,
+            "web_result_count": len(usable_web_evidence),
+            "web_success_count": 1 if tagged.status == ToolStatus.SUCCESS else 0,
+            "web_error_count": len(new_errors),
+            "web_search_stage": "executed",
+            "web_search_reason": reason,
+        },
+        "web_search_attempted": True,
+        "web_search_reason": reason,
+        "web_search_iteration": int(state.get("web_search_iteration") or 0) + 1,
     }
 
 
 def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
-    """Judge whether retrieved knowledge-base evidence can support the answer."""
+    """Judge whether internal evidence can support the answer before web fallback."""
 
+    _emit_status(
+        stream_stage="evidence_judge",
+        stage_label="证据评估",
+        detail="正在评估内部证据是否足够支撑回答。",
+    )
     source_policy = _source_policy(state)
     question = _resolved_question(state)
+    all_evidence = _collect_evidence(state)
     notebook_evidence = [
         item
-        for item in _collect_evidence(state)
+        for item in all_evidence
         if item.source_type in {"notebook", "course"} and item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE
     ]
-    strong = [item for item in notebook_evidence if item.score >= STRONG_EVIDENCE_SCORE]
+    notebook_required = source_policy == SourcePolicy.NOTEBOOK_ONLY.value or _has_strict_notebook_signal(question)
+    if source_policy == SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value and _has_notebook_signal(question):
+        notebook_required = True
+    usable = notebook_evidence
+    strong = [item for item in usable if item.score >= STRONG_EVIDENCE_SCORE]
     if strong:
         status = "strong"
         usable = strong
         reason = "strong_notebook_evidence"
-    elif notebook_evidence:
+    elif usable:
         status = "partial"
-        usable = notebook_evidence
         reason = "partial_notebook_evidence"
     else:
         status = "insufficient"
-        usable = []
         reason = "no_sufficient_notebook_evidence"
-
-    notebook_required = source_policy == SourcePolicy.NOTEBOOK_ONLY.value or _has_strict_notebook_signal(question)
-    if source_policy == SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value and _has_notebook_signal(question):
-        notebook_required = True
 
     gate = {
         "sufficient": bool(usable),
-        "insufficient": notebook_required and not usable,
+        "insufficient": notebook_required and not notebook_evidence,
         "source_policy": source_policy,
         "notebook_required": notebook_required,
         "usable_evidence_refs": [item.id for item in usable],
@@ -371,14 +572,17 @@ def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
         "status": status,
         "missing_reason": "" if usable else reason,
         "verified_count": len(usable),
-        "discarded_count": max(0, len(_collect_evidence(state)) - len(usable)),
+        "discarded_count": max(0, len(all_evidence) - len(usable)),
         "strong_count": len(strong),
-        "partial_count": len(notebook_evidence) - len(strong),
+        "partial_count": max(0, len(usable) - len(strong)),
+        "notebook_count": len(notebook_evidence),
+        "web_count": 0,
         "route_count": len(state.get("knowledge_routes") or []),
     }
     return {
         "evidence": [item.model_dump(mode="json") for item in usable],
-        "notebook_evidence": [item.model_dump(mode="json") for item in usable],
+        "notebook_evidence": [item.model_dump(mode="json") for item in notebook_evidence],
+        "web_evidence": [],
         "evidence_judgement": judgement,
         "evidence_gate": gate,
         "grounding_report": gate,
@@ -390,16 +594,26 @@ def answer_generate_node(
     *,
     adapter: QARuntimeAdapter | None = None,
 ) -> dict[str, Any]:
+    _emit_status(
+        stream_stage="answer_generate",
+        stage_label="生成回答",
+        detail="证据已完成合并，正在生成候选回答。",
+    )
     return run_adapter(state, adapter=adapter)
 
 
 def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
-    """Check answer quality and decide whether web fallback is needed."""
+    """Check answer quality and decide whether to pass, repair, or clarify."""
 
+    _emit_status(
+        stream_stage="answer_quality_check",
+        stage_label="质量检查",
+        detail="正在检查回答是否有足够证据和稳定结构。",
+    )
     source_policy = _source_policy(state)
     final_response = FinalResponse.model_validate(state.get("final_response") or {})
     question = _resolved_question(state)
-    evidence = _collect_evidence(state)
+    evidence = _collect_answer_evidence(state)
     evidence_by_id = {item.id: item for item in evidence}
     web_used = any(item.source_type == "web" for item in evidence)
     notebook_used = any(item.source_type in {"notebook", "course"} for item in evidence)
@@ -410,37 +624,160 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
         issues.append("empty_answer")
     if final_response.evidence_refs and any(ref not in evidence_by_id for ref in final_response.evidence_refs):
         issues.append("evidence_ref_missing")
-    if _has_external_search_signal(question) and not web_used and source_policy != SourcePolicy.NOTEBOOK_ONLY.value:
+    if (
+        _has_external_search_signal(question)
+        and not web_used
+        and not bool(state.get("web_search_attempted"))
+        and source_policy != SourcePolicy.NOTEBOOK_ONLY.value
+    ):
         issues.append("time_sensitive_without_web")
         needs_web = True
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value and final_response.source_level == SourceLevel.NOTEBOOK and not notebook_used:
         issues.append("notebook_claim_without_evidence")
 
-    status = "pass"
+    passed = not issues
+    repair_attempt_count = int(state.get("answer_repair_attempt_count") or 0)
+    repair_action = "none"
     if issues:
-        status = "needs_web_search" if needs_web else "failed"
+        repairable = any(issue in {"empty_answer", "evidence_ref_missing"} for issue in issues)
+        if repairable and repair_attempt_count < MAX_ANSWER_REPAIR_ATTEMPTS:
+            repair_action = "rewrite_with_evidence"
+        elif any(issue in {"notebook_claim_without_evidence", "time_sensitive_without_web"} for issue in issues):
+            repair_action = "ask_clarification"
+        else:
+            repair_action = "fallback_general_answer"
+    status = "pass" if passed else "failed"
+    quality_check = {
+        "passed": passed,
+        "reason": issues[0] if issues else "quality_pass",
+        "repair_action": repair_action,
+        "issues": issues,
+        "repair_attempt_count": repair_attempt_count,
+        "max_repair_attempts": MAX_ANSWER_REPAIR_ATTEMPTS,
+    }
     return {
+        "quality_check": quality_check,
         "answer_quality": {
             "status": status,
+            "passed": passed,
             "issues": issues,
-            "needs_web_search": needs_web,
-            "reason": issues[0] if issues else "quality_pass",
+            "needs_web_search": False,
+            "web_search_recommended": needs_web,
+            "reason": quality_check["reason"],
+            "repair_action": repair_action,
             "web_repair_count": int(state.get("web_search_iteration") or 0),
+            "answer_repair_count": repair_attempt_count,
         }
     }
 
 
+def route_after_answer_quality(state: QAGraphState) -> str:
+    quality = dict(state.get("quality_check") or state.get("answer_quality") or {})
+    if quality.get("passed") or str(quality.get("status") or "") == "pass":
+        return "final_response_compose"
+    action = str(quality.get("repair_action") or "ask_clarification")
+    if action == "rewrite_with_evidence":
+        return "answer_repair"
+    return "clarification_response"
+
+
+def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
+    """Repair a failed candidate answer once, using only merged evidence."""
+
+    attempt_count = int(state.get("answer_repair_attempt_count") or 0) + 1
+    response = FinalResponse.model_validate(state.get("final_response") or {})
+    evidence = _collect_answer_evidence(state)
+    source_usage = _source_usage_from_evidence(evidence)
+    source_level = _source_level_from_usage(source_usage, response.source_level)
+    if not evidence:
+        repaired = response.model_copy(
+            update={
+                "answer": "",
+                "source_level": SourceLevel.NONE,
+                "evidence_refs": [],
+                "ui_payload": {
+                    **dict(response.ui_payload),
+                    "answer_mode": "answer_repair_no_evidence",
+                    "degraded": True,
+                    "repair_attempt_count": attempt_count,
+                },
+            }
+        )
+        return {
+            "final_response": repaired.model_dump(mode="json"),
+            "answer_repair_attempt_count": attempt_count,
+        }
+
+    lead = evidence[0].text.strip().replace("\n", " ")
+    prefix = "结合内部资料和联网信息，" if source_usage == "mixed" else "基于已审核证据，"
+    if source_usage == "web":
+        prefix = "基于联网补充证据，"
+    elif source_usage == "notebook":
+        prefix = "参考你的资料，"
+    answer = f"{prefix}{lead}"
+    if not answer.endswith(("。", ".", "！", "!", "？", "?")):
+        answer = f"{answer}。"
+    repaired = response.model_copy(
+        update={
+            "answer": answer,
+            "source_level": source_level,
+            "evidence_refs": [item.id for item in evidence],
+            "ui_payload": {
+                **dict(response.ui_payload),
+                "answer_mode": "answer_repaired",
+                "degraded": True,
+                "repair_attempt_count": attempt_count,
+                "repair_source_usage": source_usage,
+            },
+        }
+    )
+    return {
+        "final_response": repaired.model_dump(mode="json"),
+        "answer_repair_attempt_count": attempt_count,
+    }
+
+
+def clarification_response_node(state: QAGraphState) -> dict[str, Any]:
+    """Return a safe clarification/degraded response when quality cannot be repaired."""
+
+    quality = dict(state.get("quality_check") or state.get("answer_quality") or {})
+    gate = dict(state.get("evidence_gate") or {})
+    source_policy = _source_policy(state)
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        answer = "当前资料里还没有足够证据支撑这个回答。你可以补充相关资料，或允许我使用外部资料后再问一次。"
+    else:
+        answer = "我目前缺少足够可靠的证据来给出确定回答。你可以补充更具体的上下文，或明确允许联网补充来源。"
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        coach_actions=["ask_clarification"],
+        mastery_signals={"signal_strength": "none"},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": "clarification_required",
+            "degraded": True,
+            "answer_quality": quality,
+            "evidence_sufficiency": gate,
+            "source_policy": source_policy,
+        },
+    )
+    error = GraphError(
+        code="qa_clarification_response",
+        message=str(quality.get("reason") or "answer_quality_failed"),
+        node="clarification_response",
+        severity=GraphErrorSeverity.WARNING,
+        metadata={"repair_action": str(quality.get("repair_action") or "")},
+    )
+    return {
+        "final_response": response.model_dump(mode="json"),
+        "source_usage": "model",
+        "errors": [*list(state.get("errors") or []), error.model_dump(mode="json")],
+    }
+
+
 def should_run_web_search(state: QAGraphState) -> str:
-    quality = dict(state.get("answer_quality") or {})
-    if not quality.get("needs_web_search"):
-        return "evidence_merge"
-    if _source_policy(state) == SourcePolicy.NOTEBOOK_ONLY.value:
-        return "evidence_merge"
-    if bool(state.get("web_search_attempted")):
-        return "evidence_merge"
-    if int(state.get("web_search_iteration") or 0) >= MAX_WEB_REPAIRS:
-        return "evidence_merge"
-    return "web_search"
+    _ = state
+    return "evidence_merge"
 
 
 def web_search_node(
@@ -448,7 +785,7 @@ def web_search_node(
     *,
     tool_executor: ToolExecutor | None = None,
 ) -> dict[str, Any]:
-    """Run web search as a post-answer quality fallback when policy allows it."""
+    """Legacy node kept for old callers; production web search now runs in retrieval_node."""
 
     source_policy = _source_policy(state)
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
@@ -491,15 +828,21 @@ def web_search_node(
 
 
 def evidence_merge_node(state: QAGraphState) -> dict[str, Any]:
-    """Merge notebook and web evidence while keeping source classes explicit."""
+    """Merge evidence that has already passed the judge while keeping source classes explicit."""
 
-    all_evidence = _collect_evidence(state)
+    _emit_status(
+        stream_stage="evidence_merge",
+        stage_label="证据合并",
+        detail="正在合并内部证据和已触发的联网证据。",
+    )
+    internal_evidence = _collect_explicit_evidence(state)
+    web_evidence = _parse_evidence_list(state.get("web_evidence") or [])
     notebook = [
         item
-        for item in all_evidence
+        for item in internal_evidence
         if item.source_type in {"notebook", "course"} and item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE
     ]
-    web = [item for item in all_evidence if item.source_type == "web" and item.text.strip()]
+    web = [item for item in web_evidence if item.source_type == "web" and item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE]
     merged = _dedupe_evidence([*notebook, *web])
     source_usage = "model"
     if notebook and web:
@@ -520,10 +863,10 @@ def final_response_node(state: QAGraphState) -> dict[str, Any]:
     """Compose the final contract response with v2 QA process metadata."""
 
     response = FinalResponse.model_validate(state.get("final_response") or {})
-    evidence = _collect_evidence(state)
+    evidence = _collect_answer_evidence(state)
     source_usage = str(state.get("source_usage") or _source_usage_from_evidence(evidence))
     source_level = _source_level_from_usage(source_usage, response.source_level)
-    evidence_refs = [item.id for item in evidence] if evidence else list(response.evidence_refs)
+    evidence_refs = [item.id for item in evidence]
     answer = response.answer
 
     if not answer.strip() and evidence:
@@ -558,6 +901,8 @@ def final_response_node(state: QAGraphState) -> dict[str, Any]:
         "retrieval_report": dict(state.get("retrieval_report") or {}),
         "evidence_judgement": dict(state.get("evidence_judgement") or {}),
         "answer_quality": dict(state.get("answer_quality") or {}),
+        "quality_check": dict(state.get("quality_check") or {}),
+        "answer_repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
         "source_usage": source_usage,
         "web_search_attempted": bool(state.get("web_search_attempted")),
         "concept_linking": dict(state.get("concept_linking") or {}),
@@ -699,7 +1044,7 @@ def run_adapter(
     question = str(qa_request.get("question") or _question(state))
     question_type = str(qa_request.get("question_type") or _infer_question_type(_question(state)))
     source_policy = _source_policy(state)
-    evidence = _collect_evidence(state)
+    evidence = _collect_answer_evidence(state)
     evidence_gate = dict(state.get("evidence_gate") or {})
     contract_runner = getattr(runtime_adapter, "answer_with_contract", None)
     if callable(contract_runner):
@@ -717,7 +1062,21 @@ def run_adapter(
             "runtime_summary": dict(contract_result.runtime_summary),
         }
         if contract_result.evidence:
-            update["evidence"] = [item.model_dump(mode="json") for item in contract_result.evidence]
+            if state.get("evidence_judgement"):
+                judged_ids = {item.id for item in evidence}
+                judged_runtime_evidence = [item for item in contract_result.evidence if item.id in judged_ids]
+                if judged_runtime_evidence:
+                    update["evidence"] = [item.model_dump(mode="json") for item in judged_runtime_evidence]
+                else:
+                    sanitized_response = contract_result.final_response.model_copy(
+                        update={
+                            "source_level": SourceLevel.MODEL,
+                            "evidence_refs": [],
+                        }
+                    )
+                    update["final_response"] = sanitized_response.model_dump(mode="json")
+            else:
+                update["evidence"] = [item.model_dump(mode="json") for item in contract_result.evidence]
         if contract_result.tool_results:
             existing_tool_results = [
                 item.model_dump(mode="json")
@@ -727,6 +1086,9 @@ def run_adapter(
                 *existing_tool_results,
                 *[item.model_dump(mode="json") for item in contract_result.tool_results],
             ]
+            if any(item.capability == ToolCapability.WEB_SEARCH for item in contract_result.tool_results):
+                update["web_search_attempted"] = True
+                update["web_search_reason"] = str(state.get("web_search_reason") or "runtime_tool_result")
         if contract_result.learning_events:
             update["adapter_learning_events"] = [
                 item.model_dump(mode="json") for item in contract_result.learning_events
@@ -824,6 +1186,21 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
             )
         )
 
+    answer_mode = str(response.ui_payload.get("answer_mode") or "")
+    if answer_mode in {"answer_repaired", "clarification_required"}:
+        events.append(
+            LearningEvent(
+                event_type=LearningEventType.ANSWER_REPAIRED.value,
+                user_id=str(state.get("user_id") or ""),
+                graph_run_id=str(state.get("run_id") or ""),
+                payload={
+                    "answer_mode": answer_mode,
+                    "repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
+                    "quality_check": dict(state.get("quality_check") or {}),
+                },
+            )
+        )
+
     for concept in response.concepts:
         events.append(
             LearningEvent(
@@ -841,7 +1218,7 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
             )
         )
 
-    evidence_by_id = {item.id: item for item in _collect_evidence(state)}
+    evidence_by_id = {item.id: item for item in _collect_answer_evidence(state)}
     for evidence_ref in response.evidence_refs:
         evidence = evidence_by_id.get(evidence_ref)
         if evidence is None:
@@ -880,22 +1257,7 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
             )
         )
 
-    return {"learning_events": [item.model_dump(mode="json") for item in events]}
-
-
-def persist_learning_events(
-    state: QAGraphState,
-    *,
-    learning_event_repository: LearningEventRepository | None = None,
-) -> dict[str, Any]:
-    if learning_event_repository is None:
-        return {}
-
-    persisted_ids: list[str] = []
-    for raw_event in list(state.get("learning_events") or []):
-        event = LearningEvent.model_validate(raw_event)
-        persisted_ids.append(learning_event_repository.append(event))
-    return {"persisted_learning_event_ids": persisted_ids}
+    return {"learning_events": [item.model_dump(mode="json") for item in _events_with_idempotency(events, state)]}
 
 
 def _normalized_question(state: QAGraphState) -> str:
@@ -958,6 +1320,12 @@ def _infer_intent(question: str) -> str:
     if _infer_question_type(question) == "concept":
         return "concept_explain"
     return "unknown"
+
+
+def _qa_scoped_intent(intent: str) -> str:
+    if intent in {"question_generation", "learning_diagnosis"}:
+        return "unknown"
+    return intent
 
 
 def _question_type_from_intent(intent: str, question: str) -> str:
@@ -1200,8 +1568,24 @@ def _retrieval_skipped_reason(
     if intent == "concept_explain" or question_type == "concept":
         return "stable_concept_model_first"
     if _has_external_search_signal(question):
-        return "external_search_quality_fallback_only"
+        return "external_search_retrieval_stage"
     return "no_explicit_knowledge_base_signal"
+
+
+def _should_run_web_retrieval(
+    state: QAGraphState,
+    question: str,
+    source_policy: str,
+) -> bool:
+    _ = state
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        return False
+    if not _has_external_search_signal(question):
+        return False
+    return source_policy in {
+        SourcePolicy.OPEN_TOOLS.value,
+        SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
+    }
 
 
 def _query_terms(question: str) -> list[str]:
@@ -1328,6 +1712,20 @@ def _tag_tool_result_evidence(
     return result.model_copy(update={"evidence": evidence})
 
 
+def _tool_error_result(request: ToolExecutionRequest, exc: Exception) -> ToolResult:
+    message = str(exc) or exc.__class__.__name__
+    status = ToolStatus.TIMEOUT if "timeout" in message.lower() or "超时" in message else ToolStatus.ERROR
+    return ToolResult(
+        tool_id=f"error:{request.capability.value}",
+        provider="tool_executor",
+        capability=request.capability,
+        status=status,
+        input_summary=request.input_summary,
+        output={"error_type": exc.__class__.__name__},
+        error=message[:240],
+    )
+
+
 def _dedupe_evidence(evidence: list[EvidenceChunk]) -> list[EvidenceChunk]:
     by_id: dict[str, EvidenceChunk] = {}
     for item in evidence:
@@ -1362,6 +1760,28 @@ def _source_level_from_usage(source_usage: str, fallback: SourceLevel) -> Source
             return SourceLevel.NONE
         return SourceLevel.MODEL
     return fallback
+
+
+def _collect_answer_evidence(state: QAGraphState) -> list[EvidenceChunk]:
+    if state.get("evidence_judgement") or state.get("source_usage"):
+        return _collect_explicit_evidence(state)
+    return _collect_evidence(state)
+
+
+def _collect_explicit_evidence(state: QAGraphState) -> list[EvidenceChunk]:
+    return _parse_evidence_list(state.get("evidence") or [])
+
+
+def _parse_evidence_list(raw_items: Any) -> list[EvidenceChunk]:
+    evidence_by_id: dict[str, EvidenceChunk] = {}
+    for item in list(raw_items or []):
+        if isinstance(item, EvidenceChunk):
+            evidence_by_id[item.id] = item
+            continue
+        if isinstance(item, dict):
+            parsed = EvidenceChunk.model_validate(item)
+            evidence_by_id[parsed.id] = parsed
+    return list(evidence_by_id.values())
 
 
 def _collect_evidence(state: QAGraphState) -> list[EvidenceChunk]:
@@ -1399,3 +1819,75 @@ def _adapter_events_from_state(state: QAGraphState) -> list[LearningEvent]:
         if isinstance(item, dict):
             events.append(LearningEvent.model_validate(item))
     return events
+
+
+def _events_with_idempotency(events: list[LearningEvent], state: QAGraphState) -> list[LearningEvent]:
+    session_id = str(state.get("thread_id") or state.get("session_id") or "")
+    message_id = str(state.get("message_id") or state.get("run_id") or "")
+    enriched: list[LearningEvent] = []
+    for event in events:
+        payload = dict(event.payload)
+        payload.setdefault("session_id", session_id)
+        payload.setdefault("message_id", message_id)
+        payload.setdefault("event_type", event.event_type)
+        payload.setdefault("concept_id", event.concept_id or "")
+        payload.setdefault("created_at", event.created_at)
+        payload.setdefault(
+            "hash_key",
+            _event_hash_key(
+                session_id=session_id,
+                message_id=message_id,
+                event_type=event.event_type,
+                concept_id=event.concept_id or "",
+                payload=payload,
+            ),
+        )
+        enriched.append(event.model_copy(update={"payload": payload}))
+    return enriched
+
+
+def _event_hash_key(
+    *,
+    session_id: str,
+    message_id: str,
+    event_type: str,
+    concept_id: str,
+    payload: dict[str, Any],
+) -> str:
+    payload_marker = str(
+        payload.get("evidence_id")
+        or payload.get("tool_result_id")
+        or payload.get("answer_mode")
+        or payload.get("reason")
+        or payload.get("question_type")
+        or ""
+    )
+    source = "|".join([session_id, message_id, event_type, concept_id, payload_marker])
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def _emit_status(
+    *,
+    stream_stage: str,
+    stage_label: str,
+    detail: str,
+    status: str = "running",
+) -> None:
+    try:
+        from langgraph.config import get_stream_writer
+
+        writer = get_stream_writer()
+        writer(
+            {
+                "event": "status",
+                "data": {
+                    "stream_stage": stream_stage,
+                    "stage_label": stage_label,
+                    "detail": detail,
+                    "status": status,
+                    "streaming_mode": "node",
+                },
+            }
+        )
+    except Exception:
+        return

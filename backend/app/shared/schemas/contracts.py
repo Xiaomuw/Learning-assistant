@@ -50,11 +50,15 @@ class NotebookKnowledgeStatus(BaseModel):
     personal_pdf_count: int = 0
     personal_url_count: int = 0
     personal_ready: bool = False
+    pgvector_ready: bool = False
     embedding_ready: bool = False
+    embedding_model_ready: bool = False
+    embedding_model_error: str = ""
     schema_ready: bool = False
     index_ready: bool = False
     schema_issues: list[str] = Field(default_factory=list)
     embedding_profile: dict[str, Any] = Field(default_factory=dict)
+    content_ready: bool = False
     coverage_score: int = 0
     coverage_level: Literal["empty", "sparse", "partial", "ready"] = "empty"
     missing_doc_types: list[str] = Field(default_factory=list)
@@ -592,6 +596,7 @@ class PracticeSubmissionResult(BaseModel):
     session_memory: dict[str, Any] | None = None
     mastery_evaluation: MasteryEvaluationResult | None = None
     personalized_feedback: str = ""
+    duplicate_submission: bool = False
 
 
 class ModelOptionRecord(BaseModel):

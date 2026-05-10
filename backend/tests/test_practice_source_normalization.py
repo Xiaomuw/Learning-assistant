@@ -161,6 +161,7 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                 "app.domains.practice.attempts._save_user_memory",
                 return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP"], "last_session": ""},
             ),
+            patch("app.domains.practice.attempts._find_existing_practice_attempt", return_value=None),
         ):
             record_practice_attempt_and_update_memory(
                 user_id="u1",
@@ -185,6 +186,188 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
             )
 
         self.assertEqual(captured["source_type"], "ai_generated")
+
+    def test_submit_attempt_completes_missing_option_rationales_before_persisting(self) -> None:
+        captured: dict[str, dict] = {}
+
+        def fake_create_attempt(**kwargs):
+            captured.update(kwargs)
+            return {"id": "legacy-attempt-1", "created_at": "2026-05-09T00:00:00Z", **kwargs}
+
+        with (
+            patch(
+                "app.domains.practice.attempts.evaluate_practice_answer",
+                return_value=MasteryEvaluationResult(
+                    subject_id="general",
+                    knowledge_point="HTTP",
+                    normalized_answer="C",
+                    is_correct=True,
+                    score=100,
+                    mastery_score=100,
+                    mastery_level="mastered",
+                    feedback="回答正确。",
+                ),
+            ),
+            patch("app.domains.practice.attempts._create_practice_attempt", side_effect=fake_create_attempt),
+            patch("app.domains.practice.attempts._find_existing_practice_attempt", return_value=None),
+            patch(
+                "app.domains.practice.attempts._get_user_memory",
+                return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
+            ),
+            patch(
+                "app.domains.practice.attempts._save_user_memory",
+                return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP"], "last_session": ""},
+            ),
+        ):
+            result = record_practice_attempt_and_update_memory(
+                user_id="u1",
+                session_id="",
+                subject_id="general",
+                quiz_item=PracticeRecommendation(
+                    question_id="q1",
+                    question="HTTP 默认端口是？",
+                    options=[
+                        {"key": "A", "text": "20"},
+                        {"key": "B", "text": "53"},
+                        {"key": "C", "text": "80"},
+                        {"key": "D", "text": "443"},
+                    ],
+                    correct_option="C",
+                    explanation="HTTP 默认端口是 80。",
+                    option_rationales={"C": "80 是 HTTP 默认端口。"},
+                    knowledge_point="HTTP",
+                    source_type="ai_generated",
+                ),
+                selected_option="C",
+            )
+
+        self.assertEqual(set(result.option_rationales), {"A", "B", "C", "D"})
+        self.assertEqual(set(captured["question_snapshot"]["option_rationales"]), {"A", "B", "C", "D"})
+
+    def test_submit_attempt_uses_stable_fallback_question_id_when_missing(self) -> None:
+        captured: dict[str, str] = {}
+
+        def fake_create_attempt(**kwargs):
+            captured.update(kwargs)
+            return {"id": "legacy-attempt-1", "created_at": "2026-05-09T00:00:00Z", **kwargs}
+
+        with (
+            patch(
+                "app.domains.practice.attempts.evaluate_practice_answer",
+                return_value=MasteryEvaluationResult(
+                    subject_id="general",
+                    knowledge_point="HTTP",
+                    normalized_answer="C",
+                    is_correct=True,
+                    score=100,
+                    mastery_score=100,
+                    mastery_level="mastered",
+                    feedback="回答正确。",
+                ),
+            ),
+            patch("app.domains.practice.attempts._create_practice_attempt", side_effect=fake_create_attempt),
+            patch("app.domains.practice.attempts._find_existing_practice_attempt", return_value=None) as find_existing,
+            patch(
+                "app.domains.practice.attempts._get_user_memory",
+                return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
+            ),
+            patch(
+                "app.domains.practice.attempts._save_user_memory",
+                return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP"], "last_session": ""},
+            ),
+        ):
+            record_practice_attempt_and_update_memory(
+                user_id="u1",
+                session_id="",
+                subject_id="general",
+                quiz_item=PracticeRecommendation(
+                    question_id="",
+                    question="HTTP 默认端口是？",
+                    options=[
+                        {"key": "A", "text": "20"},
+                        {"key": "B", "text": "53"},
+                        {"key": "C", "text": "80"},
+                        {"key": "D", "text": "443"},
+                    ],
+                    correct_option="C",
+                    explanation="HTTP 默认端口是 80。",
+                    option_rationales={"C": "80 是 HTTP 默认端口。"},
+                    knowledge_point="HTTP",
+                    source_type="ai_generated",
+                ),
+                selected_option="C",
+            )
+
+        self.assertTrue(captured["question_id"].startswith("practice:"))
+        self.assertEqual(captured["question_id"], captured["question_snapshot"]["question_id"])
+        self.assertEqual(find_existing.call_args.kwargs["question_id"], captured["question_id"])
+
+    def test_duplicate_submit_returns_existing_feedback_without_writes(self) -> None:
+        with (
+            patch(
+                "app.domains.practice.attempts._find_existing_practice_attempt",
+                return_value={
+                    "id": "legacy-attempt-1",
+                    "user_id": "u1",
+                    "session_id": "session-1",
+                    "subject_id": "general",
+                    "question_id": "q1",
+                    "question_snapshot": {
+                        "question_id": "q1",
+                        "question": "HTTP 默认端口是？",
+                        "options": [
+                            {"key": "A", "text": "20"},
+                            {"key": "B", "text": "53"},
+                            {"key": "C", "text": "80"},
+                            {"key": "D", "text": "443"},
+                        ],
+                        "correct_option": "C",
+                        "explanation": "HTTP 默认端口是 80。",
+                        "option_rationales": {"C": "80 是 HTTP 默认端口。"},
+                        "knowledge_point": "HTTP",
+                        "source_type": "ai_generated",
+                    },
+                    "selected_option": "A",
+                    "is_correct": False,
+                },
+            ),
+            patch("app.domains.practice.attempts.evaluate_practice_answer") as evaluate_answer,
+            patch("app.domains.practice.attempts._create_practice_attempt") as create_attempt,
+            patch("app.domains.practice.attempts._save_user_memory") as save_memory,
+            patch(
+                "app.domains.practice.attempts._get_user_memory",
+                return_value={"weak_points": ["HTTP"], "error_count": {"HTTP": 1}, "recent_topics": ["HTTP"]},
+            ),
+        ):
+            result = record_practice_attempt_and_update_memory(
+                user_id="u1",
+                session_id="session-1",
+                subject_id="general",
+                quiz_item=PracticeRecommendation(
+                    question_id="q1",
+                    question="HTTP 默认端口是？",
+                    options=[
+                        {"key": "A", "text": "20"},
+                        {"key": "B", "text": "53"},
+                        {"key": "C", "text": "80"},
+                        {"key": "D", "text": "443"},
+                    ],
+                    correct_option="C",
+                    explanation="HTTP 默认端口是 80。",
+                    option_rationales={"C": "80 是 HTTP 默认端口。"},
+                    knowledge_point="HTTP",
+                    source_type="ai_generated",
+                ),
+                selected_option="C",
+            )
+
+        self.assertTrue(result.duplicate_submission)
+        self.assertFalse(result.is_correct)
+        self.assertEqual(result.selected_option, "A")
+        self.assertEqual(set(result.option_rationales), {"A", "B", "C", "D"})
+        evaluate_answer.assert_not_called()
+        create_attempt.assert_not_called()
+        save_memory.assert_not_called()
 
     def test_submit_attempt_updates_graph_mastery_for_canonical_concept(self) -> None:
         graph_attempt_payloads: list[dict] = []
@@ -237,6 +420,7 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                 "app.domains.practice.attempts._save_user_memory",
                 return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP/HTTPS"], "last_session": ""},
             ),
+            patch("app.domains.practice.attempts._find_existing_practice_attempt", return_value=None),
         ):
             record_practice_attempt_and_update_memory(
                 user_id="u1",

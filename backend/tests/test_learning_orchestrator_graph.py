@@ -4,6 +4,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -25,6 +26,18 @@ class MockGraphRunRepository:
 
     def record_audit_event(self, payload: dict) -> None:
         self.audit_events.append(payload)
+
+
+class MockLearningEventRepository:
+    def __init__(self) -> None:
+        self.events: list[Any] = []
+
+    def append(self, event):
+        self.events.append(event)
+        return event.id
+
+    def list_for_user(self, *, user_id: str, limit: int = 100):
+        return [item for item in self.events if item.user_id == user_id][:limit]
 
 
 class LearningOrchestratorGraphTest(unittest.TestCase):
@@ -178,6 +191,33 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         self.assertEqual(result["audit_events"][0]["status"], "degraded")
         self.assertTrue(
             any(error["code"] == "orchestrator_audit_persist_unavailable" for error in result["errors"])
+        )
+
+    def test_orchestrator_persists_child_learning_events(self) -> None:
+        repository = MockLearningEventRepository()
+        result = build_graph(learning_event_repository=repository).compile().invoke(
+            {"run_id": "orch-events", "user_id": "u1", "thread_id": "t1", "user_message": "什么是 HTTP？"}
+        )
+
+        child_events = result["child_graph_output"]["payload"]["learning_events"]
+        self.assertTrue(child_events)
+        self.assertEqual(len(repository.events), len(child_events))
+        self.assertEqual(result["learning_event_persist_status"]["persisted_count"], len(child_events))
+        self.assertIn("hash_key", repository.events[0].payload)
+
+    def test_orchestrator_learning_event_persistence_fails_open(self) -> None:
+        class FailingLearningEventRepository:
+            def append(self, event) -> str:
+                raise RuntimeError("db unavailable")
+
+        result = build_graph(learning_event_repository=FailingLearningEventRepository()).compile().invoke(
+            {"run_id": "orch-event-fail", "user_id": "u1", "thread_id": "t1", "user_message": "什么是 HTTP？"}
+        )
+
+        self.assertTrue(result["final_response"]["answer"])
+        self.assertTrue(result["learning_event_persist_status"]["failed_open"])
+        self.assertTrue(
+            any(error["code"] == "orchestrator_learning_event_persist_unavailable" for error in result["errors"])
         )
 
 

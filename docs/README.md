@@ -47,11 +47,40 @@
 
 ## 最低自检命令
 
+建议在 repo root 使用统一入口：
+
 ```bash
-cd backend
+make check-project
+```
+
+如需分阶段排查，可以拆开运行：
+
+```bash
+make test-backend
+TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:5432/test_db make test-backend-postgres
+make test-graphs
+make eval-graphs
+make smoke-backend
+make check-frontend
+make check-weapp
+```
+
+后端验收口径要区分清楚：
+
+- `/health` 只证明 FastAPI 进程能响应，不证明数据库、PGVector、认证、模型或 LangGraph runtime 已就绪。
+- `backend/scripts/check_environment.py` 检查启动级配置和可选依赖提示，不等于已完成 authenticated runtime smoke。
+- `make test-backend-postgres` 必须显式提供真实 PostgreSQL `TEST_DATABASE_URL`；关键 Postgres 集成测试在该目标下不会静默跳过，会创建并删除临时 schema。
+- `make smoke-backend` 会访问正在运行的后端，默认创建临时认证用户，登录后检查 `/api/auth/me`、`/api/subjects`、`/api/users/{id}/learning-center`、`/api/users/{id}/practice/recommendations`，结束时清理该账号；它会写入当前后端连接的本地数据库。
+- `make eval-graphs` 是本地 deterministic graph smoke eval；只有显式运行 `make eval-graphs-remote` 或对应 LangSmith CLI 时，才能声称 LangSmith remote dataset/evaluator 通过。
+
+如果已经在 `backend/` 目录内，再使用 backend 相对路径：
+
+```bash
 ./.venv313/bin/python scripts/check_environment.py
 ./.venv313/bin/python -m compileall app tests scripts
-./.venv313/bin/python -m unittest discover -s tests
+./.venv313/bin/python -m unittest discover -s tests -t .
+POSTGRES_TEST_STRICT=true TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:5432/test_db ./.venv313/bin/python -m unittest tests.test_auth_api tests.test_repository_init tests.test_practice_question_import
+./.venv313/bin/python scripts/smoke_backend.py --base-url http://127.0.0.1:8000
 ```
 
 ```bash

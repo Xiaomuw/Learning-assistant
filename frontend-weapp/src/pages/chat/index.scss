@@ -2,7 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  height: 100vh;
   padding-bottom: 24px;
+  overflow: hidden;
 }
 
 .chat-header {
@@ -38,8 +40,8 @@
 
 .message-list {
   flex: 1;
-  height: calc(100vh - 430px);
-  min-height: 520px;
+  min-height: 0;
+  height: 0;
 }
 
 .message-row {
@@ -94,10 +96,130 @@
   line-height: 1.65;
 }
 
+.process-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.process-item {
+  border-left: 6px solid #93c5fd;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #f8fafc;
+}
+
+.process-item.completed {
+  border-left-color: #22c55e;
+}
+
+.process-item.failed {
+  border-left-color: #ef4444;
+}
+
+.process-label,
+.process-detail {
+  display: block;
+}
+
+.process-label {
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.process-detail {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 22px;
+  line-height: 1.45;
+}
+
+.quiz-clarification,
+.quiz-preview {
+  margin-top: 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 18px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.quiz-card-title,
+.quiz-card-desc {
+  display: block;
+}
+
+.quiz-card-title {
+  color: #0f172a;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.quiz-card-desc {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 23px;
+  line-height: 1.5;
+}
+
+.suggestion-button {
+  width: 100%;
+  height: 68px;
+  margin: 14px 0 0;
+  overflow: hidden;
+  font-size: 24px;
+  line-height: 68px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.quiz-link-button {
+  flex-shrink: 0;
+  width: 132px;
+  height: 64px;
+  margin: 0;
+  font-size: 24px;
+  line-height: 64px;
+}
+
+.quiz-preview-item {
+  margin-top: 14px;
+  border-radius: 14px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.quiz-preview-meta,
+.quiz-preview-question {
+  display: block;
+}
+
+.quiz-preview-meta {
+  color: #2563eb;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.quiz-preview-question {
+  margin-top: 6px;
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1.5;
+}
+
 .composer {
   display: flex;
   align-items: flex-end;
   gap: 16px;
+  flex-shrink: 0;
   padding: 18px;
 }
 

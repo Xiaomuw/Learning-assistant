@@ -73,7 +73,7 @@ def create_auth_user_record(
     email: str,
     password_hash: str,
     display_name: str | None = None,
- ) -> AuthUserView:
+) -> AuthUserView:
     user_id = str(uuid.uuid4())
     email = email.lower().strip()
     profile_name = (display_name or "").strip() or email.split("@", 1)[0]
@@ -102,6 +102,7 @@ def create_auth_user_record(
             last_session="",
         )
         session.add(user)
+        session.flush()
         session.add(profile)
         session.add(memory)
         session.flush()
@@ -209,6 +210,7 @@ def _create_wechat_mini_user_record(
             last_login_at=now,
         )
         session.add(user)
+        session.flush()
         session.add(profile)
         session.add(memory)
         session.add(identity)

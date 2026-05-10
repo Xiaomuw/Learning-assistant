@@ -19,6 +19,7 @@ env/
 # Node / Next
 node_modules/
 .next/
+.swc/
 dist/
 build/
 out/
@@ -43,4 +44,5 @@ target/
 *.pem
 *.key
 backend/storage/
+backups/
 .codex-pet-runs/

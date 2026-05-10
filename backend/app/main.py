@@ -20,12 +20,10 @@ load_dotenv()
 
 from app.infrastructure.config.validation import (  # noqa: E402
     collect_environment_warnings,
+    get_cors_allow_origins,
     validate_startup_environment,
 )
-from app.infrastructure.db.database import current_database_backend, ensure_postgres_extensions  # noqa: E402
-from app.infrastructure.db.repositories.bootstrap import init_database  # noqa: E402
-from app.infrastructure.db.repositories.subjects import list_subject_records  # noqa: E402
-from app.infrastructure.llm.langsmith import initialize_langsmith  # noqa: E402
+from app.infrastructure.db.readiness import assert_database_readiness  # noqa: E402
 from app.infrastructure.llm.provider import ensure_model_env_aliases  # noqa: E402
 from app.interfaces.api.chat import router as chat_router  # noqa: E402
 from app.interfaces.api.model_config import router as model_config_router  # noqa: E402
@@ -34,8 +32,6 @@ from app.interfaces.api.subjects import router as subjects_router  # noqa: E402
 from app.interfaces.api.upload import router as upload_router  # noqa: E402
 from app.interfaces.api.user_data import router as user_data_router  # noqa: E402
 from app.interfaces.auth.router import router as auth_router  # noqa: E402
-from app.infrastructure.mcp import initialize_mcp  # noqa: E402
-from app.shared.schemas.subject import DEFAULT_SUBJECT_ID  # noqa: E402
 
 ensure_model_env_aliases()
 
@@ -48,26 +44,15 @@ async def lifespan(app: FastAPI):
     for warning in collect_environment_warnings():
         logger.warning(f"⚠️ {warning}")
 
-    ensure_postgres_extensions()
-    logger.info("✅ PostgreSQL 扩展就绪（vector）")
-
-    init_database()
-    logger.info(f"✅ 数据库就绪，当前后端: {current_database_backend()}")
-
-    initialize_langsmith()
-    initialize_mcp()
-
-    subjects = list_subject_records()
-    logger.info(f"✅ 学科列表就绪，共 {len(subjects)} 个学科")
-
-    from app.services.rag.vector_store import count_collection_documents, ensure_vector_store_ready
-
-    try:
-        ensure_vector_store_ready(subject_id=DEFAULT_SUBJECT_ID)
-        doc_count = count_collection_documents(subject_id=DEFAULT_SUBJECT_ID)
-        logger.info(f"✅ PGVector 就绪，默认辅助知识库文档数: {doc_count}")
-    except Exception as exc:
-        logger.warning(f"⚠️ PGVector 初始化失败（可稍后重试）: {exc}")
+    db_report = assert_database_readiness()
+    logger.info(
+        "✅ 数据库只读 readiness 通过 | "
+        f"backend={db_report.database_backend} | "
+        f"alembic={','.join(db_report.alembic_current_revisions)} | "
+        f"tables={db_report.required_table_count} | "
+        f"indexes={db_report.required_index_count} | "
+        f"vector_extension={db_report.vector_extension_ready}"
+    )
 
     from app.orchestration.graphs.orchestrator.graph import build_graph
 
@@ -90,7 +75,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -370,6 +370,8 @@ export interface MessageProcess {
   currentStage: string;
   stages: MessageProcessStage[];
   reasoningSummary?: string;
+  reasoningTrace?: string;
+  reasoningTraceEphemeral?: true;
   execution?: MessageProcessExecution;
   toolCalls?: MessageProcessToolCall[];
 }
@@ -1303,14 +1305,19 @@ export function stripMarkdownArtifacts(value: string): string {
   return String(value ?? "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
+    .replace(/(^|\s)#{1,6}\s*/g, "$1")
+    .replace(/(^|\s)(?:-{3,}|\*{3,}|_{3,})(?=\s|$)/g, "$1")
     .split(/\r?\n/)
     .filter((line) => !line.trim().startsWith("```"))
+    .filter((line) => !/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line))
     .map((line) =>
       line
         .replace(/^\s{0,3}#{1,6}\s*/g, "")
         .replace(/^\s*[-*+]\s+/g, "")
+        .replace(/^\s*\d+[\.)、]\s+/g, "")
         .replace(/^\s*>\s?/g, "")
         .replace(/\*\*|__|\*|_/g, "")
+        .replace(/\s{2,}/g, " ")
         .trim()
     )
     .filter(Boolean)

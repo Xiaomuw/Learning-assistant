@@ -10,6 +10,8 @@ class QAGraphState(BaseLearningState, total=False):
     normalized_question: str
     context_dependency: dict[str, Any]
     intent_result: dict[str, Any]
+    parent_intent_decision: dict[str, Any]
+    intent_alignment: dict[str, Any]
     resolved_question: str
     concept_linking: dict[str, Any]
     knowledge_routes: list[dict[str, Any]]
@@ -17,7 +19,9 @@ class QAGraphState(BaseLearningState, total=False):
     notebook_evidence: list[dict[str, Any]]
     web_evidence: list[dict[str, Any]]
     evidence_judgement: dict[str, Any]
+    quality_check: dict[str, Any]
     answer_quality: dict[str, Any]
+    answer_repair_attempt_count: int
     source_usage: str
     web_search_attempted: bool
     web_search_reason: str

@@ -1,6 +1,6 @@
 # 后端最终结构图与维护约定
 
-> 更新日期：2026-04-28  
+> 更新日期：2026-05-10
 > 适用范围：`backend/app/*`  
 > 目标读者：项目维护者、协作 AI、后续接手同学
 
@@ -310,7 +310,39 @@ flowchart LR
 
 ```bash
 backend/.venv313/bin/python -m py_compile $(find backend/app backend/tests -name '*.py')
-backend/.venv313/bin/python -m unittest discover -s backend/tests -v
+backend/.venv313/bin/python -m unittest discover -s backend/tests -t . -v
+make test-graphs
+make eval-graphs
+```
+
+需要真实 PostgreSQL 集成验收时，从 repo root 显式提供 `TEST_DATABASE_URL`：
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:5432/test_db make test-backend-postgres
+```
+
+`make test-backend-postgres` 会打开 `POSTGRES_TEST_STRICT=true`，关键集成测试必须拿到真实 PostgreSQL DSN；缺失、占位符或非 PostgreSQL DSN 都会硬失败，不允许静默 skip。测试会在目标库里创建临时 schema，并在测试结束后删除该 schema。
+
+本地服务已启动后，再跑 authenticated smoke：
+
+```bash
+make smoke-backend
+```
+
+`smoke-backend` 默认访问 `http://127.0.0.1:8000`，也可通过 `SMOKE_BASE_URL` 或 `scripts/smoke_backend.py --base-url` 指定。runner 默认创建 `codex+auth-auto-smoke-...@gmail.com` 临时用户，登录拿到 `HttpOnly Cookie` 中的 access token，并用 bearer 方式访问 `/api/auth/me`，再用会话 cookie 访问 `/api/subjects`、`/api/users/{id}/learning-center`、`/api/users/{id}/practice/recommendations`，最后删除临时账号及相关认证/学习数据。这个 smoke 会写入当前后端连接的本地数据库。
+
+验收口径不要混淆：
+
+- `/health`：只表示 FastAPI 进程活着，不能代表 DB、PGVector、LLM、LangGraph 或认证链路就绪。
+- `scripts/check_environment.py`：检查启动级配置、必要环境变量和可选依赖提示；它不是 runtime endpoint smoke。
+- runtime readiness：需要后端进程完整启动，并跑 authenticated smoke 或等价端到端请求。
+- PostgreSQL / PGVector 集成：PostgreSQL 结构和 repository 行为用 `make test-backend-postgres`；PGVector schema/索引健康仍由对应 health 逻辑和测试覆盖，不在 smoke runner 里临时改 startup 或 PGVector health。
+- LangSmith remote eval：`make eval-graphs` 只是本地 deterministic graph smoke eval；只有运行 `make eval-graphs-remote` 或 `backend/app/orchestration/graphs/langsmith_eval.py` 的 remote 路径，才能声称 LangSmith dataset/evaluator 通过。
+
+如果当前工作目录已经是 `backend/`，测试入口应改为：
+
+```bash
+./.venv313/bin/python -m unittest discover -s tests -t .
 ```
 
 如果改到了前端联动，再补：

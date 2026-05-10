@@ -57,10 +57,17 @@ LangGraph：
 后端：
 
 ```bash
-cd backend
+make test-backend
+make test-graphs
+make eval-graphs
+```
+
+如果已经进入 `backend/` 目录：
+
+```bash
 ./.venv313/bin/python scripts/check_environment.py
 ./.venv313/bin/python -m compileall app tests scripts
-./.venv313/bin/python -m unittest discover -s tests
+./.venv313/bin/python -m unittest discover -s tests -t .
 ```
 
 前端：

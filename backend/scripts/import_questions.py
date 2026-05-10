@@ -12,16 +12,23 @@ Import Practice Questions
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from app.infrastructure.db.repositories.bootstrap import init_database
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+load_dotenv(BACKEND_ROOT / ".env")
+
+from app.infrastructure.db.repositories.bootstrap import init_database  # noqa: E402
 from app.infrastructure.db.repositories.practice_questions import (
     import_practice_questions,
     load_practice_question_json,
     validate_practice_questions,
-)
+)  # noqa: E402
 
 
 def main() -> None:
@@ -36,7 +43,6 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="只校验，不写入数据库")
     args = parser.parse_args()
 
-    load_dotenv()
     init_database()
 
     file_path = Path(args.path)

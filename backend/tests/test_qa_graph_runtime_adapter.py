@@ -4,6 +4,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +16,7 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
-from app.domains.qa.runtime import _stream_delta_to_text, create_agent
+from app.domains.qa.runtime import _stream_delta_to_text, _stream_reasoning_delta_to_text, create_agent
 from app.domains.qa.schemas import AgentExecutionResult, AgentRequest, AnswerSchema
 from app.orchestration.graphs.qa.adapter import ProductionQARuntimeAdapter
 from app.orchestration.graphs.qa.graph import build_graph
@@ -43,18 +44,29 @@ class _FakeAgent:
 
 
 class _FakeStreamChunk:
-    def __init__(self, content) -> None:
+    def __init__(
+        self,
+        content,
+        *,
+        additional_kwargs: dict[str, Any] | None = None,
+        response_metadata: dict[str, Any] | None = None,
+    ) -> None:
         self.content = content
+        self.additional_kwargs = additional_kwargs or {}
+        self.response_metadata = response_metadata or {}
 
 
 class _FakeStreamingLLM:
-    def __init__(self, chunks: list[str] | None = None, invoke_text: str = "HTTP 是应用层协议。") -> None:
+    def __init__(self, chunks: list[Any] | None = None, invoke_text: str = "HTTP 是应用层协议。") -> None:
         self.chunks = list(chunks or [])
         self.invoke_text = invoke_text
 
     def stream(self, _messages):
         for chunk in self.chunks:
-            yield _FakeStreamChunk(chunk)
+            if hasattr(chunk, "content"):
+                yield chunk
+            else:
+                yield _FakeStreamChunk(chunk)
 
     def invoke(self, _messages):
         return self.invoke_text
@@ -78,7 +90,12 @@ def _runtime_request(runtime_context: dict | None = None) -> AgentRequest:
 
 
 class QAGraphRuntimeAdapterTest(unittest.TestCase):
-    def _invoke_with_runtime_result(self, runtime_result: AgentExecutionResult) -> dict:
+    def _invoke_with_runtime_result(
+        self,
+        runtime_result: AgentExecutionResult,
+        *,
+        question: str = "HTTP/3 现在浏览器支持怎么样？",
+    ) -> dict:
         adapter = ProductionQARuntimeAdapter(
             model_name="test-model",
             user_id="u1",
@@ -96,13 +113,13 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                     "run_id": "run-production-runtime",
                     "user_id": "u1",
                     "thread_id": "s1",
-                    "user_message": "HTTP/3 现在浏览器支持怎么样？",
+                    "user_message": question,
                     "question_type": "concept",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
                 }
             )
 
-    def test_maps_runtime_web_evidence_and_tool_result_to_contract(self) -> None:
+    def test_runtime_web_evidence_stays_diagnostic_without_graph_judge(self) -> None:
         result = self._invoke_with_runtime_result(
             AgentExecutionResult(
                 execution_mode="tool_calling",
@@ -131,6 +148,16 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                         "is_external": True,
                     }
                 ],
+                tool_decision_rounds=[
+                    {
+                        "round": 1,
+                        "decision": "use_tool",
+                        "tool": ToolCapability.WEB_SEARCH.value,
+                        "provider": "tavily",
+                        "reason": "按需补充最新来源。",
+                    }
+                ],
+                retrieval_diagnosis={"diagnosis": "web_search_used", "raw_count": 1},
                 source_usage="web",
                 final_answer="HTTP/3 已被主流现代浏览器支持，但具体版本要看官方兼容表。",
                 selected_model_profile={"model_id": "test-model"},
@@ -141,15 +168,18 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         tool_result = result["tool_results"][0]
         event_types = {item["event_type"] for item in result["learning_events"]}
 
-        self.assertEqual(response.source_level, SourceLevel.WEB)
-        self.assertEqual(response.evidence_refs, ["web-http3"])
-        self.assertEqual(result["evidence"][0]["source_type"], "web")
+        self.assertEqual(response.source_level, SourceLevel.MODEL)
+        self.assertEqual(response.evidence_refs, [])
+        self.assertEqual(result["evidence"], [])
         self.assertEqual(tool_result["provider"], "tavily")
         self.assertEqual(tool_result["capability"], ToolCapability.WEB_SEARCH.value)
         self.assertEqual(tool_result["status"], ToolStatus.SUCCESS.value)
+        self.assertEqual(tool_result["evidence"][0]["source_type"], "web")
         self.assertEqual(response.ui_payload["explanation"]["topic"], "HTTP/3")
         self.assertEqual(response.ui_payload["explanation"]["steps"], ["总结主流浏览器支持情况"])
         self.assertNotIn("raw_output", response.ui_payload)
+        self.assertEqual(result["runtime_summary"]["retrieval_diagnosis"]["diagnosis"], "web_search_used")
+        self.assertEqual(result["runtime_summary"]["tool_decision_rounds"][0]["tool"], ToolCapability.WEB_SEARCH.value)
         self.assertIn("tool_fallback_used", event_types)
         self.assertIn("question_answered", event_types)
 
@@ -233,7 +263,8 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                     {"model_id": "qwen3-coder-flash", "role": "fallback", "status": "ok"},
                 ],
                 final_answer="HTTP 是请求响应式应用层协议。",
-            )
+            ),
+            question="什么是 HTTP？",
         )
 
         event_types = {item["event_type"] for item in result["learning_events"]}
@@ -287,6 +318,89 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
 
         self.assertEqual(_stream_delta_to_text(chunk), "visible answer")
 
+    def test_reasoning_delta_extracts_debug_content_from_deepseek_chunks(self) -> None:
+        chunk = _FakeStreamChunk(
+            [
+                {"type": "reasoning_content", "text": "先判断协议层。"},
+                {"type": "text", "text": "visible answer"},
+            ],
+            additional_kwargs={"reasoning_content": "模型先分析题意。"},
+            response_metadata={"reasoning_content": "再确认概念边界。"},
+        )
+
+        self.assertEqual(_stream_delta_to_text(chunk), "visible answer")
+        self.assertEqual(
+            _stream_reasoning_delta_to_text(chunk),
+            "模型先分析题意。再确认概念边界。先判断协议层。",
+        )
+
+    def test_deterministic_context_streams_reasoning_delta_only_in_thinking_mode(self) -> None:
+        events: list[dict[str, Any]] = []
+        request = _runtime_request(
+            {
+                "stream_answer_tokens": True,
+                "thinking_mode": True,
+                "stream_writer": lambda event: events.append(event),
+            }
+        )
+        fake_llm = _FakeStreamingLLM(
+            [
+                _FakeStreamChunk(
+                    "HTTP 是",
+                    additional_kwargs={"reasoning_content": "先判断 HTTP 所在层级。"},
+                ),
+                _FakeStreamChunk(
+                    [
+                        {"type": "reasoning_content", "text": "再确认它不是传输层协议。"},
+                        {"type": "text", "text": "应用层协议。"},
+                    ]
+                ),
+            ]
+        )
+
+        with (
+            patch("app.domains.qa.runtime.select_execution_mode", return_value="deterministic_context"),
+            patch("app.domains.qa.runtime.get_chat_llm", return_value=fake_llm),
+        ):
+            result = create_agent(request, state={}, model_profile=_profile()).run()
+
+        reasoning_events = [event for event in events if event.get("event") == "reasoning_delta"]
+        answer_events = [event for event in events if event.get("event") == "answer_delta"]
+        self.assertEqual(result.final_answer, "HTTP 是应用层协议。")
+        self.assertEqual(len(reasoning_events), 2)
+        self.assertEqual(len(answer_events), 2)
+        self.assertTrue(reasoning_events[0]["data"]["ephemeral"])
+        self.assertNotIn("先判断", result.final_answer)
+        self.assertGreater(request.runtime_context["reasoning_trace_char_count"], 0)
+
+    def test_reasoning_delta_not_emitted_when_thinking_mode_disabled(self) -> None:
+        events: list[dict[str, Any]] = []
+        request = _runtime_request(
+            {
+                "stream_answer_tokens": True,
+                "thinking_mode": False,
+                "stream_writer": lambda event: events.append(event),
+            }
+        )
+        fake_llm = _FakeStreamingLLM(
+            [
+                _FakeStreamChunk(
+                    "HTTP 是应用层协议。",
+                    additional_kwargs={"reasoning_content": "不应输出的思考过程。"},
+                ),
+            ]
+        )
+
+        with (
+            patch("app.domains.qa.runtime.select_execution_mode", return_value="deterministic_context"),
+            patch("app.domains.qa.runtime.get_chat_llm", return_value=fake_llm),
+        ):
+            result = create_agent(request, state={}, model_profile=_profile()).run()
+
+        self.assertEqual(result.final_answer, "HTTP 是应用层协议。")
+        self.assertFalse([event for event in events if event.get("event") == "reasoning_delta"])
+        self.assertEqual([event.get("event") for event in events if event.get("event") == "answer_delta"], ["answer_delta"])
+
     def test_maps_empty_answer_to_safe_contract_error(self) -> None:
         result = self._invoke_with_runtime_result(
             AgentExecutionResult(
@@ -297,7 +411,8 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         )
 
         response = FinalResponse.model_validate(result["final_response"])
-        self.assertIn("没有生成可用回答", response.answer)
+        self.assertIn("缺少足够可靠的证据", response.answer)
+        self.assertEqual(response.ui_payload["answer_mode"], "clarification_required")
         self.assertIn("empty_answer", {item["code"] for item in result["errors"]})
 
     def test_runtime_exception_returns_safe_contract_error(self) -> None:

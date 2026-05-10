@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import secrets
+import hashlib
+import hmac
+import os
 from datetime import datetime, timedelta, timezone
 
-from app.infrastructure.auth.security import hash_token
 from app.infrastructure.db.repositories.auth import (
     consume_email_verification_challenge_record,
     create_or_refresh_email_verification_challenge_record,
@@ -48,7 +50,12 @@ def utcnow() -> datetime:
 
 
 def hash_verification_code(code: str) -> str:
-    return hash_token(code.strip())
+    secret = (
+        os.getenv("AUTH_CODE_SECRET")
+        or os.getenv("JWT_SECRET_KEY")
+        or "dev-secret-change-me"
+    ).encode("utf-8")
+    return hmac.new(secret, code.strip().encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def generate_numeric_code(length: int = 6) -> str:
@@ -139,4 +146,3 @@ def mark_register_verification_verified(challenge_id: str) -> None:
 
 def consume_register_verification(challenge_id: str) -> None:
     consume_email_verification_challenge_record(challenge_id)
-

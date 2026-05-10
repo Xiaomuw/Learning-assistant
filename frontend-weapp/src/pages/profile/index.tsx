@@ -3,7 +3,7 @@ import Taro, { useDidShow } from "@tarojs/taro";
 import { Button, Text, View } from "@tarojs/components";
 import { fetchCurrentUser, fetchNotebooks, logoutWechatMini } from "@/services/api";
 import { clearAuthSession, getAuthUser, getRefreshToken, requireAuthUser } from "@/store/auth";
-import { clearChatDraft, clearStoredQuiz, clearStoredSessionId, getStoredNotebookId } from "@/store/learning";
+import { clearLearningDataForUser, getStoredNotebookId } from "@/store/learning";
 import type { AuthUser, Notebook } from "@/types/api";
 import "./index.scss";
 
@@ -39,6 +39,7 @@ export default function ProfilePage() {
 
   async function logout() {
     const refreshToken = getRefreshToken();
+    const userId = getAuthUser()?.id;
     try {
       if (refreshToken) {
         await logoutWechatMini(refreshToken);
@@ -46,10 +47,8 @@ export default function ProfilePage() {
     } catch {
       // 退出以本地会话清理为准，服务端撤销失败时允许用户重新登录。
     } finally {
+      clearLearningDataForUser(userId);
       clearAuthSession();
-      clearStoredSessionId();
-      clearStoredQuiz();
-      clearChatDraft();
       Taro.reLaunch({ url: "/pages/login/index" });
     }
   }

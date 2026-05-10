@@ -132,12 +132,15 @@ class QAGraphAdapterTest(unittest.TestCase):
             }
         )
 
-        self.assertEqual([item["capability"] for item in result["tool_requests"]], [ToolCapability.NOTEBOOK_RETRIEVE.value])
+        self.assertEqual(
+            [item["capability"] for item in result["tool_requests"]],
+            [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value],
+        )
         request_input = result["tool_requests"][0]["input"]
         self.assertEqual(request_input["subject_id"], "computer-network")
         self.assertEqual(request_input["concept_id"], "computer-network.application.http-https")
 
-    def test_notebook_signal_plans_notebook_retrieve_without_web(self) -> None:
+    def test_notebook_signal_plans_internal_then_web_if_evidence_insufficient(self) -> None:
         result = build_graph().compile().invoke(
             {
                 "run_id": "run-qa-notebook-signal",
@@ -149,7 +152,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         )
 
         requested_capabilities = [item["capability"] for item in result["tool_requests"]]
-        self.assertEqual(requested_capabilities, [ToolCapability.NOTEBOOK_RETRIEVE.value])
+        self.assertEqual(requested_capabilities, [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value])
         self.assertEqual(result["source_policy"], SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value)
 
     def test_injected_tool_executor_can_supply_evidence_without_provider_coupling(self) -> None:
@@ -243,7 +246,21 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn("kb-http", route_ids)
         self.assertNotIn("current-notebook", route_ids)
 
-    def test_time_sensitive_question_runs_web_after_quality_gate(self) -> None:
+    def test_time_sensitive_question_runs_web_after_internal_evidence_judge_before_answer(self) -> None:
+        class CapturingAdapter:
+            def __init__(self) -> None:
+                self.evidence_ids = []
+
+            def answer(self, **kwargs):
+                evidence = kwargs["evidence"]
+                self.evidence_ids = [item.id for item in evidence]
+                return FinalResponse(
+                    answer="HTTP/3 支持情况需要参考当前外部来源。",
+                    source_level=SourceLevel.WEB,
+                    evidence_refs=self.evidence_ids,
+                    ui_payload={"answer_mode": "captured"},
+                )
+
         class FakeToolExecutor:
             def __init__(self) -> None:
                 self.capabilities = []
@@ -277,7 +294,8 @@ class QAGraphAdapterTest(unittest.TestCase):
                 )
 
         executor = FakeToolExecutor()
-        result = build_graph(tool_executor=executor).compile().invoke(
+        adapter = CapturingAdapter()
+        result = build_graph(adapter=adapter, tool_executor=executor).compile().invoke(
             {
                 "run_id": "run-qa-web-fallback",
                 "user_id": "u1",
@@ -289,9 +307,68 @@ class QAGraphAdapterTest(unittest.TestCase):
         response = FinalResponse.model_validate(result["final_response"])
         self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
         self.assertTrue(result["web_search_attempted"])
+        self.assertEqual(result["evidence_judgement"]["web_count"], 0)
+        self.assertEqual([item["id"] for item in result["web_evidence"]], ["web-http3"])
+        self.assertEqual(adapter.evidence_ids, ["web-http3"])
         self.assertEqual(result["source_usage"], "web")
         self.assertEqual(response.source_level, SourceLevel.WEB)
         self.assertEqual(response.evidence_refs, ["web-http3"])
+
+    def test_unjudged_or_low_score_web_evidence_does_not_enter_final_refs(self) -> None:
+        class FakeToolExecutor:
+            def execute(self, request):
+                return ToolResult(
+                    tool_id="fake:web_search",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-low-score",
+                            source_type="web",
+                            source_id="https://example.test/weak",
+                            text="低相关网页证据。",
+                            score=0.2,
+                        )
+                    ]
+                    if request.capability == ToolCapability.WEB_SEARCH
+                    else [],
+                )
+
+        result = build_graph(tool_executor=FakeToolExecutor()).compile().invoke(
+            {
+                "run_id": "run-qa-web-low-score",
+                "user_id": "u1",
+                "user_message": "HTTP/3 现在浏览器支持怎么样？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(result["evidence_judgement"]["web_count"], 0)
+        self.assertNotIn("web-low-score", response.evidence_refs)
+        self.assertEqual(response.source_level, SourceLevel.MODEL)
+
+    def test_retrieval_tool_exception_returns_error_result_and_learning_event(self) -> None:
+        class FailingToolExecutor:
+            def execute(self, request):
+                raise RuntimeError("tool down")
+
+        result = build_graph(tool_executor=FailingToolExecutor()).compile().invoke(
+            {
+                "run_id": "run-qa-tool-error",
+                "user_id": "u1",
+                "user_message": "HTTP/3 现在浏览器支持怎么样？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+            }
+        )
+
+        event_types = {item["event_type"] for item in result["learning_events"]}
+        self.assertTrue(result["final_response"]["answer"])
+        self.assertTrue(any(error["code"] == "qa_retrieval_tool_failed" for error in result["errors"]))
+        self.assertTrue(any(item["status"] == ToolStatus.ERROR.value for item in result["tool_results"]))
+        self.assertIn("question_answered", event_types)
 
     def test_notebook_only_blocks_web_quality_fallback(self) -> None:
         result = build_graph().compile().invoke(
@@ -308,19 +385,91 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertNotIn(ToolCapability.WEB_SEARCH.value, requested_capabilities)
         self.assertFalse(result.get("web_search_attempted", False))
 
-    def test_quality_gate_repairs_at_most_once(self) -> None:
+    def test_quality_gate_no_longer_routes_web_search(self) -> None:
         from app.orchestration.graphs.qa.nodes import should_run_web_search
 
         state = {
             "answer_quality": {"needs_web_search": True},
             "source_policy": SourcePolicy.OPEN_TOOLS.value,
-            "web_search_attempted": True,
-            "web_search_iteration": 1,
+            "web_search_attempted": False,
+            "web_search_iteration": 0,
         }
 
         self.assertEqual(should_run_web_search(state), "evidence_merge")
 
-    def test_persists_only_learning_events_when_repository_is_supplied(self) -> None:
+    def test_answer_quality_failure_repairable_rewrites_once_with_evidence(self) -> None:
+        evidence = EvidenceChunk(
+            id="ev-http",
+            source_type="notebook",
+            source_id="chunk-1",
+            text="HTTP 是应用层协议，采用请求-响应模型。",
+            score=0.9,
+        )
+
+        class BadRefAdapter:
+            def answer(self, **_kwargs):
+                return FinalResponse(
+                    answer="HTTP 是协议。",
+                    source_level=SourceLevel.NOTEBOOK,
+                    evidence_refs=["missing-ref"],
+                )
+
+        result = build_graph(adapter=BadRefAdapter()).compile().invoke(
+            {
+                "run_id": "run-qa-repair",
+                "user_id": "u1",
+                "thread_id": "t1",
+                "user_message": "什么是 HTTP？",
+                "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                "evidence": [evidence.model_dump(mode="json")],
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        event_types = {item["event_type"] for item in result["learning_events"]}
+        self.assertEqual(result["answer_repair_attempt_count"], 1)
+        self.assertEqual(result["answer_quality"]["status"], "pass")
+        self.assertEqual(response.evidence_refs, ["ev-http"])
+        self.assertEqual(response.ui_payload["answer_mode"], "answer_repaired")
+        self.assertIn("answer_repaired", event_types)
+
+    def test_answer_quality_failure_not_repairable_returns_clarification(self) -> None:
+        class EmptyAnswerAdapter:
+            def answer(self, **_kwargs):
+                return FinalResponse(answer="", source_level=SourceLevel.MODEL)
+
+        result = build_graph(adapter=EmptyAnswerAdapter()).compile().invoke(
+            {
+                "run_id": "run-qa-clarify",
+                "user_id": "u1",
+                "thread_id": "t1",
+                "user_message": "HTTP/3 现在浏览器支持怎么样？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(result["answer_repair_attempt_count"], 1)
+        self.assertEqual(response.source_level, SourceLevel.NONE)
+        self.assertEqual(response.ui_payload["answer_mode"], "clarification_required")
+        self.assertIn("缺少足够可靠的证据", response.answer)
+
+    def test_parent_intent_is_recorded_but_not_used_for_cross_graph_routing(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-parent-intent",
+                "user_id": "u1",
+                "user_message": "什么是 HTTP？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "parent_intent_decision": {"intent": "qa", "target_graph_type": "qa"},
+            }
+        )
+
+        self.assertEqual(result["intent_result"]["intent"], "concept_explain")
+        self.assertEqual(result["intent_result"]["parent_intent"], "qa")
+        self.assertEqual(result["intent_alignment"]["status"], "aligned")
+
+    def test_qa_graph_does_not_persist_learning_events_when_repository_is_supplied(self) -> None:
         repository = InMemoryLearningEventRepository()
         result = build_graph(learning_event_repository=repository).compile().invoke(
             {
@@ -331,9 +480,9 @@ class QAGraphAdapterTest(unittest.TestCase):
             }
         )
 
-        self.assertEqual(len(repository.events), len(result["learning_events"]))
-        self.assertEqual(result["persisted_learning_event_ids"], [item.id for item in repository.events])
-        self.assertTrue(all(item.graph_run_id == "run-qa-4" for item in repository.events))
+        self.assertEqual(repository.events, [])
+        self.assertTrue(result["learning_events"])
+        self.assertNotIn("persisted_learning_event_ids", result)
 
     def test_qa_graph_static_boundaries_no_provider_or_mastery_write(self) -> None:
         forbidden_imports = {"TavilyClient", "tavily_web_search", "TavilyWebSearchAdapter"}

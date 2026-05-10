@@ -124,6 +124,10 @@ NODE_EVENT_MAP: dict[str, dict[str, Any]] = {
         "event": "answer_delta",
         "fields": ["delta", "streaming_mode", "is_synthetic_delta"],
     },
+    "reasoning_delta": {
+        "event": "reasoning_delta",
+        "fields": ["delta", "streaming_mode", "source", "ephemeral"],
+    },
     "stream_status": {
         "event": "status",
         "fields": [
@@ -133,6 +137,7 @@ NODE_EVENT_MAP: dict[str, dict[str, Any]] = {
             "safe_decision_summary",
             "status",
             "streaming_mode",
+            "reasoning_trace_char_count",
         ],
     },
     "qa_answer_guard_node": {
@@ -230,6 +235,16 @@ NODE_EVENT_MAP: dict[str, dict[str, Any]] = {
             "final_response_type",
             "route_decision",
             "graph_warnings",
+            "degraded",
+        ],
+    },
+    "final": {
+        "event": "final",
+        "fields": [
+            "finalized",
+            "question_type",
+            "route",
+            "final_answer",
             "degraded",
         ],
     },

@@ -1,6 +1,6 @@
 # 学习助手项目当前状态
 
-> 更新日期：2026-04-28  
+> 更新日期：2026-05-10
 > 目标读者：项目维护者、接手开发同学、协作 AI / Agent  
 > 当前事实源：`backend/app/*`、`frontend/app/*`、`frontend/lib/api.ts`、`backend/langgraph.json`
 
@@ -155,6 +155,7 @@ frontend/
 ## 6. 外部依赖与开关
 
 - `DATABASE_URL`：启动级必需，必须是 PostgreSQL DSN。
+- `TEST_DATABASE_URL`：真实 PostgreSQL 集成测试专用，运行 `make test-backend-postgres` 时必须显式提供。
 - `JWT_SECRET_KEY`：启动级必需，不能是占位值。
 - `MODEL_ACCESS_KEY` / `OPENAI_API_KEY`：主问答和 embedding 能力需要。
 - `SMTP_*`：注册验证码能力需要。
@@ -184,11 +185,30 @@ frontend/
 
 ## 9. 最低自检命令
 
+推荐从 repo root 使用统一入口：
+
 ```bash
-cd backend
+make test-backend
+TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:5432/test_db make test-backend-postgres
+make test-graphs
+make eval-graphs
+make smoke-backend
+```
+
+后端验收分层：
+
+- `/health` 是进程存活检查，只说明 HTTP 进程有响应。
+- `scripts/check_environment.py` 是配置与环境检查，不代表认证态 API、数据库写入或 runtime readiness 已通过。
+- `make test-backend-postgres` 覆盖真实 PostgreSQL repository/auth/import 等关键集成测试；目标库会被创建临时 schema 并清理。
+- `make smoke-backend` 需要后端服务已经启动，默认创建临时用户、登录、访问 `/api/auth/me`、`/api/subjects`、`/api/users/{id}/learning-center`、`/api/users/{id}/practice/recommendations`，最后清理临时账号；它会写入当前 runtime 数据库。
+- `make eval-graphs` 仍是本地 deterministic graph smoke eval；LangSmith remote dataset/evaluator 只有在显式运行 remote eval 命令后才能作为通过结论。
+
+如果当前目录已经是 `backend/`：
+
+```bash
 ./.venv313/bin/python scripts/check_environment.py
 ./.venv313/bin/python -m compileall app tests scripts
-./.venv313/bin/python -m unittest discover -s tests
+./.venv313/bin/python -m unittest discover -s tests -t .
 ```
 
 ```bash

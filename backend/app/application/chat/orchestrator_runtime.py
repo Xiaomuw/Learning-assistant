@@ -11,7 +11,7 @@ from app.application.chat.messages import normalize_explanation_payload
 from app.infrastructure.llm.langsmith import trace_run
 from app.orchestration.graphs.orchestrator.graph import build_graph as build_orchestrator_graph
 from app.persistence.repositories.graph_facts import build_graph_fact_repositories, is_graph_facts_enabled
-from app.shared.schemas.agent_graphs import FinalResponse, GraphType, LearningEvent, SourcePolicy, ToolResult
+from app.shared.schemas.agent_graphs import FinalResponse, GraphType, SourcePolicy, ToolResult
 from app.shared.schemas.subject import DEFAULT_SUBJECTS, normalize_subject_id
 from app.shared.schemas.state import AgentState
 
@@ -47,7 +47,8 @@ def run_orchestrator_chat(
             tags=["learning-assistant", "orchestrator", f"entry:{request_mode}"],
         ) as run:
             result = build_orchestrator_graph(
-                audit_repository=repos.graph_runs if repos is not None else None
+                audit_repository=repos.graph_runs if repos is not None else None,
+                learning_event_repository=repos.learning_events if repos is not None else None,
             ).compile().invoke(_orchestrator_state_from_chat_state(state, graph_run_id=graph_run_id))
             run.end(outputs=_trace_outputs(result))
     except Exception as exc:
@@ -119,7 +120,8 @@ def stream_orchestrator_chat(
             tags=["learning-assistant", "orchestrator", f"entry:{request_mode}", "streaming:mixed"],
         ) as run:
             compiled = build_orchestrator_graph(
-                audit_repository=repos.graph_runs if repos is not None else None
+                audit_repository=repos.graph_runs if repos is not None else None,
+                learning_event_repository=repos.learning_events if repos is not None else None,
             ).compile()
             for raw_update in compiled.stream(
                 graph_input,
@@ -206,6 +208,18 @@ def stream_orchestrator_chat(
             "final_response_type": "orchestrator_graph",
             "degraded": bool(final_state.get("graph_warnings")),
             "streaming_mode": "node",
+            "__final_state": final_state,
+        },
+        "elapsed": latency_ms / 1000,
+    }
+    yield {
+        "node": "final",
+        "state_update": {
+            "finalized": True,
+            "final_answer": str(final_state.get("final_answer") or ""),
+            "question_type": final_state.get("question_type"),
+            "route": final_state.get("route"),
+            "degraded": bool(final_state.get("graph_warnings")),
             "__final_state": final_state,
         },
         "elapsed": latency_ms / 1000,
@@ -354,7 +368,26 @@ def _stream_chunk_from_orchestrator_update(
     latency_ms: int,
 ) -> dict[str, Any] | None:
     elapsed = latency_ms / 1000
-    if node_name == "intent_router":
+    status_payloads = {
+        "request_guard": ("request_guard", "请求检查", "正在检查请求是否合法。"),
+        "load_runtime_context": ("load_runtime_context", "运行上下文", "正在加载模型、工具和策略上下文。"),
+        "load_learner_context": ("load_learner_context", "学习者上下文", "正在加载学习者会话上下文。"),
+        "persist_learning_events": ("persist_learning_events", "学习事件", "正在保存本轮学习事件。"),
+    }
+    if node_name in status_payloads:
+        stream_stage, stage_label, detail = status_payloads[node_name]
+        return {
+            "node": "stream_status",
+            "state_update": {
+                "stream_stage": stream_stage,
+                "stage_label": stage_label,
+                "detail": detail,
+                "status": "done",
+                "streaming_mode": "node",
+            },
+            "elapsed": elapsed,
+        }
+    if node_name in {"intent_router", "graph_router"}:
         intent = _intent(graph_state)
         return {
             "node": "router",
@@ -487,7 +520,10 @@ def _split_answer_for_delta(text: str) -> list[str]:
 def _streaming_reasoning_summary(final_state: dict[str, Any]) -> str:
     summary = str(final_state.get("reasoning_summary") or "").strip()
     if str(final_state.get("streaming_mode") or "") == "token":
-        suffix = "当前为安全实时流式：回答内容逐步展示，处理过程只展示可审计决策摘要，不暴露原始隐藏思维链。"
+        if bool(final_state.get("thinking_mode", False)):
+            suffix = "当前为实时流式：回答内容逐步展示；原始思考仅在本轮调试面板临时显示，不写入历史或 LangSmith。"
+        else:
+            suffix = "当前为安全实时流式：回答内容逐步展示，处理过程只展示可审计决策摘要。"
         return f"{summary}\n\n{suffix}" if summary else suffix
     if summary:
         return f"{summary}\n\n当前为节点级流式：模型/工具节点完成后立即展示结果；本路径未暴露原始思维链。"
@@ -523,6 +559,17 @@ def _custom_chunk_from_stream_part(raw_update: Any, *, elapsed: float) -> dict[s
             },
             "elapsed": elapsed,
         }
+    if event_name == "reasoning_delta":
+        return {
+            "node": "reasoning_delta",
+            "state_update": {
+                "delta": str(payload.get("delta") or ""),
+                "streaming_mode": str(payload.get("streaming_mode") or "token"),
+                "source": str(payload.get("source") or "deepseek_reasoning_content"),
+                "ephemeral": bool(payload.get("ephemeral", True)),
+            },
+            "elapsed": elapsed,
+        }
     if event_name == "status":
         return {
             "node": "stream_status",
@@ -533,6 +580,7 @@ def _custom_chunk_from_stream_part(raw_update: Any, *, elapsed: float) -> dict[s
                 "safe_decision_summary": str(payload.get("safe_decision_summary") or ""),
                 "status": str(payload.get("status") or "running"),
                 "streaming_mode": str(payload.get("streaming_mode") or "token"),
+                "reasoning_trace_char_count": int(payload.get("reasoning_trace_char_count") or 0),
             },
             "elapsed": elapsed,
         }
@@ -683,8 +731,6 @@ def _record_child_facts_safely(
         return
     try:
         child_payload = _child_payload(graph_result)
-        for raw_event in list(child_payload.get("learning_events") or []):
-            repos.learning_events.append(LearningEvent.model_validate(raw_event))
         for raw_tool_result in list(child_payload.get("tool_results") or []):
             repos.tool_runs.record_tool_run(
                 ToolResult.model_validate(raw_tool_result),
@@ -758,17 +804,114 @@ def _trace_outputs(result: dict[str, Any]) -> dict[str, Any]:
     child_payload = _child_payload(result)
     final_response = result.get("final_response") if isinstance(result.get("final_response"), dict) else {}
     response_ui = final_response.get("ui_payload") if isinstance(final_response.get("ui_payload"), dict) else {}
+    runtime_summary = child_payload.get("runtime_summary") if isinstance(child_payload.get("runtime_summary"), dict) else {}
     return {
         "intent": _intent(result),
         "target_graph_type": str((result.get("intent_decision") or {}).get("target_graph_type") or ""),
+        "route": _trace_route_from_result(result, final_response),
         "final_answer": str(final_response.get("answer") or ""),
         "final_answer_empty": not bool(str(final_response.get("answer") or "").strip()),
-        "safe_reasoning_summary": str(response_ui.get("reasoning_summary") or ""),
+        "safe_reasoning_summary": str(response_ui.get("reasoning_summary") or runtime_summary.get("reasoning_summary") or ""),
         "reasoning_visibility": "safe_summary_only",
+        "model_name": _trace_model_name(response_ui, runtime_summary),
+        "primary_model_id": str(response_ui.get("primary_model_id") or runtime_summary.get("primary_model_id") or ""),
+        "fallback_model_id": str(response_ui.get("fallback_model_id") or runtime_summary.get("fallback_model_id") or ""),
+        "fallback_used": bool(response_ui.get("fallback_used") or runtime_summary.get("fallback_used")),
+        "fallback_reason": str(response_ui.get("fallback_reason") or runtime_summary.get("fallback_reason") or ""),
+        "source_usage": str(response_ui.get("source_usage") or runtime_summary.get("source_usage") or final_response.get("source_level") or ""),
+        "retrieval_diagnosis": _trace_retrieval_diagnosis(response_ui, runtime_summary),
+        "retrieval_report": _trace_dict(response_ui.get("retrieval_report")),
+        "tool_decision": _trace_tool_decision(child_payload, response_ui, runtime_summary),
         "learning_event_count": len(list(child_payload.get("learning_events") or [])),
         "tool_result_count": len(list(child_payload.get("tool_results") or [])),
         "error_count": len(list(result.get("errors") or [])),
     }
+
+
+def _trace_route_from_result(result: dict[str, Any], final_response: dict[str, Any]) -> str:
+    intent = _intent(result)
+    if intent == "generate_question":
+        return "practice"
+    source_level = str(final_response.get("source_level") or "")
+    if source_level == "web":
+        return "agent"
+    if source_level == "notebook":
+        return "rag"
+    return "explain"
+
+
+def _trace_model_name(response_ui: dict[str, Any], runtime_summary: dict[str, Any]) -> str:
+    selected_profile = response_ui.get("selected_model_profile")
+    if not isinstance(selected_profile, dict):
+        selected_profile = {}
+    return str(
+        selected_profile.get("model_id")
+        or runtime_summary.get("selected_model_id")
+        or response_ui.get("primary_model_id")
+        or runtime_summary.get("primary_model_id")
+        or ""
+    )
+
+
+def _trace_retrieval_diagnosis(
+    response_ui: dict[str, Any],
+    runtime_summary: dict[str, Any],
+) -> dict[str, Any]:
+    for value in (
+        runtime_summary.get("retrieval_diagnosis"),
+        response_ui.get("retrieval_diagnosis"),
+        response_ui.get("retrieval_report"),
+    ):
+        if isinstance(value, dict) and value:
+            return dict(value)
+    return {}
+
+
+def _trace_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _trace_tool_decision(
+    child_payload: dict[str, Any],
+    response_ui: dict[str, Any],
+    runtime_summary: dict[str, Any],
+) -> dict[str, Any]:
+    tool_results = [item for item in list(child_payload.get("tool_results") or []) if isinstance(item, dict)]
+    tool_decision_rounds = [
+        item for item in list(runtime_summary.get("tool_decision_rounds") or []) if isinstance(item, dict)
+    ]
+    capabilities = sorted(
+        {
+            str(item.get("capability") or item.get("tool") or "")
+            for item in [*tool_results, *tool_decision_rounds]
+            if str(item.get("capability") or item.get("tool") or "").strip()
+        }
+    )
+    providers = sorted(
+        {
+            str(item.get("provider") or "")
+            for item in [*tool_results, *tool_decision_rounds]
+            if str(item.get("provider") or "").strip()
+        }
+    )
+    return {
+        "tool_calls_count": _trace_int(runtime_summary.get("tool_calls_count") or response_ui.get("tool_calls_count")),
+        "tool_decision_rounds_count": _trace_int(
+            runtime_summary.get("tool_decision_rounds_count") or response_ui.get("tool_decision_rounds_count")
+        ),
+        "tool_decision_rounds": tool_decision_rounds[:5],
+        "tool_results_count": len(tool_results),
+        "capabilities": capabilities,
+        "providers": providers,
+        "web_search_attempted": bool(response_ui.get("web_search_attempted")),
+    }
+
+
+def _trace_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _trace_inputs(state: dict[str, Any], *, request_mode: str) -> dict[str, Any]:

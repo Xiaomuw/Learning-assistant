@@ -66,12 +66,13 @@ def submit_attempt(
                 "concept_mapping_status": result.mastery_evaluation.concept_mapping_status,
             }
         )
-    maybe_dual_write_practice_attempt(
-        user_id=user_id,
-        session_id=session_id,
-        subject_id=subject_id,
-        quiz_item=enriched_quiz_item,
-        selected_option=selected_option,
-        result=result,
-    )
+    if not result.duplicate_submission:
+        maybe_dual_write_practice_attempt(
+            user_id=user_id,
+            session_id=session_id,
+            subject_id=subject_id,
+            quiz_item=enriched_quiz_item,
+            selected_option=selected_option,
+            result=result,
+        )
     return result

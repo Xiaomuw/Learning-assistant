@@ -207,7 +207,11 @@ class GraphFactsBackfillTest(unittest.TestCase):
         self.assertEqual(len(concepts), 1)
         self.assertEqual(len(snapshots), 1)
         self.assertAlmostEqual(snapshots[0].p_mastery, 0.82)
-        self.assertEqual(snapshots[0].id, "legacy-knowledge-u1-network-http-默认端口")
+        self.assertEqual(
+            snapshots[0].id,
+            "legacy-knowledge-u1-computer-network-computer-network.application.http-https",
+        )
+        self.assertEqual(snapshots[0].concept_id, "computer-network.application.http-https")
 
 
 if __name__ == "__main__":

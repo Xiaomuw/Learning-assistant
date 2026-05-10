@@ -44,6 +44,26 @@ const SIMILAR_TITLE: Record<string, string> = {
   meta: "功能探索",
 };
 
+function comparableText(value: string) {
+  return stripMarkdownArtifacts(value)
+    .replace(/[\s，。！？；：,.!?;:、"'“”‘’（）()【】\[\]<>《》-]/g, "")
+    .toLowerCase();
+}
+
+function isNearDuplicate(a: string, b: string) {
+  const left = comparableText(a);
+  const right = comparableText(b);
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  const shorter = left.length < right.length ? left : right;
+  const longer = left.length < right.length ? right : left;
+  return shorter.length >= 16 && longer.includes(shorter);
+}
+
 function Section({
   title,
   icon: Icon,
@@ -85,9 +105,20 @@ export default function ExplanationCard({
   onSuggestionClick,
 }: ExplanationCardProps) {
   const thinking = stripMarkdownArtifacts(explanation.thinking || "");
-  const steps = explanation.steps
-    .map((step) => stripMarkdownArtifacts(step))
-    .filter(Boolean);
+  const steps = explanation.steps.reduce<string[]>((items, step) => {
+    const cleaned = stripMarkdownArtifacts(step);
+    if (!cleaned) {
+      return items;
+    }
+    if (items.some((item) => isNearDuplicate(item, cleaned))) {
+      return items;
+    }
+    return [...items, cleaned];
+  }, []);
+  const visibleThinking =
+    thinking && !steps.slice(0, 2).some((step) => isNearDuplicate(thinking, step))
+      ? thinking
+      : "";
   const mistakes = explanation.mistakes
     ? [stripMarkdownArtifacts(explanation.mistakes)].filter(Boolean)
     : [];
@@ -96,7 +127,7 @@ export default function ExplanationCard({
     .filter(Boolean);
 
   const similarTitle = SIMILAR_TITLE[questionType] ?? "延伸知识点";
-  const hasTeaching = Boolean(thinking || steps.length > 0);
+  const hasTeaching = Boolean(visibleThinking || steps.length > 0);
 
   return (
     <div className="space-y-3">
@@ -119,25 +150,22 @@ export default function ExplanationCard({
           defaultOpen
         >
           <div className="space-y-4">
-            {thinking && (
+            {visibleThinking && (
               <p className="text-sm font-bold leading-relaxed text-neo-ink">
-                {thinking}
+                {visibleThinking}
               </p>
             )}
             {steps.length > 0 && (
-              <ol className="space-y-3">
+              <div className="space-y-3">
                 {steps.map((step, index) => (
-                  <li
+                  <div
                     key={`${step}-${index}`}
-                    className="grid grid-cols-[2rem_1fr] gap-2 text-sm font-bold leading-relaxed"
+                    className="border-l-[3px] border-neo-ink bg-neo-bg px-3 py-3 text-sm font-bold leading-relaxed text-neo-ink shadow-neo-sm"
                   >
-                    <span className="flex h-7 w-7 items-center justify-center border-[3px] border-neo-ink bg-neo-muted text-xs font-black shadow-neo-sm">
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0 pt-1">{step}</span>
-                  </li>
+                    {step}
+                  </div>
                 ))}
-              </ol>
+              </div>
             )}
           </div>
         </Section>

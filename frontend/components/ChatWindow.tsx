@@ -24,20 +24,6 @@ const SUGGESTIONS = [
   "给我出两道数据库索引练习题",
 ];
 
-function processWithAnswerThinking(message: Message): MessageProcess | undefined {
-  if (!message.process) {
-    return undefined;
-  }
-  const thinking = message.explanation?.thinking?.trim();
-  if (!thinking || message.process.reasoningSummary?.trim()) {
-    return message.process;
-  }
-  return {
-    ...message.process,
-    reasoningSummary: thinking,
-  };
-}
-
 function safeQuizHint(hint: string | undefined) {
   const raw = (hint ?? "").trim();
   if (!raw) {
@@ -121,7 +107,7 @@ export default function ChatWindow({
 
       {messages.map((message, index) => {
         const isUser = message.role === "user";
-        const visibleProcess = processWithAnswerThinking(message);
+        const visibleProcess = message.process;
         const fallbackBadge = fallbackModelBadge(visibleProcess);
         const plainContent = stripMarkdownArtifacts(message.content || "");
         const showPlainContent = Boolean(plainContent && !message.explanation);

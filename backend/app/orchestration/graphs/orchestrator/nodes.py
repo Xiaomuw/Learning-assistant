@@ -11,6 +11,7 @@ from app.orchestration.graphs.shared.schemas import (
     FinalResponse,
     GraphError,
     GraphType,
+    LearningEvent,
     SourceLevel,
     SourcePolicy,
 )
@@ -75,13 +76,21 @@ def load_learner_context(state: OrchestratorState) -> dict[str, Any]:
     }
 
 
-def intent_router(state: OrchestratorState) -> dict[str, Any]:
+def graph_router(state: OrchestratorState) -> dict[str, Any]:
+    """Route the user request to one child graph; QA-local intent stays inside QAGraph."""
+
     from app.orchestration.graphs.orchestrator.intent_rules import resolve_intent_decision
 
     return resolve_intent_decision(state)
 
 
-def qa_graph_stub(state: OrchestratorState) -> dict[str, Any]:
+def intent_router(state: OrchestratorState) -> dict[str, Any]:
+    """Deprecated compatibility alias for graph_router."""
+
+    return graph_router(state)
+
+
+def invoke_qa_graph(state: OrchestratorState) -> dict[str, Any]:
     from app.orchestration.graphs.orchestrator.child_invokers import ChildGraphInvokerFactory
 
     return ChildGraphInvokerFactory.from_state(state).for_graph(GraphType.QA).invoke(state)
@@ -143,6 +152,61 @@ def response_composer(state: OrchestratorState) -> dict[str, Any]:
         }
     )
     return {"final_response": response.model_dump(mode="json")}
+
+
+def persist_learning_events(
+    state: OrchestratorState,
+    *,
+    learning_event_repository: Any | None = None,
+) -> dict[str, Any]:
+    """Persist child graph learning events at the Orchestrator boundary."""
+
+    child_output = state.get("child_graph_output") if isinstance(state.get("child_graph_output"), dict) else {}
+    payload = child_output.get("payload") if isinstance(child_output.get("payload"), dict) else {}
+    raw_events = list(payload.get("learning_events") or [])
+    status = {
+        "attempted": learning_event_repository is not None,
+        "event_count": len(raw_events),
+        "persisted_count": 0,
+        "failed_open": False,
+    }
+    if learning_event_repository is None or not raw_events:
+        return {"learning_event_persist_status": status}
+
+    persisted_ids: list[str] = []
+    errors = list(state.get("errors") or [])
+    try:
+        for raw_event in raw_events:
+            persisted_ids.append(learning_event_repository.append(LearningEvent.model_validate(raw_event)))
+    except Exception as exc:  # noqa: BLE001 - learning telemetry must never block chat answers
+        error_type = exc.__class__.__name__
+        logger.warning(f"Orchestrator learning event persistence failed open: {error_type}")
+        status = {
+            **status,
+            "persisted_count": len(persisted_ids),
+            "failed_open": True,
+            "error_type": error_type,
+        }
+        errors.append(
+            GraphError(
+                code="orchestrator_learning_event_persist_unavailable",
+                message="学习事件暂时无法持久化，已继续完成本轮问答。",
+                node="persist_learning_events",
+                severity="warning",
+                metadata={"error_type": error_type},
+            ).model_dump(mode="json")
+        )
+        return {
+            "persisted_learning_event_ids": persisted_ids,
+            "learning_event_persist_status": status,
+            "errors": errors,
+        }
+
+    status = {**status, "persisted_count": len(persisted_ids)}
+    return {
+        "persisted_learning_event_ids": persisted_ids,
+        "learning_event_persist_status": status,
+    }
 
 
 def persist_audit_event(state: OrchestratorState, *, audit_repository: Any | None = None) -> dict[str, Any]:

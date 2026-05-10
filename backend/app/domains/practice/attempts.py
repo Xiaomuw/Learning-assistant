@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Callable
 
 from app.domains.memory.session_summary import normalize_session_memory
 from app.domains.mastery.evaluation import evaluate_practice_answer
-from app.domains.practice.common import MAX_RECENT_TOPICS, normalize_practice_source_type, utc_iso
-from app.infrastructure.db.repositories.practice import create_practice_attempt_record
+from app.domains.practice.common import OPTION_KEYS, MAX_RECENT_TOPICS, normalize_practice_source_type, utc_iso
+from app.infrastructure.db.repositories.practice import (
+    create_practice_attempt_record,
+    find_practice_attempt_record_for_question,
+)
 from app.infrastructure.db.repositories.sessions import (
     get_chat_session_record,
     update_chat_session_memory_record,
@@ -38,6 +42,22 @@ def _create_practice_attempt(**kwargs: Any) -> dict[str, Any]:
     return create_practice_attempt_record(**kwargs).model_dump()
 
 
+def _find_existing_practice_attempt(
+    *,
+    user_id: str,
+    session_id: str,
+    subject_id: str,
+    question_id: str,
+) -> dict[str, Any] | None:
+    record = find_practice_attempt_record_for_question(
+        user_id=user_id,
+        session_id=session_id,
+        subject_id=subject_id,
+        question_id=question_id,
+    )
+    return record.model_dump() if record else None
+
+
 def record_practice_attempt_and_update_memory(
     *,
     user_id: str,
@@ -47,12 +67,39 @@ def record_practice_attempt_and_update_memory(
     selected_option: str,
     graph_mastery_update: Callable[..., None] | None = None,
 ) -> PracticeSubmissionResult:
-    normalized_item = PracticeRecommendation.model_validate(quiz_item)
+    selected = _normalize_selected_option(selected_option)
+    normalized_item = _normalize_submission_quiz_item(PracticeRecommendation.model_validate(quiz_item))
     concept_payload = _concept_payload_for_quiz_item(normalized_item, subject_id=subject_id)
-    normalized_item = normalized_item.model_copy(update=concept_payload)
-    selected = selected_option.strip().upper()[:1]
+    normalized_item = _normalize_submission_quiz_item(normalized_item.model_copy(update=concept_payload))
     correct_option = normalized_item.correct_option
     knowledge_point = normalized_item.concept_name or normalized_item.knowledge_point or "综合"
+
+    existing_attempt = _find_existing_practice_attempt(
+        user_id=user_id,
+        session_id=session_id,
+        subject_id=subject_id or "general",
+        question_id=str(normalized_item.question_id or ""),
+    )
+    if existing_attempt is not None:
+        existing_item = _quiz_item_from_existing_attempt(
+            existing_attempt,
+            fallback=normalized_item,
+        )
+        existing_selected = _normalize_selected_option(existing_attempt.get("selected_option") or selected)
+        memory = UserMemoryRecord.model_validate(_get_user_memory(user_id))
+        return PracticeSubmissionResult(
+            is_correct=bool(existing_attempt.get("is_correct")),
+            selected_option=existing_selected,
+            correct_option=existing_item.correct_option,
+            explanation=existing_item.explanation,
+            option_rationales=existing_item.option_rationales,
+            memory=memory,
+            session_memory=None,
+            mastery_evaluation=None,
+            personalized_feedback="这次提交已记录过，页面会继续展示首次判题结果。",
+            duplicate_submission=True,
+        )
+
     mastery_evaluation = evaluate_practice_answer(
         user_id=user_id,
         subject_id=subject_id or "general",
@@ -162,6 +209,95 @@ def record_practice_attempt_and_update_memory(
         mastery_evaluation=mastery_evaluation,
         personalized_feedback=mastery_evaluation.feedback,
     )
+
+
+def _normalize_selected_option(value: Any) -> str:
+    selected = str(value or "").strip().upper()[:1]
+    if selected not in OPTION_KEYS:
+        raise ValueError("selected_option 必须是 A/B/C/D")
+    return selected
+
+
+def _normalize_submission_quiz_item(item: PracticeRecommendation) -> PracticeRecommendation:
+    question = str(item.question or "").strip()
+    if not question:
+        raise ValueError("quiz_item.question 不能为空")
+
+    option_map: dict[str, str] = {}
+    for option in item.options or []:
+        key = str(option.get("key") or "").strip().upper()[:1]
+        text = str(option.get("text") or "").strip()
+        if key in OPTION_KEYS and text:
+            option_map[key] = text
+
+    if set(option_map) != set(OPTION_KEYS):
+        raise ValueError("quiz_item.options 必须完整包含 A/B/C/D 四个选项")
+
+    correct_option = str(item.correct_option or "").strip().upper()[:1]
+    if correct_option not in OPTION_KEYS:
+        raise ValueError("quiz_item.correct_option 必须是 A/B/C/D")
+
+    explanation = str(item.explanation or "").strip()
+    if not explanation:
+        explanation = f"正确答案是 {correct_option}。请结合题干条件和选项辨析复盘。"
+
+    raw_rationales = {
+        str(key).strip().upper()[:1]: str(value or "").strip()
+        for key, value in dict(item.option_rationales or {}).items()
+    }
+    rationales: dict[str, str] = {}
+    for key in OPTION_KEYS:
+        rationale = raw_rationales.get(key, "")
+        if not rationale:
+            rationale = (
+                f"{key} 是正确答案，依据见标准解析。"
+                if key == correct_option
+                else "该选项不是本题正确答案，需要对照题干条件和标准解析排除。"
+            )
+        rationales[key] = rationale
+
+    return item.model_copy(
+        update={
+            "question_id": str(item.question_id or "").strip()
+            or _fallback_question_id(question=question, option_map=option_map, correct_option=correct_option),
+            "question": question,
+            "options": [{"key": key, "text": option_map[key]} for key in OPTION_KEYS],
+            "correct_option": correct_option,
+            "explanation": explanation,
+            "option_rationales": rationales,
+        }
+    )
+
+
+def _fallback_question_id(
+    *,
+    question: str,
+    option_map: dict[str, str],
+    correct_option: str,
+) -> str:
+    identity = "|".join(
+        [
+            question,
+            *[f"{key}:{option_map.get(key, '')}" for key in OPTION_KEYS],
+            correct_option,
+        ]
+    )
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:32]
+    return f"practice:{digest}"
+
+
+def _quiz_item_from_existing_attempt(
+    existing_attempt: dict[str, Any],
+    *,
+    fallback: PracticeRecommendation,
+) -> PracticeRecommendation:
+    snapshot = existing_attempt.get("question_snapshot")
+    if isinstance(snapshot, dict) and snapshot:
+        try:
+            return _normalize_submission_quiz_item(PracticeRecommendation.model_validate(snapshot))
+        except Exception:
+            pass
+    return fallback
 
 
 def _concept_payload_for_quiz_item(item: PracticeRecommendation, *, subject_id: str) -> dict[str, str]:

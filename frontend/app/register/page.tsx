@@ -44,6 +44,38 @@ function getPasswordStrength(pw: string): { score: number; label: string; color:
   return { score, label: "强", color: "bg-neo-green" };
 }
 
+const COMMON_WEAK_PASSWORDS = new Set([
+  "12345678",
+  "123456789",
+  "1234567890",
+  "11111111",
+  "00000000",
+  "password",
+  "password1",
+  "password12",
+  "password123",
+  "qwerty123",
+  "qwer1234",
+  "admin123",
+  "admin1234",
+  "learningassistant",
+]);
+
+function passwordPolicyError(pw: string): string {
+  const effective = pw.trim();
+  if (effective.length < 8) {
+    return "密码至少需要 8 位有效字符。";
+  }
+  const normalized = effective.toLowerCase().replace(/\s+/g, "");
+  if (COMMON_WEAK_PASSWORDS.has(normalized)) {
+    return "这个密码太常见了，请换一个更安全的密码。";
+  }
+  if (new Set(normalized).size <= 1) {
+    return "密码不能由同一个字符重复组成。";
+  }
+  return "";
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const { sendRegisterCode, register, isLoading, user } = useAuth();
@@ -145,8 +177,9 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.trim().length < 8) {
-      setError("密码至少需要 8 位。");
+    const passwordError = passwordPolicyError(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 

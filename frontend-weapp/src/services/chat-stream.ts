@@ -1,13 +1,14 @@
 import Taro from "@tarojs/taro";
 import { getAccessToken } from "@/store/auth";
 import { API_BASE, refreshAuthSession } from "@/services/api";
-import type { SSEEvent } from "@/types/api";
+import type { Explanation, SSEEvent } from "@/types/api";
 
 export interface ChatStreamPayload {
   user_id: string;
   session_id: string;
   question: string;
   subject_id: string;
+  thinking_mode?: boolean;
 }
 
 export interface ChatStreamHandlers {
@@ -58,6 +59,31 @@ function errorTextFromData(data: any) {
     return data.detail.reason;
   }
   return "学习引擎处理失败";
+}
+
+function stripMarkdownArtifacts(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-zA-Z]*\n?/g, "").replace(/```/g, ""))
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
+function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
+  if (finalAnswer.trim()) {
+    return stripMarkdownArtifacts(finalAnswer);
+  }
+  const stepContent = (explanation?.steps || [])
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  if (stepContent) {
+    return stripMarkdownArtifacts(stepContent);
+  }
+  if (explanation?.topic?.trim()) {
+    return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
+  }
+  return "讲解已经准备好了。";
 }
 
 export function createSSEParser(onMessage: (message: ParsedSSEMessage) => void) {
@@ -178,22 +204,41 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         return;
       }
       const result = response.data || {};
+      const explanation = result.explanation as Explanation | undefined;
       handlers.onEvent({
         event: "explanation",
         data: {
-          final_answer: result.explanation?.thinking || "",
-          explanation: result.explanation,
+          final_answer: buildAnswerContent(result.final_answer || "", explanation),
+          explanation,
           question_type: result.question_type,
-          route: result.route
+          route: result.route,
+          session_id: result.session_id
         }
       });
-      if (Array.isArray(result.quiz_items) && result.quiz_items.length > 0) {
+      if (
+        (Array.isArray(result.quiz_items) && result.quiz_items.length > 0) ||
+        result.quiz_clarification ||
+        result.quiz_generation_status
+      ) {
         handlers.onEvent({
           event: "quiz",
           data: {
-            quiz_items: result.quiz_items,
+            quiz_items: Array.isArray(result.quiz_items) ? result.quiz_items : [],
             quiz_request: result.quiz_request,
-            quiz_clarification: result.quiz_clarification
+            quiz_clarification: result.quiz_clarification,
+            quiz_generation_status: result.quiz_generation_status,
+            final_answer: result.final_answer,
+            session_id: result.session_id,
+            subject_id: payload.subject_id
+          }
+        });
+      }
+      if (result.memory) {
+        handlers.onEvent({
+          event: "memory",
+          data: {
+            memory: result.memory,
+            session_id: result.session_id
           }
         });
       }

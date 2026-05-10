@@ -12,6 +12,8 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+from loguru import logger
+
 from app.application.errors import (
     ConflictError,
     ProcessingError,
@@ -57,6 +59,7 @@ from app.infrastructure.auth.security import (
     decode_token,
     hash_password,
     hash_token,
+    validate_password_policy,
     verify_password,
 )
 from app.shared.schemas.contracts import (
@@ -69,6 +72,9 @@ from app.shared.schemas.contracts import (
 
 _REFRESH_REPLAY_TTL_SECONDS = float(os.getenv("AUTH_REFRESH_REPLAY_TTL_SECONDS", "5"))
 _REFRESH_REPLAY_MAX_USES = int(os.getenv("AUTH_REFRESH_REPLAY_MAX_USES", "1"))
+_REGISTER_CODE_IP_WINDOW_SECONDS = float(os.getenv("AUTH_REGISTER_CODE_IP_WINDOW_SECONDS", "60"))
+_REGISTER_CODE_IP_MAX_REQUESTS = int(os.getenv("AUTH_REGISTER_CODE_IP_MAX_REQUESTS", "20"))
+REGISTER_CODE_DISPATCH_MESSAGE = "如果该邮箱可以注册，验证码会发送到邮箱，请检查收件箱。"
 
 
 @dataclass
@@ -80,6 +86,8 @@ class _RefreshReplayEntry:
 
 _refresh_replay_cache: dict[str, _RefreshReplayEntry] = {}
 _refresh_replay_lock = Lock()
+_register_code_ip_attempts: dict[str, list[float]] = {}
+_register_code_ip_lock = Lock()
 
 
 def _refresh_replay_key(user_id: str, token_jti: str, token_hash: str) -> str:
@@ -133,6 +141,26 @@ def _consume_refresh_replay(
 
 def _normalize_email(email: str) -> str:
     return str(email).strip().lower()
+
+
+def _enforce_register_code_ip_rate_limit(client_host: str | None) -> None:
+    host = str(client_host or "").strip()
+    if not host or _REGISTER_CODE_IP_WINDOW_SECONDS <= 0 or _REGISTER_CODE_IP_MAX_REQUESTS <= 0:
+        return
+
+    now = time.monotonic()
+    window_start = now - _REGISTER_CODE_IP_WINDOW_SECONDS
+    with _register_code_ip_lock:
+        attempts = [
+            item
+            for item in _register_code_ip_attempts.get(host, [])
+            if item > window_start
+        ]
+        if len(attempts) >= _REGISTER_CODE_IP_MAX_REQUESTS:
+            _register_code_ip_attempts[host] = attempts
+            raise RateLimitError("验证码请求过于频繁，请稍后再试", reason="rate_limited")
+        attempts.append(now)
+        _register_code_ip_attempts[host] = attempts
 
 
 def _issue_auth_session(user: AuthUserView) -> AuthSessionResult:
@@ -228,10 +256,16 @@ def login_with_wechat_mini_code(
     return _issue_auth_session(user)
 
 
-def send_register_code(email: str) -> VerificationDispatchResult:
+def send_register_code(email: str, *, client_host: str | None = None) -> VerificationDispatchResult:
+    _enforce_register_code_ip_rate_limit(client_host)
     normalized_email = _normalize_email(email)
     if get_user_auth_record_by_email(normalized_email):
-        raise ConflictError("该邮箱已注册")
+        logger.info("注册验证码请求命中已注册邮箱，已使用统一响应避免枚举: {}", normalized_email)
+        return VerificationDispatchResult(
+            message=REGISTER_CODE_DISPATCH_MESSAGE,
+            expires_in_seconds=REGISTER_CODE_TTL_SECONDS,
+            resend_after_seconds=REGISTER_RESEND_COOLDOWN_SECONDS,
+        )
 
     try:
         pending = issue_register_verification_code(normalized_email)
@@ -253,7 +287,7 @@ def send_register_code(email: str) -> VerificationDispatchResult:
         raise ServiceUnavailableError(str(exc)) from exc
 
     return VerificationDispatchResult(
-        message="验证码已发送，请检查邮箱",
+        message=REGISTER_CODE_DISPATCH_MESSAGE,
         expires_in_seconds=REGISTER_CODE_TTL_SECONDS,
         resend_after_seconds=REGISTER_RESEND_COOLDOWN_SECONDS,
     )
@@ -269,6 +303,10 @@ def complete_registration(
     normalized_email = _normalize_email(email)
     if get_user_auth_record_by_email(normalized_email):
         raise ConflictError("该邮箱已注册")
+    try:
+        validate_password_policy(password)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
 
     try:
         challenge = verify_register_code(normalized_email, code)
@@ -301,6 +339,11 @@ def complete_registration(
 
 
 def login_user(*, email: str, password: str) -> AuthSessionResult:
+    try:
+        validate_password_policy(password)
+    except ValueError as exc:
+        raise UnauthorizedError("邮箱或密码错误") from exc
+
     user_record = get_user_auth_record_by_email(_normalize_email(email))
     if not user_record or not verify_password(password, user_record.password_hash):
         raise UnauthorizedError("邮箱或密码错误")
@@ -383,6 +426,10 @@ def change_password(
 
     if current_password == new_password:
         raise ValidationError("新密码不能与当前密码相同")
+    try:
+        validate_password_policy(new_password)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
 
     updated = update_user_password_hash(user_id, hash_password(new_password))
     if not updated:

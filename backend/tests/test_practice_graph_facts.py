@@ -123,6 +123,23 @@ class PracticeGraphFactsTest(unittest.TestCase):
         self.assertIs(result, expected)
         dual_write.assert_called_once()
 
+    def test_submit_attempt_skips_dual_write_for_duplicate_submission(self) -> None:
+        expected = _submission_result().model_copy(update={"duplicate_submission": True})
+        with (
+            patch("app.application.practice.service.record_practice_attempt_and_update_memory", return_value=expected),
+            patch("app.application.practice.service.maybe_dual_write_practice_attempt") as dual_write,
+        ):
+            result = submit_attempt(
+                user_id="u1",
+                session_id="s1",
+                subject_id="network",
+                quiz_item=_quiz_item(),
+                selected_option="C",
+            )
+
+        self.assertIs(result, expected)
+        dual_write.assert_not_called()
+
     def test_dual_write_disabled_does_not_touch_graph_repositories(self) -> None:
         with (
             patch.dict(os.environ, {"ENABLE_GRAPH_DUAL_WRITE": "false", "ENABLE_GRAPH_FACTS": "true"}, clear=False),

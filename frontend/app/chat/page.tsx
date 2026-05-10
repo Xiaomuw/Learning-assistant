@@ -131,6 +131,7 @@ const PROCESS_STAGE_ORDER: Record<string, number> = {
   teaching: 6,
   tool_decision: 7,
   execution: 8,
+  reasoning_stream: 8.25,
   answer_stream: 8.5,
   stream_status: 8.75,
   answer: 9,
@@ -211,9 +212,26 @@ function cloneProcess(process?: MessageProcess): MessageProcess {
     currentStage: process.currentStage,
     stages: process.stages.map((stage) => ({ ...stage })),
     reasoningSummary: process.reasoningSummary ?? "",
+    reasoningTrace: process.reasoningTrace ?? "",
+    reasoningTraceEphemeral: process.reasoningTraceEphemeral,
     execution: process.execution ? { ...process.execution } : undefined,
     toolCalls: (process.toolCalls ?? []).map((toolCall) => ({ ...toolCall })),
   };
+}
+
+function stripEphemeralReasoningDebug(messages: Message[]): Message[] {
+  return messages.map((message) => {
+    if (!message.process?.reasoningTrace && !message.process?.reasoningTraceEphemeral) {
+      return message;
+    }
+    const process = { ...message.process };
+    delete process.reasoningTrace;
+    delete process.reasoningTraceEphemeral;
+    return {
+      ...message,
+      process,
+    };
+  });
 }
 
 function finalizeRunningStages(
@@ -421,6 +439,9 @@ function hasStreamStageStatusPayload(data: Record<string, unknown>) {
 
 function streamStageKey(data: Record<string, unknown>) {
   const stage = String(data.stream_stage ?? "");
+  if (stage.includes("reasoning")) {
+    return "reasoning_stream";
+  }
   if (stage.includes("tool")) {
     return "tool_decision";
   }
@@ -1005,7 +1026,7 @@ export default function ChatPage() {
     persistStoredChatDraft({
       sessionId,
       notebookId: resolveNotebookId(notebooks, notebookId),
-      messages: draftMessages,
+      messages: stripEphemeralReasoningDebug(draftMessages),
       updatedAt: Date.now(),
     });
   }
@@ -1547,11 +1568,7 @@ export default function ChatPage() {
               );
 
               nextProcess.reasoningSummary =
-                reasoningSummary ||
-                explanation?.thinking ||
-                finalAnswer ||
-                nextProcess.reasoningSummary ||
-                "";
+                reasoningSummary || nextProcess.reasoningSummary || "";
 
               if (toolDecisionRounds.length > 0) {
                 const usedToolCount = toolDecisionRounds.filter((item) => {
@@ -1621,6 +1638,35 @@ export default function ChatPage() {
             break;
           }
 
+          case "reasoning_delta": {
+            const delta = typeof data.delta === "string" ? data.delta : "";
+            if (!delta) {
+              break;
+            }
+            updateLastAssistant((message) => {
+              const nextProcess = upsertProcessStage(
+                message.process,
+                {
+                  key: "reasoning_stream",
+                  label: "模型思考",
+                  status: "running",
+                  detail: "正在接收模型思考过程；该内容仅用于本轮调试。",
+                  elapsed:
+                    typeof data.elapsed === "number" ? data.elapsed : undefined,
+                },
+                "模型思考",
+                { completeRunning: false }
+              );
+              nextProcess.reasoningTrace = `${nextProcess.reasoningTrace || ""}${delta}`;
+              nextProcess.reasoningTraceEphemeral = true;
+              return {
+                ...message,
+                process: nextProcess,
+              };
+            });
+            break;
+          }
+
           case "answer_delta": {
             const delta = typeof data.delta === "string" ? data.delta : "";
             if (!delta) {
@@ -1646,8 +1692,8 @@ export default function ChatPage() {
               nextProcess.reasoningSummary =
                 nextProcess.reasoningSummary ||
                 (data.streaming_mode === "token"
-                  ? "当前为安全实时流式：回答正文逐步展示，处理过程只展示可审计决策摘要，不展示原始隐藏思维链。"
-                  : "当前为节点级流式：模型/工具节点完成后立即展示结果，不展示原始思维链。");
+                  ? "当前为实时流式：回答正文逐步展示；如果模型返回原始思考流，只会临时显示在本轮调试面板。"
+                  : "当前为节点级流式：模型/工具节点完成后立即展示结果。");
               return {
                 ...message,
                 content: `${message.content || ""}${delta}`,

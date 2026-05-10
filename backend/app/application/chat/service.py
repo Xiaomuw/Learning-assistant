@@ -15,7 +15,7 @@ from app.shared.schemas.contracts import ChatExecutionResult, UserMemoryRecord
 _STREAM_DONE = object()
 
 
-def run_chat_sync(
+def run_chat_once(
     *,
     user_id: str,
     session_id: str,

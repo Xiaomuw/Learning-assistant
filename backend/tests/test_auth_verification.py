@@ -17,6 +17,7 @@ os.environ.setdefault(
 )
 
 from app.application.auth import verification as verification_module
+from app.infrastructure.auth.security import validate_password_policy
 from app.shared.schemas.contracts import EmailVerificationChallengeRecord
 
 
@@ -25,6 +26,23 @@ class AuthVerificationTest(unittest.TestCase):
         code = verification_module.generate_numeric_code()
         self.assertEqual(len(code), 6)
         self.assertTrue(code.isdigit())
+
+    def test_password_policy_rejects_blank_common_and_repeated_passwords(self) -> None:
+        for password in ("        ", "password123", "aaaaaaaa", "12345678"):
+            with self.subTest(password=password):
+                with self.assertRaises(ValueError):
+                    validate_password_policy(password)
+
+        validate_password_policy("Str0ngPass123!")
+
+    def test_verification_code_hash_uses_secret_keyed_hmac(self) -> None:
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": "secret-one-for-verification"}, clear=False):
+            first = verification_module.hash_verification_code("123456")
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": "secret-two-for-verification"}, clear=False):
+            second = verification_module.hash_verification_code("123456")
+
+        self.assertNotEqual(first, "123456")
+        self.assertNotEqual(first, second)
 
     def test_issue_register_verification_code_respects_cooldown(self) -> None:
         with patch(

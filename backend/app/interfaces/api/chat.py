@@ -6,6 +6,8 @@ Chat API — POST /chat
 SSE 事件类型：
   - routing      : 路由结果 { question_type }
   - retrieval    : 检索完成 { doc_count, is_rewritten }
+  - reasoning_delta : 思考模式调试流 { delta, ephemeral }
+  - answer_delta : 回答正文流 { delta }
   - explanation  : 讲解内容 { topic, thinking, steps, ... }
   - quiz         : 练习题 { items: [...] }
   - memory       : 记忆更新 { weak_points, ... }
@@ -27,7 +29,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from app.application.chat.service import (
-    run_chat_sync,
+    run_chat_once,
     stream_chat,
 )
 from app.interfaces.auth.dependencies import AuthenticatedUser, require_current_user
@@ -40,12 +42,16 @@ CHAT_HEARTBEAT_SECONDS = 12.0
 
 
 def _safe_chat_error_message(exc: Exception) -> str:
-    raw_message = str(exc).strip()
-    if raw_message:
-        return raw_message
-    if exc.__class__.__name__ and exc.__class__.__name__ != "Exception":
-        return f"学习引擎处理失败（{exc.__class__.__name__}），请稍后重试。"
-    return "学习引擎处理失败，请稍后重试。"
+    reason = _chat_error_reason(exc)
+    if reason == "timeout":
+        return "学习引擎响应超时，我已停止本轮处理。请稍后重试，或把问题拆小后再问。"
+    if reason == "model_unavailable":
+        return "当前模型服务暂时不可用，我没有拿到稳定回答。请稍后重试，或切换模型后再问。"
+    return "学习引擎暂时无法完成本轮处理，我已安全停止。请稍后重试，或换一种问法继续。"
+
+
+def _safe_chat_error_type(exc: Exception) -> str:
+    return _chat_error_reason(exc)
 
 
 def _chat_error_reason(exc: Exception) -> str:
@@ -55,13 +61,22 @@ def _chat_error_reason(exc: Exception) -> str:
     if any(
         marker in text
         for marker in (
+            "401",
+            "403",
+            "429",
+            "unauthorized",
+            "forbidden",
             "api connection",
+            "api status",
             "connection error",
             "connection refused",
             "dns",
             "inference.do-ai.run",
             "model not found",
             "model unavailable",
+            "not available",
+            "rate limit",
+            "subscription tier",
             "temporary failure in name resolution",
         )
     ):
@@ -148,7 +163,7 @@ async def chat(
                         "session_id": request.session_id,
                         "thinking_mode": request.thinking_mode,
                         "safe_decision_summary": (
-                            "思考模式已启用：后端会请求模型进行更充分推理，但界面只展示安全摘要和最终回答。"
+                            "思考模式已启用：调试面板会临时显示本轮模型原始思考流；不会写入历史或 LangSmith。"
                             if request.thinking_mode
                             else ""
                         ),
@@ -255,7 +270,7 @@ async def chat(
                 "data": json.dumps(
                     {
                         "error": error_message,
-                        "error_type": e.__class__.__name__,
+                        "error_type": _safe_chat_error_type(e),
                         "reason": reason,
                         "retryable": True,
                         "session_id": request.session_id,
@@ -282,7 +297,7 @@ async def chat_sync(
     logger.info(f"💬 [同步] 收到问题: {request.question[:50]}...")
 
     try:
-        result = run_chat_sync(
+        result = run_chat_once(
             user_id=request.user_id,
             session_id=request.session_id,
             question=request.question,

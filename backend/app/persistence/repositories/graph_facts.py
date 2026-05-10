@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from uuid import uuid4
 
+from loguru import logger
 from sqlalchemy import select
 
 from app.infrastructure.db.database import session_scope
@@ -20,6 +21,7 @@ from app.infrastructure.db.models import (
     NodeRunModel,
     ToolRunModel,
 )
+from app.knowledge.concept_registry import get_concept_registry
 from app.persistence.interfaces import (
     AttemptRepository,
     ConceptRepository,
@@ -170,7 +172,15 @@ class SqlLearningEventRepository(LearningEventRepository):
 
     def append(self, event: LearningEvent) -> str:
         payload = event.model_dump(mode="json")
+        event_payload = _summary(payload.get("payload") or {})
+        hash_key = _text(event_payload.get("hash_key"), 128)
         with self.session_factory() as session:
+            if hash_key:
+                existing_by_hash = session.scalars(
+                    select(LearningEventModel).where(LearningEventModel.hash_key == hash_key)
+                ).first()
+                if existing_by_hash is not None and existing_by_hash.id != event.id:
+                    return existing_by_hash.id
             existing = session.get(LearningEventModel, event.id)
             if existing is None:
                 session.add(
@@ -180,12 +190,14 @@ class SqlLearningEventRepository(LearningEventRepository):
                         user_id=event.user_id,
                         concept_id=event.concept_id,
                         graph_run_id=event.graph_run_id,
-                        payload=_summary(payload.get("payload") or {}),
+                        hash_key=hash_key or None,
+                        payload=event_payload,
                         created_at=_parse_datetime(event.created_at) or _utcnow(),
                     )
                 )
             else:
-                existing.payload = _summary(payload.get("payload") or {})
+                existing.hash_key = hash_key or existing.hash_key
+                existing.payload = event_payload
         return event.id
 
     def list_for_user(self, *, user_id: str, limit: int = 100) -> list[LearningEvent]:
@@ -238,6 +250,11 @@ class SqlAttemptRepository(AttemptRepository):
 
     def create_attempt(self, payload: dict[str, Any]) -> str:
         attempt_id = str(payload.get("id") or payload.get("attempt_id") or uuid4())
+        concept_id = _text(payload.get("concept_id") or payload.get("knowledge_point"), 160)
+        concept = get_concept_registry().get_concept(concept_id)
+        if concept is None:
+            logger.warning("Skip graph attempt with non-canonical concept_id: {}", concept_id)
+            return ""
         with self.session_factory() as session:
             existing = session.get(GraphAttemptModel, attempt_id)
             if existing is None:
@@ -245,8 +262,8 @@ class SqlAttemptRepository(AttemptRepository):
                     GraphAttemptModel(
                         id=attempt_id,
                         user_id=_text(payload.get("user_id"), 100),
-                        subject_id=_text(payload.get("subject_id") or "general", 64),
-                        concept_id=_text(payload.get("concept_id") or payload.get("knowledge_point"), 160),
+                        subject_id=concept.subject_id,
+                        concept_id=concept.concept_id,
                         question_id=_text(payload.get("question_id"), 100),
                         graph_run_id=_text(payload.get("graph_run_id"), 100),
                         source_event_id=_text(payload.get("source_event_id"), 100),
@@ -277,6 +294,12 @@ class SqlMasterySnapshotRepository(MasterySnapshotRepository):
         user_id = _text(payload.get("user_id"), 100)
         subject_id = _text(payload.get("subject_id") or "general", 64)
         concept_id = _text(payload.get("concept_id") or payload.get("knowledge_point"), 160)
+        concept = get_concept_registry().get_concept(concept_id)
+        if concept is None:
+            logger.warning("Skip mastery snapshot with non-canonical concept_id: {}", concept_id)
+            return ""
+        subject_id = concept.subject_id
+        concept_id = concept.concept_id
         snapshot_id = str(payload.get("id") or f"{user_id}:{subject_id}:{concept_id}")
         with self.session_factory() as session:
             row = session.scalars(
@@ -461,13 +484,16 @@ class CompositeMasterySnapshotRepository(MasterySnapshotRepository):
 
 
 def _event_from_row(row: LearningEventModel) -> LearningEvent:
+    payload = dict(row.payload or {})
+    if row.hash_key:
+        payload.setdefault("hash_key", row.hash_key)
     return LearningEvent(
         id=row.id,
         event_type=row.event_type,
         user_id=row.user_id,
         concept_id=row.concept_id,
         graph_run_id=row.graph_run_id,
-        payload=dict(row.payload or {}),
+        payload=payload,
         created_at=_iso(row.created_at),
     )
 
@@ -580,9 +606,13 @@ def _summarize_sensitive(value: Any) -> Any:
 
 def _text(value: Any, max_length: int) -> str:
     text = str(value or "").strip()
+    if max_length <= 0:
+        return ""
     if len(text) <= max_length:
         return text
-    return f"{text[:max_length]}..."
+    if max_length <= 3:
+        return text[:max_length]
+    return f"{text[: max_length - 3]}..."
 
 
 def _bounded_limit(limit: int) -> int:

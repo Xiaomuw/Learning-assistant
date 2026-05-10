@@ -1,6 +1,20 @@
 import Taro from "@tarojs/taro";
 import { clearAuthSession, getAccessToken, getAuthUser, getRefreshToken, persistAuthSession, updateAuthTokens } from "@/store/auth";
-import { DEFAULT_NOTEBOOK_ID, type AuthTokenEnvelope, type KnowledgeMasteryPayload, type LatestQuizPayload, type Memory, type Notebook, type PracticeAttemptResult, type PracticeRecommendationPayload, type QuizItem } from "@/types/api";
+import {
+  DEFAULT_NOTEBOOK_ID,
+  type AuthTokenEnvelope,
+  type KnowledgeMasteryPayload,
+  type LatestQuizPayload,
+  type LearningCenterResponse,
+  type Memory,
+  type Notebook,
+  type OptionKey,
+  type PracticeAttemptResult,
+  type PracticePackPayload,
+  type PracticePackResponse,
+  type PracticeRecommendationPayload,
+  type QuizItem
+} from "@/types/api";
 
 const API_BASE = process.env.TARO_APP_API_BASE || "http://127.0.0.1:8000/api";
 
@@ -131,6 +145,11 @@ export function fetchKnowledgeMastery(userId: string, notebookId = DEFAULT_NOTEB
   );
 }
 
+export function fetchLearningCenter(userId: string, notebookId?: string): Promise<LearningCenterResponse> {
+  const suffix = notebookId ? `?subject_id=${encodeURIComponent(notebookId)}` : "";
+  return request<LearningCenterResponse>(`/users/${userId}/learning-center${suffix}`);
+}
+
 export function fetchLatestQuizBundle(userId: string): Promise<LatestQuizPayload> {
   return request<LatestQuizPayload>(`/users/${userId}/quiz/latest`);
 }
@@ -155,7 +174,22 @@ export function submitPracticeAttempt(payload: {
       session_id: payload.sessionId,
       subject_id: payload.notebookId,
       quiz_item: payload.quizItem,
-      selected_option: payload.selectedOption
+      selected_option: payload.selectedOption as OptionKey
+    }
+  });
+}
+
+export function createPracticePack(payload: PracticePackPayload): Promise<PracticePackResponse> {
+  return request<PracticePackResponse>("/practice/packs", {
+    method: "POST",
+    data: {
+      user_id: payload.user_id,
+      session_id: payload.session_id || "",
+      subject_id: payload.subject_id || DEFAULT_NOTEBOOK_ID,
+      request_text: payload.request_text,
+      current_practice_question: payload.current_practice_question || null,
+      last_practice_pack: payload.last_practice_pack || [],
+      context: payload.context || {}
     }
   });
 }

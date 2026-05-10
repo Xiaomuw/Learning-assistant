@@ -63,10 +63,40 @@ def _get_jwt_secret() -> str:
     return value
 
 
+def get_cors_allow_origins() -> list[str]:
+    raw = (os.getenv("CORS_ALLOW_ORIGINS") or "*").strip()
+    if not raw:
+        return ["*"]
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    return origins or ["*"]
+
+
+def _is_production() -> bool:
+    return (os.getenv("APP_ENV") or "development").strip().lower() == "production"
+
+
+def _auth_cookie_secure_enabled() -> bool:
+    return (os.getenv("AUTH_COOKIE_SECURE") or "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def validate_startup_environment() -> None:
     """Validate startup-blocking environment variables."""
     _get_database_url()
     _get_jwt_secret()
+    if _is_production():
+        if "*" in get_cors_allow_origins():
+            raise EnvironmentValidationError(
+                "APP_ENV=production 时 CORS_ALLOW_ORIGINS 不能使用 '*'，请配置明确的前端域名。"
+            )
+        if not _auth_cookie_secure_enabled():
+            raise EnvironmentValidationError(
+                "APP_ENV=production 时必须设置 AUTH_COOKIE_SECURE=true，确保认证 Cookie 只通过 HTTPS 发送。"
+            )
 
 
 def collect_environment_warnings() -> list[str]:

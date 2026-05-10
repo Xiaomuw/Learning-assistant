@@ -24,7 +24,7 @@ os.environ.setdefault(
 import app.interfaces.api.chat as chat_module
 from app.interfaces.api.chat import ChatRequest, router as chat_router
 from app.application.chat import messages as chat_messages
-from app.application.chat.orchestrator_runtime import _chat_state_from_orchestrator_result
+from app.application.chat.orchestrator_runtime import _chat_state_from_orchestrator_result, _trace_outputs
 from app.application.chat import service as chat_service
 from app.application.chat import state_builder as chat_state_builder
 from app.interfaces.auth.dependencies import require_current_user
@@ -51,7 +51,7 @@ async def _fake_stream_workflow(**_kwargs):
 
 
 async def _fake_stream_failure(**_kwargs):
-    raise RuntimeError()
+    raise RuntimeError("401: model is not available for your subscription tier")
     yield {"node": "never", "state_update": {}, "elapsed": 0.0}
 
 
@@ -222,7 +222,7 @@ class ChatApiTest(unittest.TestCase):
                 last_session="abc",
             ),
         )
-        with patch("app.interfaces.api.chat.run_chat_sync", return_value=final_state):
+        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state):
             response = self.client.post(
                 "/api/chat/sync",
                 json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
@@ -233,7 +233,23 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(payload["question_type"], "concept")
         self.assertEqual(payload["explanation"]["topic"], "HTTP")
 
-    def test_run_chat_sync_uses_orchestrator_runtime_by_default(self) -> None:
+    def test_chat_sync_sanitizes_provider_error_detail(self) -> None:
+        with patch(
+            "app.interfaces.api.chat.run_chat_once",
+            side_effect=RuntimeError("APITimeoutError: Request timed out after 60s"),
+        ):
+            response = self.client.post(
+                "/api/chat/sync",
+                json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        detail = response.json()["detail"]
+        self.assertIn("学习引擎响应超时", detail)
+        self.assertNotIn("APITimeoutError", detail)
+        self.assertNotIn("Request timed out", detail)
+
+    def test_run_chat_once_uses_orchestrator_runtime_by_default(self) -> None:
         orchestrator_state = {
             "question_type": "concept",
             "route": "explain",
@@ -249,7 +265,7 @@ class ChatApiTest(unittest.TestCase):
             "memory": {},
         }
         with patch("app.application.chat.service.run_orchestrator_chat", return_value=orchestrator_state) as orchestrator:
-            result = chat_service.run_chat_sync(
+            result = chat_service.run_chat_once(
                 user_id="default_user",
                 session_id="session-graph",
                 question="什么是 HTTP？",
@@ -297,7 +313,65 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(state["explanation"]["steps"], ["客户端发送请求。", "服务器返回响应。"])
         self.assertNotEqual(state["explanation"]["steps"], ["explain_concept"])
 
-    def test_run_chat_sync_propagates_thinking_mode_to_initial_state(self) -> None:
+    def test_orchestrator_trace_outputs_include_safe_qa_diagnostics(self) -> None:
+        outputs = _trace_outputs(
+            {
+                "intent_decision": {"intent": "concept_explain", "target_graph_type": "qa"},
+                "final_response": {
+                    "answer": "HTTP 是应用层协议。",
+                    "source_level": "web",
+                    "ui_payload": {
+                        "reasoning_summary": "安全推理摘要",
+                        "selected_model_profile": {"model_id": "deepseek-v4-pro"},
+                        "primary_model_id": "deepseek-v4-pro",
+                        "fallback_used": True,
+                        "fallback_reason": "unauthorized_model",
+                        "source_usage": "web",
+                        "retrieval_report": {"diagnosis": "web_fallback_used", "doc_count": 1},
+                        "web_search_attempted": True,
+                    },
+                },
+                "child_graph_output": {
+                    "target_graph_type": "qa",
+                    "payload": {
+                        "runtime_summary": {
+                            "retrieval_diagnosis": {"diagnosis": "web_fallback_used", "raw_count": 1},
+                            "tool_calls_count": 1,
+                            "tool_decision_rounds_count": 1,
+                            "tool_decision_rounds": [
+                                {
+                                    "round": 1,
+                                    "decision": "use_tool",
+                                    "tool": "web_search",
+                                    "provider": "mcp",
+                                    "reason": "按需补充来源。",
+                                }
+                            ],
+                            "fallback_reason": "unauthorized_model",
+                        },
+                        "tool_results": [
+                            {
+                                "capability": "web_search",
+                                "provider": "mcp",
+                                "status": "success",
+                            }
+                        ],
+                        "learning_events": [{}],
+                    },
+                },
+                "errors": [],
+            }
+        )
+
+        self.assertEqual(outputs["route"], "agent")
+        self.assertEqual(outputs["model_name"], "deepseek-v4-pro")
+        self.assertEqual(outputs["retrieval_diagnosis"]["diagnosis"], "web_fallback_used")
+        self.assertEqual(outputs["tool_decision"]["tool_calls_count"], 1)
+        self.assertEqual(outputs["tool_decision"]["capabilities"], ["web_search"])
+        self.assertEqual(outputs["fallback_reason"], "unauthorized_model")
+        self.assertEqual(outputs["safe_reasoning_summary"], "安全推理摘要")
+
+    def test_run_chat_once_propagates_thinking_mode_to_initial_state(self) -> None:
         orchestrator_state = {
             "question_type": "concept",
             "route": "explain",
@@ -307,7 +381,7 @@ class ChatApiTest(unittest.TestCase):
             "memory": {},
         }
         with patch("app.application.chat.service.run_orchestrator_chat", return_value=orchestrator_state) as orchestrator:
-            chat_service.run_chat_sync(
+            chat_service.run_chat_once(
                 user_id="default_user",
                 session_id="session-thinking",
                 question="什么是 HTTP？",
@@ -318,7 +392,7 @@ class ChatApiTest(unittest.TestCase):
         initial_state = orchestrator.call_args.args[0]
         self.assertTrue(initial_state["thinking_mode"])
 
-    def test_run_chat_sync_propagates_quiz_clarification_payload(self) -> None:
+    def test_run_chat_once_propagates_quiz_clarification_payload(self) -> None:
         quiz_request = {
             "is_quiz_request": True,
             "action": "clarify_quiz_request",
@@ -355,7 +429,7 @@ class ChatApiTest(unittest.TestCase):
             "memory": {},
         }
         with patch("app.application.chat.service.run_orchestrator_chat", return_value=orchestrator_state):
-            result = chat_service.run_chat_sync(
+            result = chat_service.run_chat_once(
                 user_id="default_user",
                 session_id="session-quiz-clarify",
                 question="帮我出点题",
@@ -365,7 +439,8 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(result.quiz_request, QuizRequestResolution.model_validate(quiz_request))
         self.assertEqual(result.quiz_clarification, QuizClarificationPanel.model_validate(clarification))
 
-    def test_run_chat_sync_does_not_call_removed_legacy_workflow_or_shadow(self) -> None:
+    def test_run_chat_once_does_not_call_removed_legacy_workflow_or_shadow(self) -> None:
+        self.assertFalse(hasattr(chat_service, "run_chat_sync"))
         self.assertFalse(hasattr(chat_service, "run_chat_workflow"))
         self.assertFalse(hasattr(chat_service, "stream_chat_workflow"))
         self.assertFalse(hasattr(chat_service, "schedule_qagraph_shadow"))
@@ -542,46 +617,87 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(chunks[1]["state_update"]["streaming_mode"], "token")
         self.assertFalse(chunks[1]["state_update"]["is_synthetic_delta"])
 
-    def test_stream_chat_deterministic_context_emits_real_token_delta(self) -> None:
+    def test_stream_chat_buffers_answer_until_quality_gated_final_chunk(self) -> None:
         async def _collect_events():
             chunks = []
             async for chunk in chat_service.stream_chat(
                 user_id="default_user",
-                session_id="session-deterministic-stream",
+                session_id="session-buffered-stream",
                 question="什么是 HTTP？",
                 subject_id="general",
             ):
                 chunks.append(chunk)
             return chunks
 
-        fake_llm = _FakeStreamingLLM(["HTTP 是", "应用层协议。"])
-        with (
-            patch("app.application.chat.orchestrator_runtime.is_graph_facts_enabled", return_value=False),
-            patch("app.persistence.repositories.graph_facts.is_graph_facts_enabled", return_value=False),
-            patch("app.domains.qa.runtime.select_execution_mode", return_value="deterministic_context"),
-            patch("app.domains.qa.runtime.get_chat_llm", return_value=fake_llm),
-        ):
+        stream_chunks = [
+            {"node": "stream_status", "state_update": {"stream_stage": "evidence_merge"}, "elapsed": 0.01},
+            {
+                "node": "qa_agent_node",
+                "state_update": {"final_answer": "HTTP 是应用层协议。", "streaming_mode": "node"},
+                "elapsed": 0.02,
+            },
+            {
+                "node": "finalize_node",
+                "state_update": {
+                    "finalized": True,
+                    "__final_state": {
+                        "question_type": "concept",
+                        "route": "explain",
+                        "explanation": {},
+                        "final_answer": "HTTP 是应用层协议。",
+                        "quiz_items": [],
+                        "memory": {},
+                    },
+                },
+                "elapsed": 0.03,
+            },
+            {
+                "node": "final",
+                "state_update": {
+                    "finalized": True,
+                    "__final_state": {
+                        "question_type": "concept",
+                        "route": "explain",
+                        "explanation": {},
+                        "final_answer": "HTTP 是应用层协议。",
+                        "quiz_items": [],
+                        "memory": {},
+                    },
+                },
+                "elapsed": 0.03,
+            },
+        ]
+        with patch("app.application.chat.service.stream_orchestrator_chat", return_value=iter(stream_chunks)):
             chunks = asyncio.run(_collect_events())
 
         delta_chunks = [chunk for chunk in chunks if chunk["node"] == "answer_delta"]
-        self.assertGreaterEqual(len(delta_chunks), 2)
-        self.assertEqual(delta_chunks[0]["state_update"]["streaming_mode"], "token")
-        self.assertFalse(delta_chunks[0]["state_update"]["is_synthetic_delta"])
+        self.assertFalse([chunk for chunk in delta_chunks if not chunk["state_update"].get("is_synthetic_delta")])
         self.assertIn("qa_agent_node", [chunk["node"] for chunk in chunks])
+        self.assertEqual(chunks[-1]["node"], "final")
 
-    def test_chat_sse_emits_safe_stream_status_and_real_answer_delta(self) -> None:
+    def test_chat_sse_emits_reasoning_delta_and_real_answer_delta(self) -> None:
         async def _fake_token_stream(**_kwargs):
             yield {
                 "node": "stream_status",
                 "state_update": {
-                    "stream_stage": "model_start",
-                    "stage_label": "模型执行",
-                    "detail": "模型已开始生成回答。",
-                    "safe_decision_summary": "本轮直接回答，不展示原始隐藏思维链。",
+                    "stream_stage": "reasoning_stream",
+                    "stage_label": "模型思考",
+                    "detail": "正在接收模型思考过程。",
+                    "safe_decision_summary": "调试信息仅本轮展示，不进入回答正文、历史或 LangSmith。",
                     "status": "running",
                     "streaming_mode": "token",
                 },
                 "elapsed": 0.01,
+            }
+            yield {
+                "node": "reasoning_delta",
+                "state_update": {
+                    "delta": "先判断 HTTP 的协议层级。",
+                    "streaming_mode": "token",
+                    "source": "deepseek_reasoning_content",
+                    "ephemeral": True,
+                },
+                "elapsed": 0.015,
             }
             yield {
                 "node": "answer_delta",
@@ -606,17 +722,76 @@ class ChatApiTest(unittest.TestCase):
             with self.client.stream(
                 "POST",
                 "/api/chat",
+                json={
+                    "user_id": "default_user",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                    "thinking_mode": True,
+                },
+            ) as response:
+                body = "".join(chunk for chunk in response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: status", body)
+        self.assertIn('"safe_decision_summary": "调试信息仅本轮展示，不进入回答正文、历史或 LangSmith。"', body)
+        self.assertIn("event: reasoning_delta", body)
+        self.assertIn('"source": "deepseek_reasoning_content"', body)
+        self.assertIn('"ephemeral": true', body)
+        self.assertIn("event: answer_delta", body)
+        self.assertIn('"streaming_mode": "token"', body)
+        self.assertIn('"is_synthetic_delta": false', body)
+        self.assertNotIn("hidden_reasoning", body)
+
+    def test_chat_sse_emits_final_event_before_done(self) -> None:
+        async def _fake_final_stream(**_kwargs):
+            yield {
+                "node": "stream_status",
+                "state_update": {
+                    "stream_stage": "request_guard",
+                    "stage_label": "请求检查",
+                    "detail": "正在检查请求是否合法。",
+                    "status": "done",
+                    "streaming_mode": "node",
+                },
+                "elapsed": 0.01,
+            }
+            yield {
+                "node": "qa_agent_node",
+                "state_update": {
+                    "question_type": "concept",
+                    "route": "explain",
+                    "final_answer": "HTTP 是应用层协议。",
+                    "streaming_mode": "node",
+                },
+                "elapsed": 0.02,
+            }
+            yield {
+                "node": "final",
+                "state_update": {
+                    "finalized": True,
+                    "question_type": "concept",
+                    "route": "explain",
+                    "final_answer": "HTTP 是应用层协议。",
+                },
+                "elapsed": 0.03,
+            }
+
+        with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_final_stream):
+            with self.client.stream(
+                "POST",
+                "/api/chat",
                 json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
             ) as response:
                 body = "".join(chunk for chunk in response.iter_text())
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("event: status", body)
-        self.assertIn('"safe_decision_summary": "本轮直接回答，不展示原始隐藏思维链。"', body)
-        self.assertIn("event: answer_delta", body)
-        self.assertIn('"streaming_mode": "token"', body)
-        self.assertIn('"is_synthetic_delta": false', body)
-        self.assertNotIn("hidden_reasoning", body)
+        self.assertIn("event: explanation", body)
+        self.assertIn("event: final", body)
+        self.assertIn("event: done", body)
+        self.assertLess(body.index("event: status"), body.index("event: explanation"))
+        self.assertLess(body.index("event: explanation"), body.index("event: final"))
+        self.assertLess(body.index("event: final"), body.index("event: done"))
 
     def test_chat_sse_emits_readable_error_and_closes_on_exception(self) -> None:
         with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_stream_failure):
@@ -630,10 +805,13 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("event: status", body)
         self.assertIn("event: error", body)
-        self.assertIn('"error": "学习引擎处理失败（RuntimeError），请稍后重试。"', body)
-        self.assertIn('"error_type": "RuntimeError"', body)
-        self.assertIn('"reason": "workflow_error"', body)
+        self.assertIn('"error": "当前模型服务暂时不可用，我没有拿到稳定回答。请稍后重试，或切换模型后再问。"', body)
+        self.assertIn('"error_type": "model_unavailable"', body)
+        self.assertIn('"reason": "model_unavailable"', body)
         self.assertIn('"retryable": true', body)
+        self.assertNotIn("401", body)
+        self.assertNotIn("RuntimeError", body)
+        self.assertNotIn("subscription tier", body)
 
     def test_sse_cleanup_awaits_cancelled_pending_chunk_before_close(self) -> None:
         async def _run_cleanup() -> _CloseGuardedStream:

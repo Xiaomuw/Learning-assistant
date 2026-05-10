@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import sys
 from pathlib import Path
 
@@ -24,8 +25,83 @@ from app.infrastructure.config.validation import (  # noqa: E402
 from app.infrastructure.llm.langsmith import get_langsmith_health_status  # noqa: E402
 
 
+@dataclass(frozen=True)
+class DotenvCompatibilityIssue:
+    line: int
+    key: str
+    reason: str
+
+
+def find_dotenv_shell_compatibility_issues(path: Path) -> list[DotenvCompatibilityIssue]:
+    if not path.exists():
+        return []
+
+    issues: list[DotenvCompatibilityIssue] = []
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        assignment = stripped[7:].lstrip() if stripped.startswith("export ") else stripped
+        if "=" not in assignment:
+            continue
+        key, raw_value = assignment.split("=", 1)
+        key = key.strip()
+        value = raw_value.strip()
+        if not key:
+            continue
+        if _has_unquoted_whitespace(value):
+            issues.append(
+                DotenvCompatibilityIssue(
+                    line=line_number,
+                    key=key,
+                    reason="值包含空格但没有使用引号包裹，shell source 会把空格后的内容当成命令",
+                )
+            )
+    return issues
+
+
+def _has_unquoted_whitespace(value: str) -> bool:
+    value_without_comment = _strip_inline_comment(value).strip()
+    if not value_without_comment:
+        return False
+    quote = value_without_comment[0]
+    if quote in {"'", '"'}:
+        return len(value_without_comment) < 2 or value_without_comment[-1] != quote
+    return any(char.isspace() for char in value_without_comment)
+
+
+def _strip_inline_comment(value: str) -> str:
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(value):
+        if escaped:
+            escaped = False
+            continue
+        if quote == '"' and char == "\\":
+            escaped = True
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index].rstrip()
+    return value.rstrip()
+
+
 def main() -> int:
-    load_dotenv(dotenv_path=BACKEND_ROOT / ".env")
+    dotenv_path = BACKEND_ROOT / ".env"
+    shell_issues = find_dotenv_shell_compatibility_issues(dotenv_path)
+    if shell_issues:
+        print("❌ 环境检查失败: backend/.env 存在 shell source 不兼容写法")
+        for issue in shell_issues:
+            print(f"  line={issue.line} key={issue.key}: {issue.reason}")
+        return 1
+
+    load_dotenv(dotenv_path=dotenv_path)
 
     try:
         validate_startup_environment()

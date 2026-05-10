@@ -6,7 +6,7 @@ Auth API
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Cookie, Depends, Response
+from fastapi import APIRouter, Cookie, Depends, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 
 from app.application.auth.service import (
@@ -112,9 +112,12 @@ def _build_token_envelope(result: AuthSessionResult) -> AuthTokenEnvelope:
 
 
 @router.post("/auth/register/send-code", response_model=SendRegisterCodeResponse)
-async def send_register_code(body: SendRegisterCodeRequest):
+async def send_register_code(body: SendRegisterCodeRequest, request: Request):
     try:
-        result = send_register_code_service(str(body.email))
+        result = send_register_code_service(
+            str(body.email),
+            client_host=request.client.host if request.client else None,
+        )
     except ApplicationError as exc:
         raise to_http_exception(exc) from exc
     return SendRegisterCodeResponse.model_validate(result.model_dump())

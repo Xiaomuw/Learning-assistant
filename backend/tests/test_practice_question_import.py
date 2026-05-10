@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 import unittest
+from collections import Counter
 from pathlib import Path
 
 
@@ -118,6 +119,40 @@ class PracticeQuestionImportTest(unittest.TestCase):
         self.assertEqual(updated.as_dict(), {"total": 1, "inserted": 0, "updated": 1, "skipped": 0})
         changed = self.repo.get_practice_question("pq-binary-tree-001")
         self.assertEqual(changed["stem"], "已更新并应写入")
+
+    def test_practice_repository_reads_practice_question_before_legacy_bank(self) -> None:
+        practice_repo = _reload_or_import("app.infrastructure.db.repositories.practice")
+        self.repo.import_practice_questions(
+            [_valid_item(question_id="pq-priority-001", stem="用于推荐的新题库题目")],
+            on_conflict="upsert",
+        )
+
+        items = practice_repo.list_question_bank_item_records(
+            subject_id="data-structure",
+            knowledge_points=[CONCEPT_ID],
+            limit=1,
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].question_id, "pq-priority-001")
+        self.assertEqual(items[0].source_name, "practice_question")
+        self.assertEqual(items[0].concept_mapping_status, "matched")
+
+    def test_all_408_json_covers_53_concepts_with_ten_questions_each(self) -> None:
+        path = BACKEND_ROOT.parent / "data" / "practice_questions" / "all_408.json"
+        raw_items = self.repo.load_practice_question_json(path)
+        result = self.repo.validate_practice_questions(raw_items, source_file=str(path))
+
+        self.assertTrue(result.valid, [issue.as_dict() for issue in result.issues[:5]])
+        self.assertEqual(len(result.questions), 530)
+        counts = Counter(item["concept_id"] for item in result.questions)
+        difficulties = Counter((item["concept_id"], item["difficulty"]) for item in result.questions)
+        self.assertEqual(len(counts), 53)
+        self.assertEqual(set(counts.values()), {10})
+        for concept_id in counts:
+            self.assertEqual(difficulties[(concept_id, "basic")], 3)
+            self.assertEqual(difficulties[(concept_id, "medium")], 5)
+            self.assertEqual(difficulties[(concept_id, "hard")], 2)
 
 
 if __name__ == "__main__":

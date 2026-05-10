@@ -105,9 +105,9 @@ npm run check:weapp
 
 微信开发者工具打开仓库根目录下的 `frontend-weapp/`，项目配置里的 `miniprogramRoot` 指向 `dist/`。
 
-`build:weapp` 和 `dev:weapp` 默认带 `--no-check`，用于跳过 Taro doctor 原生校验；当前 macOS 沙箱里该校验包可能 panic 并挂住，跳过后不影响 webpack 编译产物。
+`build:weapp` 和 `dev:weapp` 默认带 `--no-check`，用于跳过 Taro doctor 原生校验；当前 macOS 沙箱里该校验包可能 panic 并挂住，跳过后不影响 webpack 编译产物。repo root 的 `make check-weapp` 会直接调用本地 Taro CLI，避免改写本地私有配置。
 
-构建前会生成 `project.private.config.json` 覆盖微信开发者工具 appid。该文件是本地私有配置，已经加入 `.gitignore`。
+构建前会生成 `project.private.config.json` 覆盖微信开发者工具 appid。该文件是本地私有配置，已经加入 `.gitignore`。Taro 编译产生的 `.swc/` 缓存也不入库。
 
 联调前设置后端地址和 appid：
 

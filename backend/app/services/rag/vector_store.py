@@ -24,7 +24,7 @@ from app.services.rag.embedding_profile import (
     get_embedding_profile,
     get_pgvector_distance_strategy,
 )
-from app.services.rag.embeddings import get_embedding_function
+from app.services.rag.embeddings import describe_embedding_model_readiness, get_embedding_function
 from app.services.rag.splitter import build_text_splitter
 from app.shared.schemas.contracts import NotebookKnowledgeStatus
 
@@ -138,6 +138,7 @@ def _embedding_table_indexes() -> set[str]:
 def _pgvector_schema_health() -> dict[str, Any]:
     if not pgvector_tables_ready():
         return {
+            "pgvector_ready": False,
             "schema_ready": False,
             "index_ready": False,
             "schema_issues": ["pgvector_tables_missing"],
@@ -155,6 +156,7 @@ def _pgvector_schema_health() -> dict[str, Any]:
     if not index_ready:
         issues.append("pgvector_indexes_incomplete")
     return {
+        "pgvector_ready": True,
         "schema_ready": not missing_columns,
         "index_ready": index_ready,
         "schema_issues": issues,
@@ -165,6 +167,7 @@ def describe_vector_store_health() -> dict[str, Any]:
     health = _pgvector_schema_health()
     profile = get_embedding_profile()
     health["embedding_profile"] = profile.as_metadata()
+    health.update(describe_embedding_model_readiness())
     return health
 
 
@@ -195,10 +198,20 @@ def _build_coverage_fields(
     url_count: int,
     pdf_count: int,
     embedding_ready: bool,
+    pgvector_ready: bool = True,
+    schema_ready: bool = True,
+    index_ready: bool = True,
 ) -> dict[str, Any]:
-    """Derive a lightweight knowledge-base completeness signal from indexed content."""
+    """Derive knowledge-base completeness and retrieval readiness from indexed content."""
     missing_doc_types: list[str] = []
     suggested_actions: list[str] = []
+    content_ready = doc_count > 0
+    retrieval_prerequisites_ready = bool(
+        pgvector_ready
+        and schema_ready
+        and index_ready
+        and embedding_ready
+    )
 
     if chapter_count <= 0:
         missing_doc_types.append("chapter")
@@ -218,6 +231,7 @@ def _build_coverage_fields(
 
     if doc_count <= 0:
         return {
+            "content_ready": False,
             "coverage_score": 0,
             "coverage_level": "empty",
             "missing_doc_types": missing_doc_types,
@@ -247,11 +261,12 @@ def _build_coverage_fields(
         coverage_level = "ready"
 
     return {
+        "content_ready": content_ready,
         "coverage_score": coverage_score,
         "coverage_level": coverage_level,
         "missing_doc_types": missing_doc_types,
         "suggested_actions": suggested_actions[:3],
-        "retrieval_ready": bool(embedding_ready and doc_count > 0),
+        "retrieval_ready": bool(retrieval_prerequisites_ready and content_ready),
     }
 
 
@@ -302,13 +317,16 @@ def _sum_counts(left: dict[str, int], right: dict[str, int]) -> dict[str, int]:
 
 def get_collection_document_status(subject_id: str | None = None, user_id: str | None = None) -> NotebookKnowledgeStatus:
     collection_name = resolve_collection_name(subject_id)
-    embedding_ready = pgvector_tables_ready()
     vector_health = describe_vector_store_health()
-    shared_counts = _get_collection_counts(collection_name) if embedding_ready else _empty_counts()
+    pgvector_ready = bool(vector_health.get("pgvector_ready"))
+    schema_ready = bool(vector_health.get("schema_ready"))
+    index_ready = bool(vector_health.get("index_ready"))
+    embedding_model_ready = bool(vector_health.get("embedding_model_ready"))
+    shared_counts = _get_collection_counts(collection_name) if pgvector_ready else _empty_counts()
     personal_collection_name = resolve_personal_collection_name(subject_id, user_id) if user_id else ""
     personal_counts = (
         _get_collection_counts(personal_collection_name)
-        if embedding_ready and user_id
+        if pgvector_ready and user_id
         else _empty_counts()
     )
     total_counts = _sum_counts(shared_counts, personal_counts)
@@ -319,7 +337,10 @@ def get_collection_document_status(subject_id: str | None = None, user_id: str |
         question_count=total_counts["question_count"],
         url_count=total_counts["url_count"],
         pdf_count=total_counts["pdf_count"],
-        embedding_ready=embedding_ready,
+        embedding_ready=embedding_model_ready,
+        pgvector_ready=pgvector_ready,
+        schema_ready=schema_ready,
+        index_ready=index_ready,
     )
     return NotebookKnowledgeStatus(
         subject_id=subject_id or "general",
@@ -334,10 +355,19 @@ def get_collection_document_status(subject_id: str | None = None, user_id: str |
         pdf_count=total_counts["pdf_count"],
         personal_pdf_count=personal_counts["pdf_count"],
         personal_url_count=personal_counts["url_count"],
-        personal_ready=bool(embedding_ready and personal_counts["doc_count"] > 0),
-        embedding_ready=embedding_ready,
-        schema_ready=bool(vector_health.get("schema_ready")),
-        index_ready=bool(vector_health.get("index_ready")),
+        personal_ready=bool(
+            pgvector_ready
+            and schema_ready
+            and index_ready
+            and embedding_model_ready
+            and personal_counts["doc_count"] > 0
+        ),
+        pgvector_ready=pgvector_ready,
+        embedding_ready=embedding_model_ready,
+        embedding_model_ready=embedding_model_ready,
+        embedding_model_error=str(vector_health.get("embedding_model_error") or ""),
+        schema_ready=schema_ready,
+        index_ready=index_ready,
         schema_issues=list(vector_health.get("schema_issues") or []),
         embedding_profile=dict(vector_health.get("embedding_profile") or {}),
         **coverage_fields,

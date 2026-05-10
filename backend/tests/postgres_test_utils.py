@@ -8,23 +8,43 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 
+STRICT_POSTGRES_ENV = "POSTGRES_TEST_STRICT"
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+class PostgresTestConfigurationError(RuntimeError):
+    """Raised when PostgreSQL integration tests are required but not configured."""
+
+
+def _strict_postgres_required() -> bool:
+    return os.getenv(STRICT_POSTGRES_ENV, "").strip().lower() in _TRUE_VALUES
+
+
+def _postgres_config_error(message: str) -> None:
+    if _strict_postgres_required():
+        raise PostgresTestConfigurationError(message)
+    raise unittest.SkipTest(f"{message}，跳过 PostgreSQL 集成测试。")
+
+
 def _normalize_postgres_url(raw_url: str) -> str:
     normalized = raw_url.strip()
+    if "__tests_only__" in normalized:
+        _postgres_config_error("TEST_DATABASE_URL 包含占位符 __tests_only__")
     if normalized.startswith("postgres://"):
         return normalized.replace("postgres://", "postgresql+psycopg://", 1)
     if normalized.startswith("postgresql://"):
         return normalized.replace("postgresql://", "postgresql+psycopg://", 1)
     if normalized.startswith("postgresql+psycopg://"):
         return normalized
-    raise unittest.SkipTest("TEST_DATABASE_URL 不是 PostgreSQL DSN，跳过 PostgreSQL 集成测试。")
+    _postgres_config_error("TEST_DATABASE_URL 必须是 PostgreSQL DSN")
+    raise AssertionError("unreachable")
 
 
 def get_test_database_base_url() -> str:
-    raw_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if raw_url and "__tests_only__" in raw_url:
-        raw_url = ""
+    raw_url = os.getenv("TEST_DATABASE_URL")
     if not raw_url:
-        raise unittest.SkipTest("未配置 TEST_DATABASE_URL，跳过 PostgreSQL 集成测试。")
+        _postgres_config_error("未配置 TEST_DATABASE_URL")
+        raise AssertionError("unreachable")
     return _normalize_postgres_url(raw_url)
 
 

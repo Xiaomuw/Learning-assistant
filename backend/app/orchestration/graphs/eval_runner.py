@@ -112,9 +112,10 @@ def _cases() -> list[GraphEvalCase]:
                 _assert_final_response,
                 _assert_non_empty_answer,
                 _assert_concept_filtered_tool_request,
+                _assert_web_fallback_planned_without_provider,
                 _assert_has_learning_event("question_answered"),
             ],
-            expected_metrics={"non_empty_response": True, "tool_requests": 1, "concept_filtered_retrieval": True},
+            expected_metrics={"non_empty_response": True, "tool_requests": 2, "concept_filtered_retrieval": True},
         ),
         GraphEvalCase(
             name="qa_tool_policy_stable_concept_no_tools",
@@ -128,8 +129,8 @@ def _cases() -> list[GraphEvalCase]:
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
                 }
             ),
-            assertions=[_assert_final_response, _assert_non_empty_answer, _assert_no_tool_requests],
-            expected_metrics={"non_empty_response": True, "tool_requests": 0},
+            assertions=[_assert_final_response, _assert_non_empty_answer, _assert_planned_request_without_result],
+            expected_metrics={"non_empty_response": True, "tool_requests": 1},
         ),
         GraphEvalCase(
             name="qa_notebook_only_insufficient",
@@ -338,14 +339,36 @@ def _assert_no_tool_requests(output: dict[str, Any]) -> str | None:
 
 def _assert_concept_filtered_tool_request(output: dict[str, Any]) -> str | None:
     requests = list(output.get("tool_requests") or [])
-    if len(requests) != 1:
+    notebook_requests = [
+        item for item in requests if isinstance(item, dict) and item.get("capability") == ToolCapability.NOTEBOOK_RETRIEVE.value
+    ]
+    if len(notebook_requests) != 1:
         return "concept_filtered_request_count_mismatch"
-    request = requests[0]
+    request = notebook_requests[0]
     if request.get("capability") != ToolCapability.NOTEBOOK_RETRIEVE.value:
         return "concept_filtered_request_wrong_capability"
     request_input = request.get("input") if isinstance(request, dict) else {}
     if not isinstance(request_input, dict) or not request_input.get("subject_id") or not request_input.get("concept_id"):
         return "concept_filtered_request_missing_filter"
+    return None
+
+
+def _assert_web_fallback_planned_without_provider(output: dict[str, Any]) -> str | None:
+    requests = list(output.get("tool_requests") or [])
+    capabilities = {str(item.get("capability") or "") for item in requests if isinstance(item, dict)}
+    if ToolCapability.WEB_SEARCH.value not in capabilities:
+        return "web_fallback_request_missing"
+    encoded = json.dumps(requests, ensure_ascii=False).lower()
+    if "tavily" in encoded:
+        return "web_fallback_provider_leaked"
+    return None
+
+
+def _assert_planned_request_without_result(output: dict[str, Any]) -> str | None:
+    if not list(output.get("tool_requests") or []):
+        return "expected_planned_tool_request"
+    if list(output.get("tool_results") or []):
+        return "unexpected_tool_results"
     return None
 
 

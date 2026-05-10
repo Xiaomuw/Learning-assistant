@@ -3,15 +3,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from loguru import logger
+
 from app.infrastructure.llm.langsmith import trace_run
 from app.orchestration.graphs.orchestrator.schemas import ChildGraphOutput
 from app.orchestration.graphs.orchestrator.state import OrchestratorState
-from app.orchestration.graphs.shared.schemas import GraphType, SourcePolicy
+from app.orchestration.graphs.shared.schemas import (
+    FinalResponse,
+    GraphError,
+    GraphErrorSeverity,
+    GraphType,
+    LearningEvent,
+    LearningEventType,
+    SourceLevel,
+    SourcePolicy,
+)
 from app.shared.schemas.subject import DEFAULT_SUBJECTS, normalize_subject_id
 
 
 class ChildGraphInvoker(Protocol):
-    """Adapter boundary for invoking a child graph from the Orchestrator."""
+    """Orchestrator boundary for child graph invocation.
+
+    Invokers own trace metadata, runtime dependency wiring, state mapping, and
+    wrapping child outputs back into the Orchestrator contract. Business graph
+    nodes remain inside their child graph packages.
+    """
 
     graph_type: GraphType
 
@@ -26,13 +42,18 @@ class QAGraphInvoker:
 
     def invoke(self, state: OrchestratorState) -> dict[str, Any]:
         with _child_trace(self.graph_type, state) as run:
-            result = self._invoke_production(state) if self.production_runtime else self._invoke_deterministic(state)
+            try:
+                result = self._invoke_production(state) if self.production_runtime else self._invoke_deterministic(state)
+            except Exception as exc:  # noqa: BLE001 - child graph failures must fail open to the Orchestrator
+                logger.warning(f"QAGraph invocation failed open: {exc.__class__.__name__}")
+                result = _qa_child_failure_result(state, exc)
             payload = {
                 "final_response": result.get("final_response") or {},
                 "evidence": list(result.get("evidence") or []),
                 "tool_results": list(result.get("tool_results") or []),
                 "learning_events": list(result.get("learning_events") or []),
                 "errors": list(result.get("errors") or []),
+                "runtime_summary": dict(result.get("runtime_summary") or {}),
                 "learning_event_count": len(result.get("learning_events") or []),
                 "adapter": "qagraph",
             }
@@ -48,15 +69,16 @@ class QAGraphInvoker:
         from app.infrastructure.llm.provider import DEFAULT_CHAT_MODEL
         from app.orchestration.graphs.qa.adapter import ProductionQARuntimeAdapter
         from app.orchestration.graphs.qa.graph import build_graph as build_qa_graph
-        from app.persistence.repositories.graph_facts import build_graph_fact_repositories, is_graph_facts_enabled
         from app.services.tooling.executor import ToolExecutor
         from app.services.tooling.policy import ToolPolicyResolver
         from app.services.tooling.registry import build_default_tool_registry
 
         runtime_context = state.get("chat_runtime_context") if isinstance(state.get("chat_runtime_context"), dict) else {}
+        requested_token_stream = bool(runtime_context.get("stream_answer_tokens"))
         qa_runtime_context = {
             "graph_run_id": f"{state.get('run_id', '')}:{self.graph_type.value}",
-            "stream_answer_tokens": bool(runtime_context.get("stream_answer_tokens")),
+            "stream_answer_tokens": False,
+            "streaming_degraded_reason": "buffered_until_quality_gate" if requested_token_stream else "",
             "thinking_mode": bool(runtime_context.get("thinking_mode", False)),
         }
         if qa_runtime_context["stream_answer_tokens"]:
@@ -83,14 +105,12 @@ class QAGraphInvoker:
             allow_tools=bool(runtime_context.get("allow_tools", True)),
             allow_search=bool(runtime_context.get("allow_search", True)),
         )
-        event_repo = build_graph_fact_repositories().learning_events if is_graph_facts_enabled() else None
         tool_executor = ToolExecutor(
             registry=build_default_tool_registry(),
             policy_resolver=ToolPolicyResolver(),
         )
         return build_qa_graph(
             adapter=adapter,
-            learning_event_repository=event_repo,
             tool_executor=tool_executor,
         ).compile().invoke(_child_state(state, self.graph_type))
 
@@ -209,18 +229,30 @@ def _child_trace(graph_type: GraphType, state: OrchestratorState):
 
 
 def _child_trace_outputs(graph_type: GraphType, payload: dict[str, Any]) -> dict[str, Any]:
+    final_response = payload.get("final_response") if isinstance(payload.get("final_response"), dict) else {}
+    response_ui = final_response.get("ui_payload") if isinstance(final_response.get("ui_payload"), dict) else {}
+    runtime_summary = payload.get("runtime_summary") if isinstance(payload.get("runtime_summary"), dict) else {}
     generation_status = payload.get("generation_status") if isinstance(payload.get("generation_status"), dict) else {}
     quality_report = payload.get("quality_report") if isinstance(payload.get("quality_report"), dict) else {}
-    return {
+    output = {
         "graph_type": graph_type.value,
-        "answer": (payload.get("final_response") or {}).get("answer") if isinstance(payload.get("final_response"), dict) else "",
+        "route": _trace_route(graph_type, final_response),
+        "answer": final_response.get("answer") or "",
         "safe_reasoning_summary": (
-            ((payload.get("final_response") or {}).get("ui_payload") or {}).get("reasoning_summary")
-            if isinstance(payload.get("final_response"), dict)
-            and isinstance((payload.get("final_response") or {}).get("ui_payload"), dict)
-            else ""
+            response_ui.get("reasoning_summary")
+            or runtime_summary.get("reasoning_summary")
+            or ""
         ),
         "reasoning_visibility": "safe_summary_only",
+        "model_name": _trace_model_name(response_ui, runtime_summary),
+        "primary_model_id": str(response_ui.get("primary_model_id") or runtime_summary.get("primary_model_id") or ""),
+        "fallback_model_id": str(response_ui.get("fallback_model_id") or runtime_summary.get("fallback_model_id") or ""),
+        "fallback_used": bool(response_ui.get("fallback_used") or runtime_summary.get("fallback_used")),
+        "fallback_reason": str(response_ui.get("fallback_reason") or runtime_summary.get("fallback_reason") or ""),
+        "source_usage": str(response_ui.get("source_usage") or runtime_summary.get("source_usage") or final_response.get("source_level") or ""),
+        "retrieval_diagnosis": _trace_retrieval_diagnosis(response_ui, runtime_summary),
+        "retrieval_report": _trace_dict(response_ui.get("retrieval_report")),
+        "tool_decision": _trace_tool_decision(payload, response_ui, runtime_summary),
         "learning_event_count": len(payload.get("learning_events") or []),
         "error_count": len(payload.get("errors") or []),
         "evidence_count": len(payload.get("evidence") or []),
@@ -231,6 +263,155 @@ def _child_trace_outputs(graph_type: GraphType, payload: dict[str, Any]) -> dict
         "repair_attempt_count": generation_status.get("repair_attempt_count"),
         "degraded": generation_status.get("repair_degraded") or generation_status.get("ai_generation_failed"),
     }
+    return output
+
+
+def _trace_route(graph_type: GraphType, final_response: dict[str, Any]) -> str:
+    if graph_type == GraphType.QUESTION_GENERATION:
+        return "practice"
+    if graph_type == GraphType.MASTERY:
+        return "review"
+    source_level = str(final_response.get("source_level") or "")
+    if source_level == "web":
+        return "agent"
+    if source_level == "notebook":
+        return "rag"
+    return "explain"
+
+
+def _trace_model_name(response_ui: dict[str, Any], runtime_summary: dict[str, Any]) -> str:
+    selected_profile = response_ui.get("selected_model_profile")
+    if not isinstance(selected_profile, dict):
+        selected_profile = {}
+    return str(
+        selected_profile.get("model_id")
+        or runtime_summary.get("selected_model_id")
+        or response_ui.get("primary_model_id")
+        or runtime_summary.get("primary_model_id")
+        or ""
+    )
+
+
+def _trace_retrieval_diagnosis(
+    response_ui: dict[str, Any],
+    runtime_summary: dict[str, Any],
+) -> dict[str, Any]:
+    for value in (
+        runtime_summary.get("retrieval_diagnosis"),
+        response_ui.get("retrieval_diagnosis"),
+        response_ui.get("retrieval_report"),
+    ):
+        if isinstance(value, dict) and value:
+            return dict(value)
+    return {}
+
+
+def _trace_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _trace_tool_decision(
+    payload: dict[str, Any],
+    response_ui: dict[str, Any],
+    runtime_summary: dict[str, Any],
+) -> dict[str, Any]:
+    tool_results = [item for item in list(payload.get("tool_results") or []) if isinstance(item, dict)]
+    tool_decision_rounds = [
+        item for item in list(runtime_summary.get("tool_decision_rounds") or []) if isinstance(item, dict)
+    ]
+    capabilities = sorted(
+        {
+            str(item.get("capability") or item.get("tool") or "")
+            for item in [*tool_results, *tool_decision_rounds]
+            if str(item.get("capability") or item.get("tool") or "").strip()
+        }
+    )
+    providers = sorted(
+        {
+            str(item.get("provider") or "")
+            for item in [*tool_results, *tool_decision_rounds]
+            if str(item.get("provider") or "").strip()
+        }
+    )
+    return {
+        "tool_calls_count": _trace_int(runtime_summary.get("tool_calls_count") or response_ui.get("tool_calls_count")),
+        "tool_decision_rounds_count": _trace_int(
+            runtime_summary.get("tool_decision_rounds_count") or response_ui.get("tool_decision_rounds_count")
+        ),
+        "tool_decision_rounds": tool_decision_rounds[:5],
+        "tool_results_count": len(tool_results),
+        "capabilities": capabilities,
+        "providers": providers,
+        "web_search_attempted": bool(response_ui.get("web_search_attempted")),
+    }
+
+
+def _trace_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _qa_child_failure_result(state: OrchestratorState, exc: Exception) -> dict[str, Any]:
+    graph_run_id = f"{state.get('run_id', '')}:{GraphType.QA.value}"
+    error_type = exc.__class__.__name__
+    session_id = str(state.get("thread_id") or "")
+    message_id = str(state.get("run_id") or "")
+    hash_key = f"{session_id}:{message_id}:{LearningEventType.ANSWER_REPAIRED.value}:qa_child_graph_failed"
+    response = FinalResponse(
+        answer="这一轮问答链路暂时不可用，我先安全停止，避免给出不可靠回答。",
+        source_level=SourceLevel.NONE,
+        coach_actions=["retry_qa"],
+        mastery_signals={"signal_strength": "none"},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": "qa_child_graph_failed",
+            "error_type": error_type,
+        },
+    )
+    event = LearningEvent(
+        event_type=LearningEventType.ANSWER_REPAIRED.value,
+        user_id=str(state.get("user_id") or ""),
+        graph_run_id=graph_run_id,
+        payload={
+            "reason": "qa_child_graph_failed",
+            "error_type": error_type,
+            "session_id": session_id,
+            "message_id": message_id,
+            "event_type": LearningEventType.ANSWER_REPAIRED.value,
+            "concept_id": "",
+            "hash_key": hash_key,
+        },
+    )
+    error = GraphError(
+        code="qa_child_graph_failed",
+        message=error_type,
+        node="QAGraphInvoker",
+        severity=GraphErrorSeverity.ERROR,
+        metadata={"graph_type": GraphType.QA.value},
+    )
+    return {
+        "final_response": response.model_dump(mode="json"),
+        "learning_events": [event.model_dump(mode="json")],
+        "errors": [error.model_dump(mode="json")],
+        "runtime_summary": {"error_type": error_type, "degraded": True},
+    }
+
+
+def _persist_fallback_learning_events_safely(raw_events: list[Any]) -> None:
+    if not raw_events:
+        return
+    try:
+        from app.persistence.repositories.graph_facts import build_graph_fact_repositories, is_graph_facts_enabled
+
+        if not is_graph_facts_enabled():
+            return
+        repository = build_graph_fact_repositories().learning_events
+        for raw_event in raw_events:
+            repository.append(LearningEvent.model_validate(raw_event))
+    except Exception as exc:  # noqa: BLE001 - fallback telemetry must never block user output
+        logger.warning(f"QAGraph fallback learning event persistence failed open: {exc.__class__.__name__}")
 
 
 def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, Any]:
@@ -253,6 +434,7 @@ def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, A
         "tool_results": list(state.get("tool_results") or []),
         "learning_events": list(state.get("learning_events") or []),
         "errors": list(state.get("errors") or []),
+        "parent_intent_decision": state.get("intent_decision") or {},
         "quiz_request": state.get("quiz_request") or {},
         "chat_runtime_context": state.get("chat_runtime_context") or {},
         "production_runtime": bool(state.get("production_runtime")),

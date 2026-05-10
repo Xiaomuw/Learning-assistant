@@ -4,6 +4,7 @@ import type { AuthTokenEnvelope, AuthUser } from "@/types/api";
 const ACCESS_TOKEN_KEY = "la_weapp_access_token";
 const REFRESH_TOKEN_KEY = "la_weapp_refresh_token";
 const USER_KEY = "la_weapp_user";
+const ACTIVE_USER_KEY = "la_weapp_active_user_id";
 
 export function getAccessToken(): string {
   return Taro.getStorageSync(ACCESS_TOKEN_KEY) || "";
@@ -21,6 +22,7 @@ export function persistAuthSession(payload: AuthTokenEnvelope) {
   Taro.setStorageSync(ACCESS_TOKEN_KEY, payload.access_token);
   Taro.setStorageSync(REFRESH_TOKEN_KEY, payload.refresh_token);
   Taro.setStorageSync(USER_KEY, payload.user);
+  Taro.setStorageSync(ACTIVE_USER_KEY, payload.user.id);
 }
 
 export function updateAuthTokens(payload: Pick<AuthTokenEnvelope, "access_token" | "refresh_token">) {
@@ -32,6 +34,7 @@ export function clearAuthSession() {
   Taro.removeStorageSync(ACCESS_TOKEN_KEY);
   Taro.removeStorageSync(REFRESH_TOKEN_KEY);
   Taro.removeStorageSync(USER_KEY);
+  Taro.removeStorageSync(ACTIVE_USER_KEY);
 }
 
 export function requireAuthUser(): AuthUser | null {
@@ -41,6 +44,7 @@ export function requireAuthUser(): AuthUser | null {
     Taro.reLaunch({ url: "/pages/login/index" });
     return null;
   }
+  Taro.setStorageSync(ACTIVE_USER_KEY, user.id);
   return user;
 }
 

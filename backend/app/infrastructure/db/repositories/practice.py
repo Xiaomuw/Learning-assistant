@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import or_, select
 
 from app.infrastructure.db.database import session_scope
-from app.infrastructure.db.models import PracticeAttemptModel, QuestionBankItemModel
+from app.infrastructure.db.models import PracticeAttemptModel, PracticeQuestionModel, QuestionBankItemModel
 from app.infrastructure.db.repositories._shared import (
     QUIZ_DIFFICULTY_ORDER,
     normalize_option_rationales,
@@ -17,6 +17,7 @@ from app.infrastructure.db.repositories._shared import (
 )
 from app.shared.schemas.contracts import PracticeAttemptRecord, QuestionBankItemRecord, UserMemoryRecord
 from app.knowledge.concept_registry import ConceptMatch, get_concept_registry
+from app.infrastructure.db.repositories.practice_questions import normalize_difficulty
 
 
 def upsert_question_bank_item_records(items: list[dict[str, Any]]) -> int:
@@ -63,6 +64,72 @@ def list_question_bank_item_records(
     years: list[int] | None = None,
     limit: int = 20,
 ) -> list[QuestionBankItemRecord]:
+    practice_items = list_practice_question_records(
+        subject_id=subject_id,
+        knowledge_points=knowledge_points,
+        difficulty=difficulty,
+        limit=limit,
+    )
+    if len(practice_items) >= limit:
+        return practice_items[:limit]
+    remaining = max(0, limit - len(practice_items))
+    legacy_items = _list_legacy_question_bank_item_records(
+        subject_id=subject_id,
+        knowledge_points=knowledge_points,
+        difficulty=difficulty,
+        years=years,
+        limit=remaining,
+    )
+    seen = {item.question_id for item in practice_items}
+    merged = list(practice_items)
+    for item in legacy_items:
+        if item.question_id in seen:
+            continue
+        merged.append(item)
+        seen.add(item.question_id)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def list_practice_question_records(
+    *,
+    subject_id: str | None = None,
+    knowledge_points: list[str] | None = None,
+    difficulty: str | None = None,
+    limit: int = 20,
+) -> list[QuestionBankItemRecord]:
+    with session_scope() as session:
+        stmt = select(PracticeQuestionModel)
+        if subject_id:
+            stmt = stmt.where(PracticeQuestionModel.subject_id == subject_id)
+        normalized_points = [str(point).strip() for point in list(knowledge_points or []) if str(point).strip()]
+        if normalized_points:
+            stmt = stmt.where(
+                or_(
+                    PracticeQuestionModel.concept_id.in_(normalized_points),
+                    PracticeQuestionModel.concept_name.in_(normalized_points),
+                )
+            )
+        normalized_difficulty = normalize_difficulty(difficulty) if difficulty else ""
+        if normalized_difficulty:
+            stmt = stmt.where(PracticeQuestionModel.difficulty == normalized_difficulty)
+        stmt = stmt.order_by(
+            PracticeQuestionModel.updated_at.desc(),
+            PracticeQuestionModel.question_id.asc(),
+        ).limit(max(1, int(limit or 20)))
+        rows = session.scalars(stmt).all()
+        return [_practice_question_record(row) for row in rows]
+
+
+def _list_legacy_question_bank_item_records(
+    *,
+    subject_id: str | None = None,
+    knowledge_points: list[str] | None = None,
+    difficulty: str | None = None,
+    years: list[int] | None = None,
+    limit: int = 20,
+) -> list[QuestionBankItemRecord]:
     with session_scope() as session:
         stmt = select(QuestionBankItemModel)
         if subject_id:
@@ -87,6 +154,32 @@ def list_question_bank_item_records(
         ).limit(limit)
         rows = session.scalars(stmt).all()
         return [serialize_question_bank_item_record(row) for row in rows]
+
+
+def _practice_question_record(row: PracticeQuestionModel) -> QuestionBankItemRecord:
+    options_json = dict(row.options_json or {})
+    return QuestionBankItemRecord(
+        id=row.question_id,
+        question_id=row.question_id,
+        subject_id=row.subject_id,
+        knowledge_point=row.concept_name or row.concept_id,
+        chapter_id=str((row.metadata_json or {}).get("canonical", {}).get("chapter_id") or ""),
+        topic_id=str((row.metadata_json or {}).get("canonical", {}).get("topic_id") or ""),
+        concept_id=row.concept_id,
+        concept_name=row.concept_name,
+        concept_mapping_status="matched",
+        question=row.stem,
+        options=[{"key": key, "text": str(options_json.get(key) or "")} for key in ("A", "B", "C", "D")],
+        correct_option=row.answer,
+        explanation=row.explanation,
+        option_rationales={},
+        difficulty=row.difficulty,
+        source_type="question_bank",
+        source_name="practice_question",
+        source_year=None,
+        hint=row.common_trap,
+        tags=["408", "practice_question"],
+    )
 
 
 def list_practice_recommendation_records(
@@ -161,6 +254,32 @@ def create_practice_attempt_record(
         session.add(attempt)
         session.flush()
         return serialize_practice_attempt_record(attempt)
+
+
+def find_practice_attempt_record_for_question(
+    *,
+    user_id: str,
+    session_id: str = "",
+    subject_id: str = "general",
+    question_id: str = "",
+) -> PracticeAttemptRecord | None:
+    normalized_question_id = str(question_id or "").strip()
+    if not normalized_question_id:
+        return None
+
+    with session_scope() as session:
+        row = session.scalars(
+            select(PracticeAttemptModel)
+            .where(
+                PracticeAttemptModel.user_id == user_id,
+                PracticeAttemptModel.session_id == session_id,
+                PracticeAttemptModel.subject_id == subject_id,
+                PracticeAttemptModel.question_id == normalized_question_id,
+            )
+            .order_by(PracticeAttemptModel.created_at.desc())
+            .limit(1)
+        ).first()
+        return serialize_practice_attempt_record(row) if row is not None else None
 
 
 def _concept_payload_for_item(item: dict[str, Any]) -> dict[str, str]:

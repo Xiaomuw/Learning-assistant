@@ -23,6 +23,7 @@ from app.services.rag.vector_store import (
     _build_vector_id,
     _keyword_score,
     _validate_embedding_dimensions,
+    get_collection_document_status,
     search_documents,
     upsert_documents,
 )
@@ -266,6 +267,7 @@ class RetrievalVectorContractTest(unittest.TestCase):
             embedding_ready=False,
         )
         self.assertEqual(empty["coverage_level"], "empty")
+        self.assertFalse(empty["content_ready"])
         self.assertFalse(empty["retrieval_ready"])
         self.assertIn("chapter", empty["missing_doc_types"])
 
@@ -279,6 +281,7 @@ class RetrievalVectorContractTest(unittest.TestCase):
             embedding_ready=True,
         )
         self.assertEqual(sparse["coverage_level"], "sparse")
+        self.assertTrue(sparse["content_ready"])
         self.assertTrue(sparse["retrieval_ready"])
         self.assertIn("question_bank", sparse["missing_doc_types"])
 
@@ -293,6 +296,54 @@ class RetrievalVectorContractTest(unittest.TestCase):
         )
         self.assertEqual(ready["coverage_level"], "ready")
         self.assertTrue(ready["retrieval_ready"])
+
+        blocked = _build_coverage_fields(
+            doc_count=4,
+            chapter_count=4,
+            exam_pattern_count=0,
+            question_count=0,
+            url_count=0,
+            pdf_count=0,
+            embedding_ready=True,
+            index_ready=False,
+        )
+        self.assertTrue(blocked["content_ready"])
+        self.assertFalse(blocked["retrieval_ready"])
+
+    def test_collection_status_separates_pgvector_model_content_and_retrieval_readiness(self) -> None:
+        counts = {
+            "doc_count": 4,
+            "chapter_count": 4,
+            "exam_pattern_count": 0,
+            "question_count": 0,
+            "url_count": 0,
+            "pdf_count": 0,
+        }
+        with (
+            patch(
+                "app.services.rag.vector_store.describe_vector_store_health",
+                return_value={
+                    "pgvector_ready": True,
+                    "schema_ready": True,
+                    "index_ready": True,
+                    "embedding_model_ready": False,
+                    "embedding_model_error": "embedding_api_key_missing",
+                    "schema_issues": [],
+                    "embedding_profile": {"embedding_model": "models/gemini-embedding-2"},
+                },
+            ),
+            patch("app.services.rag.vector_store._get_collection_counts", return_value=counts),
+        ):
+            status = get_collection_document_status(subject_id="network")
+
+        self.assertTrue(status.pgvector_ready)
+        self.assertTrue(status.schema_ready)
+        self.assertTrue(status.index_ready)
+        self.assertFalse(status.embedding_model_ready)
+        self.assertFalse(status.embedding_ready)
+        self.assertTrue(status.content_ready)
+        self.assertFalse(status.retrieval_ready)
+        self.assertEqual(status.embedding_model_error, "embedding_api_key_missing")
 
     def test_retrieval_diagnostics_distinguish_low_score(self) -> None:
         with patch(

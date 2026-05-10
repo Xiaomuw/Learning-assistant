@@ -39,6 +39,7 @@ from app.persistence.repositories.graph_facts import (
     SqlMasterySnapshotRepository,
     SqlQuestionItemRepository,
     SqlToolRunRepository,
+    _text,
 )
 from app.shared.schemas.agent_graphs import EvidenceChunk, LearningEvent, ToolCapability, ToolResult, ToolStatus
 
@@ -103,6 +104,7 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
             },
         )
         self.assertIn("event_type", LearningEventModel.__table__.columns)
+        self.assertIn("hash_key", LearningEventModel.__table__.columns)
         self.assertIn("capability", ToolRunModel.__table__.columns)
         self.assertIn("p_mastery", MasterySnapshotModel.__table__.columns)
         self.assertIn("langsmith_run_id", GraphRunModel.__table__.columns)
@@ -128,6 +130,25 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         self.assertEqual(events[0].event_type, "question_answered")
         self.assertEqual(events[0].payload["score"], 0.8)
         self.assertNotIn("不要保存完整答案", str(events[0].payload))
+
+    def test_learning_event_repository_deduplicates_by_hash_key(self) -> None:
+        repo = SqlLearningEventRepository(session_factory=self.session_scope)
+        first = LearningEvent(
+            id="event-hash-1",
+            event_type="question_answered",
+            user_id="u1",
+            graph_run_id="run-1",
+            payload={"hash_key": "same-message-same-event", "score": 0.6},
+        )
+        second = first.model_copy(update={"id": "event-hash-2", "payload": {"hash_key": "same-message-same-event", "score": 0.9}})
+
+        self.assertEqual(repo.append(first), "event-hash-1")
+        self.assertEqual(repo.append(second), "event-hash-1")
+
+        with self.session_scope() as session:
+            rows = session.scalars(select(LearningEventModel)).all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].hash_key, "same-message-same-event")
 
     def test_graph_run_repository_records_run_and_audit_event(self) -> None:
         repo = SqlGraphRunRepository(session_factory=self.session_scope)
@@ -160,6 +181,32 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         self.assertNotIn("敏感", str(run.outputs_summary))
         self.assertEqual(len(node_runs), 1)
         self.assertNotIn("敏感", str(node_runs[0].output_summary))
+
+    def test_text_helper_truncates_within_requested_length(self) -> None:
+        self.assertEqual(_text("short", 20), "short")
+        self.assertEqual(_text("x" * 25, 20), f"{'x' * 17}...")
+        self.assertEqual(len(_text("x" * 25, 20)), 20)
+        self.assertEqual(_text("abcdef", 3), "abc")
+        self.assertEqual(_text("abcdef", 2), "ab")
+        self.assertEqual(_text("abcdef", 0), "")
+
+    def test_graph_run_repository_clamps_request_mode_to_column_length(self) -> None:
+        repo = SqlGraphRunRepository(session_factory=self.session_scope)
+        graph_run_id = repo.start_run(
+            {
+                "run_id": "run-long-request-mode",
+                "graph_type": "qa",
+                "run_name": "qagraph.runtime",
+                "status": "running",
+                "request_mode": "sse-with-extra-debug-context",
+            }
+        )
+
+        with self.session_scope() as session:
+            run = session.get(GraphRunModel, graph_run_id)
+
+        self.assertLessEqual(len(run.request_mode), 20)
+        self.assertEqual(run.request_mode, "sse-with-extra-de...")
 
     def test_tool_run_repository_saves_only_summary_and_evidence_refs(self) -> None:
         repo = SqlToolRunRepository(session_factory=self.session_scope)
@@ -199,8 +246,8 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
             {
                 "attempt_id": "attempt-1",
                 "user_id": "u1",
-                "subject_id": "network",
-                "concept_id": "HTTP",
+                "subject_id": "data-structure",
+                "concept_id": "data-structure.binary-tree.traversal",
                 "is_correct": True,
             }
         )
@@ -220,10 +267,22 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
     def test_mastery_snapshot_repository_upsert_keeps_unique_user_subject_concept(self) -> None:
         repo = SqlMasterySnapshotRepository(session_factory=self.session_scope)
         first_id = repo.upsert_snapshot(
-            {"user_id": "u1", "subject_id": "network", "concept_id": "HTTP", "p_mastery": 0.4, "status": "weak"}
+            {
+                "user_id": "u1",
+                "subject_id": "data-structure",
+                "concept_id": "data-structure.binary-tree.traversal",
+                "p_mastery": 0.4,
+                "status": "weak",
+            }
         )
         second_id = repo.upsert_snapshot(
-            {"user_id": "u1", "subject_id": "network", "concept_id": "HTTP", "p_mastery": 0.7, "status": "learning"}
+            {
+                "user_id": "u1",
+                "subject_id": "data-structure",
+                "concept_id": "data-structure.binary-tree.traversal",
+                "p_mastery": 0.7,
+                "status": "learning",
+            }
         )
         snapshots = repo.list_snapshots(user_id="u1", limit=10)
 
@@ -231,6 +290,33 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0]["p_mastery"], 0.7)
         self.assertEqual(snapshots[0]["status"], "learning")
+
+    def test_attempt_and_mastery_repositories_skip_non_canonical_concepts(self) -> None:
+        attempt_repo = SqlAttemptRepository(session_factory=self.session_scope)
+        mastery_repo = SqlMasterySnapshotRepository(session_factory=self.session_scope)
+
+        self.assertEqual(
+            attempt_repo.create_attempt(
+                {
+                    "attempt_id": "bad-attempt",
+                    "user_id": "u1",
+                    "subject_id": "general",
+                    "concept_id": "http",
+                    "is_correct": True,
+                }
+            ),
+            "",
+        )
+        self.assertEqual(
+            mastery_repo.upsert_snapshot(
+                {"user_id": "u1", "subject_id": "general", "concept_id": "http", "p_mastery": 0.7}
+            ),
+            "",
+        )
+
+        with self.session_scope() as session:
+            self.assertEqual(session.scalars(select(GraphAttemptModel)).all(), [])
+            self.assertEqual(session.scalars(select(MasterySnapshotModel)).all(), [])
 
     def test_question_item_repository_persists_and_finds_similar_items(self) -> None:
         repo = SqlQuestionItemRepository(session_factory=self.session_scope)

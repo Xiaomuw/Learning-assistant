@@ -10,13 +10,20 @@ Import Question Bank
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from app.infrastructure.db.repositories.bootstrap import init_database
-from app.infrastructure.llm.provider import ensure_model_env_aliases
-from app.domains.practice.service import import_question_bank_file
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+load_dotenv(BACKEND_ROOT / ".env")
+
+from app.domains.practice.service import import_question_bank_file  # noqa: E402
+from app.infrastructure.db.repositories.bootstrap import init_database  # noqa: E402
+from app.infrastructure.llm.provider import ensure_model_env_aliases  # noqa: E402
 
 
 def main() -> None:
@@ -25,7 +32,6 @@ def main() -> None:
     parser.add_argument("--subject", dest="subject_id", default=None, help="默认 subject/notebook id")
     args = parser.parse_args()
 
-    load_dotenv()
     ensure_model_env_aliases()
     init_database()
 

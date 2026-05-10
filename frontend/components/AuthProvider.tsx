@@ -46,17 +46,6 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
-function readStorageItem(key: string): string | null {
-  if (!isBrowser()) {
-    return null;
-  }
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
 function writeStorageItem(key: string, value: string) {
   if (!isBrowser()) {
     return;
@@ -76,36 +65,6 @@ function removeStorageItem(key: string) {
     window.localStorage.removeItem(key);
   } catch {
     // Ignore storage failures so auth pages keep rendering in restricted browsers.
-  }
-}
-
-function loadStoredAuthUser(): AuthUser | null {
-  if (!isBrowser()) {
-    return null;
-  }
-
-  try {
-    const raw = readStorageItem(AUTH_USER_SNAPSHOT_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<AuthUser>;
-    if (
-      typeof parsed.id !== "string" ||
-      typeof parsed.email !== "string" ||
-      typeof parsed.display_name !== "string"
-    ) {
-      return null;
-    }
-
-    return {
-      id: parsed.id,
-      email: parsed.email,
-      display_name: parsed.display_name,
-    };
-  } catch {
-    return null;
   }
 }
 
@@ -145,9 +104,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const performUserRefresh = useCallback(async (
-    options: { fallbackUser?: AuthUser | null } = {}
-  ) => {
+  const performUserRefresh = useCallback(async () => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     try {
@@ -163,16 +120,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       setUser(payload.user);
       persistStoredAuthUser(payload.user);
       return payload.user;
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message === "AUTH_RESTORE_TIMEOUT" &&
-        options.fallbackUser
-      ) {
-        setUser(options.fallbackUser);
-        return options.fallbackUser;
-      }
-
+    } catch {
       setUser(null);
       setLearningStoreUser(null);
       persistStoredAuthUser(null);
@@ -189,22 +137,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     async function bootstrap() {
       setIsLoading(true);
-      const cachedUser = loadStoredAuthUser();
-
-      if (active && cachedUser) {
-        setUser(cachedUser);
-        setLearningStoreUser(cachedUser.id);
-        setIsLoading(false);
-      }
-
-      const nextUser = await performUserRefresh({ fallbackUser: cachedUser });
+      const nextUser = await performUserRefresh();
       if (!active) {
         return;
       }
 
-      if (nextUser || !cachedUser) {
-        setUser(nextUser);
-      }
+      setUser(nextUser);
       setIsLoading(false);
     }
 
