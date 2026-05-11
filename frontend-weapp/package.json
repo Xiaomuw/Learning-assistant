@@ -14,6 +14,7 @@
     "check:weapp": "npm run typecheck && npm run lint && npm run build:weapp",
     "dev:weapp": "taro build --type weapp --watch --no-check",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "test:chat-stream": "node scripts/test-chat-stream-core.cjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

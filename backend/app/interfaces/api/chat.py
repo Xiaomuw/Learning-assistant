@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import json
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
@@ -39,6 +40,48 @@ from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
 router = APIRouter()
 
 CHAT_HEARTBEAT_SECONDS = 12.0
+
+
+def _runtime_stream_sse_event(raw_event: Any, *, session_id: str) -> dict[str, str] | None:
+    if not isinstance(raw_event, dict):
+        return None
+    event_name = str(raw_event.get("event") or "").strip()
+    raw_data = raw_event.get("data") if isinstance(raw_event.get("data"), dict) else {}
+    if event_name == "answer_delta":
+        delta = str(raw_data.get("delta") or "")
+        streaming_mode = str(raw_data.get("streaming_mode") or "token")
+        is_synthetic_delta = bool(raw_data.get("is_synthetic_delta", False))
+        if not delta or streaming_mode != "token" or is_synthetic_delta:
+            return None
+        data = {
+            "delta": delta,
+            "streaming_mode": streaming_mode,
+            "is_synthetic_delta": False,
+            "session_id": session_id,
+        }
+    elif event_name == "status":
+        data = {
+            "stream_stage": str(raw_data.get("stream_stage") or "model_progress"),
+            "stage_label": str(raw_data.get("stage_label") or "实时进度"),
+            "detail": str(raw_data.get("detail") or ""),
+            "safe_decision_summary": str(raw_data.get("safe_decision_summary") or ""),
+            "status": str(raw_data.get("status") or "running"),
+            "streaming_mode": str(raw_data.get("streaming_mode") or "token"),
+            "session_id": session_id,
+        }
+        reasoning_trace_char_count = int(raw_data.get("reasoning_trace_char_count") or 0)
+        if reasoning_trace_char_count > 0:
+            data["reasoning_trace_char_count"] = reasoning_trace_char_count
+    else:
+        return None
+    return {"event": event_name, "data": json.dumps(data, ensure_ascii=False)}
+
+
+async def _cancel_task_safely(task: asyncio.Task | None) -> None:
+    if task and not task.done():
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 def _safe_chat_error_message(exc: Exception) -> str:
@@ -155,6 +198,19 @@ async def chat(
         stream_state: dict = {}
         chat_stream = None
         pending_chunk_task: asyncio.Task | None = None
+        pending_runtime_task: asyncio.Task | None = None
+        runtime_stream_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def runtime_stream_writer(raw_event: dict[str, Any]) -> None:
+            event = _runtime_stream_sse_event(raw_event, session_id=request.session_id)
+            if event is None:
+                return
+            try:
+                loop.call_soon_threadsafe(runtime_stream_queue.put_nowait, event)
+            except RuntimeError:
+                return
+
         try:
             yield {
                 "event": "status",
@@ -179,14 +235,20 @@ async def chat(
                 question=request.question,
                 subject_id=request.subject_id,
                 thinking_mode=request.thinking_mode,
+                stream_writer=runtime_stream_writer,
             )
             pending_chunk_task = asyncio.create_task(anext(chat_stream))
+            pending_runtime_task = asyncio.create_task(runtime_stream_queue.get())
             heartbeat_count = 0
 
             while True:
+                wait_tasks = {pending_chunk_task}
+                if pending_runtime_task is not None:
+                    wait_tasks.add(pending_runtime_task)
                 done, _pending = await asyncio.wait(
-                    {pending_chunk_task},
+                    wait_tasks,
                     timeout=CHAT_HEARTBEAT_SECONDS,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
                 if not done:
                     heartbeat_count += 1
@@ -204,9 +266,22 @@ async def chat(
                     }
                     continue
 
+                if pending_runtime_task in done:
+                    yield pending_runtime_task.result()
+                    while not runtime_stream_queue.empty():
+                        yield runtime_stream_queue.get_nowait()
+                    pending_runtime_task = asyncio.create_task(runtime_stream_queue.get())
+
+                if pending_chunk_task not in done:
+                    continue
+
                 try:
                     chunk = pending_chunk_task.result()
                 except StopAsyncIteration:
+                    await _cancel_task_safely(pending_runtime_task)
+                    pending_runtime_task = None
+                    while not runtime_stream_queue.empty():
+                        yield runtime_stream_queue.get_nowait()
                     break
 
                 pending_chunk_task = asyncio.create_task(anext(chat_stream))
@@ -254,12 +329,14 @@ async def chat(
                 chat_stream=chat_stream,
                 pending_chunk_task=pending_chunk_task,
             )
+            await _cancel_task_safely(pending_runtime_task)
             raise
         except Exception as e:
             await _close_chat_stream_safely(
                 chat_stream=chat_stream,
                 pending_chunk_task=pending_chunk_task,
             )
+            await _cancel_task_safely(pending_runtime_task)
             error_message = _safe_chat_error_message(e)
             reason = _chat_error_reason(e)
             if reason in {"timeout", "model_unavailable"}:

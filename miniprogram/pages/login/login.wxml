@@ -1,11 +1,18 @@
 <view class="page-bg">
   <!-- Hero Banner -->
-  <view class="hero hero-secondary">
-    <view class="badge-tag">
-      <text class="badge-tag-text">AI 学习助手</text>
+  <view class="hero bg-secondary">
+    <!-- Floating decorative -->
+    <text class="hero-deco hero-deco-r animate-float-tag">🧠</text>
+    <text class="hero-deco hero-deco-l animate-float-tag" style="animation-delay: 1.2s;">📖</text>
+
+    <view class="hero-inner">
+      <view class="neo-badge mb-3">
+        <text>✦</text>
+        <text class="neo-badge-text">AI 学习助手</text>
+      </view>
+      <view class="hero-title">欢迎回来 👋</view>
+      <view class="hero-subtitle">登录你的账号，继续你的学习旅程</view>
     </view>
-    <view class="hero-title">欢迎回来 👋</view>
-    <view class="hero-subtitle">登录你的账号，继续你的学习旅程</view>
   </view>
 
   <!-- Form -->
@@ -13,19 +20,21 @@
     <view class="neo-box form-card">
       <!-- Email -->
       <view class="field-group">
-        <view class="field-label">📧 邮箱地址</view>
+        <view class="neo-label flex items-center gap-2 mb-1">📧 邮箱地址</view>
         <input
           class="neo-input"
           type="text"
           placeholder="you@example.com"
           data-field="email"
           bindinput="onInput"
+          bindfocus="onInputFocus"
+          bindblur="onInputBlur"
         />
       </view>
 
       <!-- Password -->
       <view class="field-group">
-        <view class="field-label">🔑 密码</view>
+        <view class="neo-label flex items-center gap-2 mb-1">🔑 密码</view>
         <view class="input-row">
           <input
             class="neo-input flex-1"
@@ -42,13 +51,13 @@
       </view>
 
       <!-- Error -->
-      <view wx:if="{{error}}" class="error-box">
+      <view wx:if="{{error}}" class="neo-error-box">
         <text>{{error}}</text>
       </view>
 
       <!-- Submit -->
       <view
-        class="neo-btn submit-btn {{isSubmitting ? 'btn-disabled' : ''}}"
+        class="neo-btn w-full text-center {{isSubmitting ? 'btn-disabled' : ''}}"
         bindtap="handleLogin"
       >
         <text wx:if="{{isSubmitting}}">登录中…</text>
@@ -56,19 +65,19 @@
       </view>
 
       <!-- Divider -->
-      <view class="divider">
-        <view class="divider-line" />
-        <text class="divider-text">OR</text>
-        <view class="divider-line" />
+      <view class="neo-divider">
+        <view class="neo-divider-line"></view>
+        <text class="neo-divider-text">OR</text>
+        <view class="neo-divider-line"></view>
       </view>
 
       <!-- Register hint -->
-      <view class="hint-box">
-        <text class="hint-text">还没账号？先去邮箱收验证码，再回来继续注册。</text>
+      <view class="neo-hint">
+        <text>还没账号？先去邮箱收验证码，再回来继续注册。</text>
       </view>
 
-      <view class="neo-btn ghost-btn" bindtap="goToRegister">
-        创建新账号 →
+      <view class="neo-btn-ghost w-full text-center" bindtap="goToRegister">
+        <text>创建新账号 →</text>
       </view>
     </view>
   </view>

@@ -255,7 +255,7 @@ def _orchestrator_state_from_chat_state(
 
 
 def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
-    return {
+    context = {
         "user_id": str(state.get("user_id") or ""),
         "session_id": str(state.get("session_id") or ""),
         "subject_id": normalize_subject_id(state.get("subject_id")),
@@ -276,6 +276,10 @@ def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
         },
         "stream_answer_tokens": bool(state.get("stream_answer_tokens")),
     }
+    stream_writer = state.get("stream_writer")
+    if callable(stream_writer):
+        context["stream_writer"] = stream_writer
+    return context
 
 
 def _chat_state_from_orchestrator_result(

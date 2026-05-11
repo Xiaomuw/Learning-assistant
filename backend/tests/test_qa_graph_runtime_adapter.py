@@ -318,6 +318,29 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
 
         self.assertEqual(_stream_delta_to_text(chunk), "visible answer")
 
+    def test_stream_delta_extracts_provider_delta_shapes(self) -> None:
+        content_blocks = _FakeStreamChunk(
+            [
+                {"type": "text_delta", "delta": "HTTP "},
+                {"type": "reasoning_content", "delta": "hidden"},
+                {"type": "output_text", "output_text": "是应用层协议。"},
+            ]
+        )
+        openai_choice = {
+            "choices": [
+                {"delta": {"content": "客户端发请求，"}},
+                {"delta": {"content": "服务器回响应。"}},
+            ]
+        }
+        metadata_fallback = _FakeStreamChunk(
+            "",
+            additional_kwargs={"choices": [{"delta": {"content": "来自 metadata 的片段"}}]},
+        )
+
+        self.assertEqual(_stream_delta_to_text(content_blocks), "HTTP 是应用层协议。")
+        self.assertEqual(_stream_delta_to_text(openai_choice), "客户端发请求，服务器回响应。")
+        self.assertEqual(_stream_delta_to_text(metadata_fallback), "来自 metadata 的片段")
+
     def test_reasoning_delta_extracts_debug_content_from_deepseek_chunks(self) -> None:
         chunk = _FakeStreamChunk(
             [

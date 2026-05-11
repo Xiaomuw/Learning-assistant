@@ -10,14 +10,14 @@
   ],
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#fff",
+    "navigationBarBackgroundColor": "#FFFDF8",
     "navigationBarTitleText": "Learning Assistant",
     "navigationBarTextStyle": "black"
   },
   "tabBar": {
-    "color": "#111827",
-    "selectedColor": "#4F46E5",
-    "backgroundColor": "#ffffff",
+    "color": "#1e293b",
+    "selectedColor": "#1e293b",
+    "backgroundColor": "#FFFDF8",
     "borderStyle": "black",
     "list": [
       {

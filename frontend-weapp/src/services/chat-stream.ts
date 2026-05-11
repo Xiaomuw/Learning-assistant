@@ -1,7 +1,15 @@
 import Taro from "@tarojs/taro";
 import { clearAuthSession, getAccessToken } from "@/store/auth";
 import { API_BASE, refreshAuthSession } from "@/services/api";
+import {
+  createSSEParser,
+  decodeUtf8,
+  recordStreamChunkDiagnostics,
+  recordStreamEventDiagnostics
+} from "@/services/chat-stream-core";
 import type { ChatStreamDiagnostics, Explanation, SSEEvent } from "@/types/api";
+
+export { createSSEParser } from "@/services/chat-stream-core";
 
 export interface ChatStreamPayload {
   user_id: string;
@@ -18,11 +26,6 @@ export interface ChatStreamHandlers {
   idleTimeoutMs?: number;
 }
 
-interface ParsedSSEMessage {
-  event: string;
-  data: string;
-}
-
 const MIN_CHAT_REQUEST_TIMEOUT_MS = 120000;
 const CHAT_REQUEST_TIMEOUT_BUFFER_MS = 15000;
 const STREAM_DIAGNOSTICS_THROTTLE_MS = 750;
@@ -36,23 +39,6 @@ function normalizeRequestError(error: any) {
   if (/timeout/i.test(message)) return "聊天响应超时，请稍后重试。";
   if (/abort|aborted|cancel/i.test(message)) return "聊天连接已中断";
   return message || "聊天连接中断";
-}
-
-function decodeUtf8(buffer: ArrayBuffer, decoder: TextDecoder | null): string {
-  const bytes = new Uint8Array(buffer);
-  if (decoder) {
-    return decoder.decode(bytes, { stream: true });
-  }
-
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 1) {
-    binary += String.fromCharCode(bytes[index]);
-  }
-  try {
-    return decodeURIComponent(escape(binary));
-  } catch {
-    return binary;
-  }
 }
 
 function parseData(raw: string) {
@@ -99,59 +85,6 @@ function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
     return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
   }
   return "讲解已经准备好了。";
-}
-
-export function createSSEParser(onMessage: (message: ParsedSSEMessage) => void) {
-  let buffer = "";
-  let eventName = "";
-  let dataLines: string[] = [];
-
-  function dispatch() {
-    if (dataLines.length === 0) {
-      eventName = "";
-      return;
-    }
-    onMessage({
-      event: eventName || "message",
-      data: dataLines.join("\n")
-    });
-    eventName = "";
-    dataLines = [];
-  }
-
-  function consumeLine(rawLine: string) {
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    if (!line) {
-      dispatch();
-      return;
-    }
-    if (line.startsWith(":")) {
-      return;
-    }
-    if (line.startsWith("event:")) {
-      eventName = line.slice(6).trim();
-      return;
-    }
-    if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trimStart());
-    }
-  }
-
-  return {
-    push(chunk: string) {
-      buffer += chunk;
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      lines.forEach(consumeLine);
-    },
-    flush() {
-      if (buffer) {
-        consumeLine(buffer);
-        buffer = "";
-      }
-      dispatch();
-    }
-  };
 }
 
 export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamHandlers) {
@@ -226,27 +159,16 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
 
   const dispatchEvent = (eventName: string, rawData: string) => {
     const data = parseData(rawData);
-    diagnostics.parsedEventCount = (diagnostics.parsedEventCount || 0) + 1;
-    let forceDiagnostics = false;
-    if (eventName === "answer_delta") {
-      const mode = typeof data?.streaming_mode === "string" ? data.streaming_mode : "token";
-      const synthetic = Boolean(data?.is_synthetic_delta);
-      if (mode === "token" && !synthetic) {
-        diagnostics.realTokenDeltaCount = (diagnostics.realTokenDeltaCount || 0) + 1;
-        if (diagnostics.firstRealTokenDeltaMs === undefined) {
-          diagnostics.firstRealTokenDeltaMs = Date.now() - startedAt;
-          forceDiagnostics = true;
-        }
-      } else {
-        diagnostics.syntheticDeltaCount = (diagnostics.syntheticDeltaCount || 0) + 1;
-        diagnostics.degradedReason = diagnostics.degradedReason || "node_synthetic_delta";
-        forceDiagnostics = diagnostics.syntheticDeltaCount === 1;
-      }
-    }
+    const diagnosticUpdate = recordStreamEventDiagnostics(
+      diagnostics,
+      eventName,
+      data,
+      Date.now() - startedAt
+    );
     handlers.onEvent({ event: eventName, data });
     if (eventName === "answer_delta" || eventName === "done" || eventName === "error") {
       emitDiagnostics(eventName === "answer_delta" ? "收到回答片段" : "流式请求结束", {
-        force: forceDiagnostics || eventName === "done" || eventName === "error"
+        force: diagnosticUpdate.force || eventName === "done" || eventName === "error"
       });
     }
     if (eventName === "done") {
@@ -370,12 +292,8 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     activeTask.onChunkReceived((response) => {
       if (completed) return;
       scheduleIdleTimer();
-      diagnostics.chunkCount = (diagnostics.chunkCount || 0) + 1;
-      const isFirstChunk = diagnostics.firstChunkMs === undefined;
-      if (diagnostics.firstChunkMs === undefined) {
-        diagnostics.firstChunkMs = Date.now() - startedAt;
-      }
-      emitDiagnostics("收到网络 chunk。", { force: isFirstChunk });
+      const diagnosticUpdate = recordStreamChunkDiagnostics(diagnostics, Date.now() - startedAt);
+      emitDiagnostics("收到网络 chunk。", { force: diagnosticUpdate.force });
       parser.push(decodeUtf8(response.data, decoder));
     });
 

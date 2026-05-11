@@ -849,30 +849,59 @@ def _truncate_stream_text(text: str, max_length: int) -> str:
     return normalized[: max_length - 1] + "…"
 
 
+_STREAM_TEXT_KEYS = ("text", "content", "delta", "text_delta", "content_delta", "output_text")
+_STREAM_CONTAINER_KEYS = ("choices", "message", "output", "outputs", "content_block", "message_chunk")
+_STREAM_REASONING_TYPES = {"reasoning", "thinking", "reasoning_content"}
+
+
+def _stream_payload_to_visible_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(_stream_payload_to_visible_text(item) for item in value)
+    if isinstance(value, dict):
+        item_type = str(value.get("type") or "").lower()
+        if item_type in _STREAM_REASONING_TYPES:
+            return ""
+        parts: list[str] = []
+        for key in _STREAM_TEXT_KEYS:
+            if key not in value:
+                continue
+            parts.append(_stream_payload_to_visible_text(value.get(key)))
+        for key in _STREAM_CONTAINER_KEYS:
+            if key not in value:
+                continue
+            parts.append(_stream_payload_to_visible_text(value.get(key)))
+        return "".join(parts)
+    return str(value)
+
+
 def _stream_delta_to_text(chunk: Any) -> str:
     content = getattr(chunk, "content", chunk)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, dict):
-                item_type = str(item.get("type") or "").lower()
-                if item_type in {"reasoning", "thinking", "reasoning_content"}:
-                    continue
-                text = item.get("text") or item.get("content") or ""
-            else:
-                text = str(item)
+    text = _stream_payload_to_visible_text(content)
+    if text:
+        return text
+
+    for attr_name in ("additional_kwargs", "response_metadata"):
+        metadata = getattr(chunk, attr_name, None)
+        if not isinstance(metadata, dict):
+            continue
+        for key in (*_STREAM_TEXT_KEYS, *_STREAM_CONTAINER_KEYS):
+            if key not in metadata:
+                continue
+            text = _stream_payload_to_visible_text(metadata.get(key))
             if text:
-                parts.append(str(text))
-        return "".join(parts)
-    if isinstance(content, dict):
-        item_type = str(content.get("type") or "").lower()
-        if item_type in {"reasoning", "thinking", "reasoning_content"}:
+                return text
+
+    text_method = getattr(chunk, "text", None)
+    if callable(text_method):
+        try:
+            return str(text_method() or "")
+        except Exception:
             return ""
-        text = content.get("text") or content.get("content") or ""
-        return str(text)
-    return str(content)
+    return ""
 
 
 def _stream_reasoning_delta_to_text(chunk: Any) -> str:

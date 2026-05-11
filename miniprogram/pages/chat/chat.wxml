@@ -25,6 +25,7 @@
     >
       <text class="notebook-item-icon">📘</text>
       <text class="notebook-item-name">{{item.name}}</text>
+      <text wx:if="{{item.id === selectedNotebookId}}" class="notebook-item-check">✓</text>
     </view>
   </view>
 
@@ -36,7 +37,7 @@
     enhanced="true"
     show-scrollbar="false"
   >
-    <view style="padding: 16px;">
+    <view class="message-pad">
       <block wx:for="{{messages}}" wx:key="timestamp">
         <view class="msg-row {{item.role === 'user' ? 'msg-row-user' : 'msg-row-assistant'}}">
           <view class="msg-bubble {{item.role === 'user' ? 'bubble-user' : (item.isError ? 'bubble-error' : 'bubble-assistant')}}">

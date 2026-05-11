@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from app.application.chat.messages import normalize_explanation_payload
@@ -59,6 +59,7 @@ async def stream_chat(
     question: str,
     subject_id: str,
     thinking_mode: bool = False,
+    stream_writer: Callable[[dict[str, Any]], None] | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     initial_state = build_initial_state(
         user_id=user_id,
@@ -68,6 +69,8 @@ async def stream_chat(
         request_mode="sse",
         thinking_mode=thinking_mode,
     )
+    if callable(stream_writer):
+        initial_state["stream_writer"] = stream_writer
     final_state: dict[str, Any] | None = None
     async for chunk in _async_stream_orchestrator_chunks(initial_state):
         state_update = chunk.get("state_update") if isinstance(chunk.get("state_update"), dict) else {}

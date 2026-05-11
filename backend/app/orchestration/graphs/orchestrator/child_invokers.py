@@ -75,6 +75,7 @@ class QAGraphInvoker:
 
         runtime_context = state.get("chat_runtime_context") if isinstance(state.get("chat_runtime_context"), dict) else {}
         requested_token_stream = bool(runtime_context.get("stream_answer_tokens"))
+        injected_stream_writer = runtime_context.get("stream_writer")
         qa_runtime_context = {
             "graph_run_id": f"{state.get('run_id', '')}:{self.graph_type.value}",
             "stream_answer_tokens": requested_token_stream,
@@ -82,12 +83,15 @@ class QAGraphInvoker:
             "thinking_mode": bool(runtime_context.get("thinking_mode", False)),
         }
         if qa_runtime_context["stream_answer_tokens"]:
-            try:
-                from langgraph.config import get_stream_writer
+            if callable(injected_stream_writer):
+                qa_runtime_context["stream_writer"] = injected_stream_writer
+            else:
+                try:
+                    from langgraph.config import get_stream_writer
 
-                qa_runtime_context["stream_writer"] = get_stream_writer()
-            except Exception:
-                pass
+                    qa_runtime_context["stream_writer"] = get_stream_writer()
+                except Exception:
+                    pass
         adapter = ProductionQARuntimeAdapter(
             model_name=str(runtime_context.get("model_name") or DEFAULT_CHAT_MODEL),
             user_id=str(runtime_context.get("user_id") or state.get("user_id") or ""),

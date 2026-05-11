@@ -37,6 +37,7 @@ frontend-weapp/project.private.config.json
 # Runtime data
 backend/chroma_data/
 backend/data/*.db
+data/*.db
 backend/data/memory/*.json
 
 tmp/
@@ -45,4 +46,5 @@ target/
 *.key
 backend/storage/
 backups/
+docs/pdf/
 .codex-pet-runs/

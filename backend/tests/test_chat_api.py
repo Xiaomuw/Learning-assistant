@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -87,6 +88,78 @@ class _FakeStreamingLLM:
 
     def invoke(self, _messages):
         return self.invoke_text
+
+
+class _RuntimeWriterTokenIterator:
+    def __init__(self, initial_state: dict) -> None:
+        self.initial_state = initial_state
+        self.index = 0
+        self.final_state = {
+            "question_type": "concept",
+            "route": "explain",
+            "explanation": {},
+            "final_answer": "HTTP 是应用层协议。",
+            "quiz_items": [],
+            "memory": {},
+            "streaming_mode": "token",
+            "streaming_token_count": 1,
+        }
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.index == 0:
+            writer = self.initial_state.get("stream_writer")
+            if callable(writer):
+                writer(
+                    {
+                        "event": "answer_delta",
+                        "data": {
+                            "delta": "HTTP 是",
+                            "streaming_mode": "token",
+                            "is_synthetic_delta": False,
+                        },
+                    }
+                )
+            time.sleep(0.02)
+            self.index += 1
+            return {
+                "node": "qa_agent_node",
+                "state_update": {
+                    "question_type": "concept",
+                    "route": "explain",
+                    "explanation": {},
+                    "final_answer": "HTTP 是应用层协议。",
+                    "streaming_mode": "token",
+                },
+                "elapsed": 0.03,
+            }
+        if self.index == 1:
+            self.index += 1
+            return {
+                "node": "finalize_node",
+                "state_update": {
+                    "finalized": True,
+                    "__final_state": self.final_state,
+                },
+                "elapsed": 0.04,
+            }
+        if self.index == 2:
+            self.index += 1
+            return {
+                "node": "final",
+                "state_update": {
+                    "finalized": True,
+                    "question_type": "concept",
+                    "route": "explain",
+                    "final_answer": "HTTP 是应用层协议。",
+                    "streaming_mode": "token",
+                    "streaming_token_count": 1,
+                },
+                "elapsed": 0.04,
+            }
+        raise StopIteration
 
 
 class ChatApiTest(unittest.TestCase):
@@ -741,6 +814,77 @@ class ChatApiTest(unittest.TestCase):
         self.assertIn('"streaming_mode": "token"', body)
         self.assertIn('"is_synthetic_delta": false', body)
         self.assertNotIn("hidden_reasoning", body)
+
+    def test_chat_sse_forwards_runtime_writer_token_before_graph_answer(self) -> None:
+        def _fake_stream_orchestrator(initial_state, **_kwargs):
+            return _RuntimeWriterTokenIterator(initial_state)
+
+        with (
+            patch("app.application.chat.service.stream_orchestrator_chat", side_effect=_fake_stream_orchestrator),
+            patch.object(chat_module, "CHAT_HEARTBEAT_SECONDS", 0.01),
+        ):
+            with self.client.stream(
+                "POST",
+                "/api/chat",
+                json={
+                    "user_id": "default_user",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            ) as response:
+                body = "".join(chunk for chunk in response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: answer_delta", body)
+        self.assertIn('"delta": "HTTP 是"', body)
+        self.assertIn('"streaming_mode": "token"', body)
+        self.assertIn('"is_synthetic_delta": false', body)
+        self.assertLess(body.index("event: answer_delta"), body.index("event: explanation"))
+
+    def test_chat_sse_forwards_real_qagraph_token_before_graph_answer(self) -> None:
+        initial_state = {
+            "user_id": "default_user",
+            "session_id": "session-real-qagraph-token",
+            "subject_id": "general",
+            "subject_name": "数据结构与算法",
+            "subject_description": "",
+            "question": "什么是 HTTP？",
+            "request_mode": "sse",
+            "thinking_mode": False,
+            "memory": {},
+            "short_term_messages": [],
+            "short_term_context": "",
+            "session_memory": {},
+            "session_memory_context": "",
+            "long_term_context": "",
+            "model_name": "deepseek-v4-pro",
+        }
+        fake_llm = _FakeStreamingLLM(["HTTP 是", "应用层协议。"])
+
+        with (
+            patch("app.application.chat.service.build_initial_state", return_value=dict(initial_state)),
+            patch("app.application.chat.service.persist_chat_session"),
+            patch("app.domains.qa.runtime.get_chat_llm", return_value=fake_llm),
+            patch.object(chat_module, "CHAT_HEARTBEAT_SECONDS", 0.01),
+        ):
+            with self.client.stream(
+                "POST",
+                "/api/chat",
+                json={
+                    "user_id": "default_user",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            ) as response:
+                body = "".join(chunk for chunk in response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: answer_delta", body)
+        self.assertIn('"delta": "HTTP 是"', body)
+        self.assertIn('"delta": "应用层协议。"', body)
+        self.assertIn('"streaming_mode": "token"', body)
+        self.assertIn('"is_synthetic_delta": false', body)
+        self.assertLess(body.index('"delta": "HTTP 是"'), body.index("event: explanation"))
 
     def test_chat_sse_emits_final_event_before_done(self) -> None:
         async def _fake_final_stream(**_kwargs):
