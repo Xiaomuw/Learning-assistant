@@ -43,6 +43,7 @@ def run_chat_once(
         session_id=session_id,
         question_type=str(final_state.get("question_type", "concept") or "concept"),
         route=str(final_state.get("route", "explain") or "explain"),
+        final_answer=str(final_state.get("final_answer") or ""),
         explanation=normalize_explanation_payload(final_state.get("explanation")),
         quiz_items=[normalize_quiz_item(item) for item in (final_state.get("quiz_items") or [])],
         quiz_request=final_state.get("quiz_request"),

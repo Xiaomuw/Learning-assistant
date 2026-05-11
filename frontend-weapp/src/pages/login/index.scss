@@ -1,49 +1,76 @@
+$neo-bg: #FFFDF8;
+$neo-ink: #1e293b;
+$neo-accent: #ffb3c6;
+$neo-secondary: #fdf0b0;
+$neo-muted: #c4b5fd;
+$neo-green: #a7f3d0;
+$neo-white: #ffffff;
+$border: 3px solid $neo-ink;
+$radius-card: 24px;
+$radius-pill: 999px;
+$shadow-sm: 3px 4px 0px 0px $neo-ink;
+
 .login-page {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 42px;
-  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 48%, #ffffff 100%);
+  background: $neo-secondary;
 }
 
 .login-hero {
   padding-top: 80px;
+  position: relative;
 }
 
 .login-kicker {
   display: block;
   margin-bottom: 18px;
-  color: #2563eb;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: 1px;
+  color: $neo-ink;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
+  border: $border;
+  border-radius: $radius-pill;
+  background: $neo-white;
+  padding: 8px 20px;
+  display: inline-flex;
+  box-shadow: 2px 3px 0px 0px $neo-ink;
 }
 
 .login-card {
   padding: 34px;
+  background: $neo-white;
 }
 
 .login-card-title {
   display: block;
   font-size: 34px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .login-card-desc {
   display: block;
   margin-top: 12px;
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.7);
   font-size: 26px;
+  font-weight: 700;
   line-height: 1.6;
 }
 
 .login-error {
   display: block;
   margin-top: 24px;
-  color: #dc2626;
+  color: $neo-ink;
   font-size: 26px;
+  font-weight: 700;
   line-height: 1.5;
+  border: $border;
+  border-radius: $radius-card;
+  background: $neo-accent;
+  padding: 18px;
+  box-shadow: $shadow-sm;
 }
 
 .login-button {

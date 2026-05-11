@@ -9,18 +9,19 @@ from app.orchestration.graphs.qa.nodes import (
     answer_generate_node,
     answer_quality_check_node,
     answer_repair_node,
-    clarification_response_node,
     compose_learning_events,
     concept_linker_node,
     context_resolver_node,
     evidence_judge_node,
     evidence_merge_node,
-    final_response_node,
     internal_retrieval_node,
     input_normalize_node,
     knowledge_router_node,
+    qa_clarification_response_node,
     qa_intent_classifier_node,
+    qa_result_compose_node,
     route_after_answer_quality,
+    route_after_evidence_judge,
     web_search_if_needed_node,
 )
 from app.orchestration.graphs.qa.state import QAGraphState
@@ -48,8 +49,8 @@ def build_graph(
     graph.add_node("answer_generate", lambda state: answer_generate_node(state, adapter=adapter))
     graph.add_node("answer_quality_check", answer_quality_check_node)
     graph.add_node("answer_repair", answer_repair_node)
-    graph.add_node("clarification_response", clarification_response_node)
-    graph.add_node("final_response_compose", final_response_node)
+    graph.add_node("qa_clarification_response", qa_clarification_response_node)
+    graph.add_node("qa_result_compose", qa_result_compose_node)
     graph.add_node("compose_learning_events", compose_learning_events)
 
     graph.set_entry_point("input_normalize")
@@ -59,7 +60,14 @@ def build_graph(
     graph.add_edge("concept_linker", "knowledge_router")
     graph.add_edge("knowledge_router", "internal_retrieval")
     graph.add_edge("internal_retrieval", "evidence_judge")
-    graph.add_edge("evidence_judge", "web_search_if_needed")
+    graph.add_conditional_edges(
+        source="evidence_judge",
+        path=route_after_evidence_judge,
+        path_map={
+            "web_search_if_needed": "web_search_if_needed",
+            "evidence_merge": "evidence_merge",
+        },
+    )
     graph.add_edge("web_search_if_needed", "evidence_merge")
     graph.add_edge("evidence_merge", "answer_generate")
     graph.add_edge("answer_generate", "answer_quality_check")
@@ -67,14 +75,14 @@ def build_graph(
         source="answer_quality_check",
         path=route_after_answer_quality,
         path_map={
-            "final_response_compose": "final_response_compose",
+            "qa_result_compose": "qa_result_compose",
             "answer_repair": "answer_repair",
-            "clarification_response": "clarification_response",
+            "qa_clarification_response": "qa_clarification_response",
         },
     )
     graph.add_edge("answer_repair", "answer_quality_check")
-    graph.add_edge("final_response_compose", "compose_learning_events")
-    graph.add_edge("clarification_response", "compose_learning_events")
+    graph.add_edge("qa_result_compose", "compose_learning_events")
+    graph.add_edge("qa_clarification_response", "compose_learning_events")
     graph.add_edge("compose_learning_events", END)
     return graph
 

@@ -21,6 +21,8 @@ class QAGraphState(BaseLearningState, total=False):
     evidence_judgement: dict[str, Any]
     quality_check: dict[str, Any]
     answer_quality: dict[str, Any]
+    repair_count: int
+    max_repair_count: int
     answer_repair_attempt_count: int
     source_usage: str
     web_search_attempted: bool

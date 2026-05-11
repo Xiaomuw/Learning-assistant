@@ -253,6 +253,46 @@ class QARuntimeTest(unittest.TestCase):
         )
         self.assertEqual(
             select_execution_mode(deepseek_request, deepseek_profile),
+            "direct_answer",
+        )
+
+        deepseek_optional_no_context_request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="general",
+            subject_name="通用知识",
+            subject_description="",
+            question="你是什么模型？",
+            question_type="meta",
+            runtime_context={
+                "rag_precomputed": True,
+                "rag_ready": False,
+                "notebook_policy": "optional",
+                "thinking_mode": False,
+            },
+        )
+        self.assertEqual(
+            select_execution_mode(deepseek_optional_no_context_request, deepseek_profile),
+            "direct_answer",
+        )
+
+        deepseek_precomputed_context_request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="network",
+            subject_name="计算机网络",
+            subject_description="",
+            question="根据资料解释 HTTP 缓存",
+            question_type="concept",
+            runtime_context={
+                "rag_precomputed": True,
+                "rag_ready": True,
+                "notebook_policy": "optional",
+                "thinking_mode": False,
+            },
+        )
+        self.assertEqual(
+            select_execution_mode(deepseek_precomputed_context_request, deepseek_profile),
             "deterministic_context",
         )
 

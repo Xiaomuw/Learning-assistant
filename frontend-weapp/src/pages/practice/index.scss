@@ -1,3 +1,17 @@
+$neo-bg: #FFFDF8;
+$neo-ink: #1e293b;
+$neo-accent: #ffb3c6;
+$neo-secondary: #fdf0b0;
+$neo-muted: #c4b5fd;
+$neo-green: #a7f3d0;
+$neo-blue: #bfdbfe;
+$neo-white: #ffffff;
+$border: 3px solid $neo-ink;
+$radius-card: 24px;
+$radius-pill: 999px;
+$shadow-sm: 3px 4px 0px 0px $neo-ink;
+$shadow-md: 4px 6px 0px 0px $neo-ink;
+
 .practice-page {
   display: flex;
   flex-direction: column;
@@ -19,19 +33,21 @@
 .quiz-card,
 .empty-card {
   padding: 30px;
+  background: $neo-white;
 }
 
 .empty-title {
   display: block;
   font-size: 34px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .empty-desc {
   display: block;
   margin-top: 12px;
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.65);
   font-size: 26px;
+  font-weight: 700;
   line-height: 1.6;
 }
 
@@ -43,17 +59,19 @@
 }
 
 .knowledge-point {
-  color: #64748b;
-  font-size: 24px;
-  font-weight: 700;
+  color: rgba(30, 41, 59, 0.6);
+  font-size: 22px;
+  font-weight: 900;
   text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .question-text {
   display: block;
   margin-top: 28px;
   font-size: 32px;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1.55;
 }
 
@@ -65,19 +83,24 @@
 }
 
 .source-text {
-  border-radius: 999px;
-  padding: 8px 14px;
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 22px;
-  font-weight: 700;
+  border: $border;
+  border-radius: $radius-pill;
+  padding: 6px 14px;
+  background: $neo-secondary;
+  color: $neo-ink;
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 2px 2px 0px 0px $neo-ink;
+  letter-spacing: 0.05em;
 }
 
 .hint-card {
   margin-top: 24px;
-  border-radius: 18px;
+  border: $border;
+  border-radius: $radius-card;
   padding: 18px;
-  background: #f8fafc;
+  background: $neo-bg;
+  box-shadow: $shadow-sm;
 }
 
 .hint-button {
@@ -88,8 +111,9 @@
 .hint-text {
   display: block;
   margin-top: 14px;
-  color: #334155;
+  color: rgba(30, 41, 59, 0.8);
   font-size: 25px;
+  font-weight: 700;
   line-height: 1.55;
 }
 
@@ -103,10 +127,17 @@
 .option-item {
   display: flex;
   gap: 18px;
-  border: 1px solid #cbd5e1;
-  border-radius: 18px;
+  border: $border;
+  border-radius: $radius-card;
   padding: 22px;
-  background: #ffffff;
+  background: $neo-white;
+  box-shadow: $shadow-sm;
+  transition: transform 100ms linear, box-shadow 100ms linear;
+
+  &:active {
+    transform: translate(3px, 3px);
+    box-shadow: 1px 1px 0px 0px $neo-ink;
+  }
 }
 
 .option-main {
@@ -114,88 +145,96 @@
 }
 
 .option-item.selected {
-  border-color: #2563eb;
-  background: #eff6ff;
+  background: $neo-secondary;
 }
 
 .option-item.correct {
-  border-color: #16a34a;
-  background: #f0fdf4;
+  background: $neo-green;
 }
 
 .option-item.wrong {
-  border-color: #dc2626;
-  background: #fef2f2;
+  background: $neo-accent;
 }
 
 .option-item.dimmed {
-  opacity: 0.58;
+  opacity: 0.45;
 }
 
 .option-key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  color: #0f172a;
+  width: 48px;
+  height: 48px;
+  border: $border;
+  border-radius: $radius-pill;
+  background: $neo-white;
+  color: $neo-ink;
   font-size: 24px;
-  font-weight: 800;
+  font-weight: 900;
   text-align: center;
+  box-shadow: 2px 2px 0px 0px $neo-ink;
+  flex-shrink: 0;
 }
 
 .option-text {
   display: block;
   font-size: 28px;
+  font-weight: 700;
   line-height: 1.5;
 }
 
 .option-rationale {
   display: block;
   margin-top: 8px;
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.6);
   font-size: 23px;
+  font-weight: 700;
   line-height: 1.45;
 }
 
 .feedback-card {
   margin-top: 28px;
-  border-radius: 18px;
+  border: $border;
+  border-radius: $radius-card;
   padding: 24px;
+  box-shadow: $shadow-md;
+  animation: stampIn 0.2s ease-out;
 }
 
 .feedback-card.ok {
-  background: #f0fdf4;
-  color: #166534;
+  background: $neo-green;
+  color: $neo-ink;
 }
 
 .feedback-card.bad {
-  background: #fff7ed;
-  color: #9a3412;
+  background: $neo-accent;
+  color: $neo-ink;
 }
 
 .feedback-title,
 .feedback-answer {
   display: block;
   font-size: 26px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .feedback-text {
   display: block;
   margin-top: 12px;
   font-size: 26px;
+  font-weight: 700;
   line-height: 1.6;
 }
 
 .feedback-label {
   display: block;
   margin-top: 20px;
-  color: #0f172a;
-  font-size: 24px;
+  color: $neo-ink;
+  font-size: 20px;
   font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .feedback-answer {
@@ -210,13 +249,14 @@
 }
 
 .answer-panel {
-  border-radius: 16px;
+  border: $border;
+  border-radius: $radius-card;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  background: $neo-white;
 }
 
 .answer-panel.correct {
-  background: #dcfce7;
+  background: $neo-green;
 }
 
 .answer-label,
@@ -225,25 +265,29 @@
 }
 
 .answer-label {
-  color: #64748b;
-  font-size: 22px;
-  font-weight: 800;
+  color: rgba(30, 41, 59, 0.5);
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .answer-value {
   margin-top: 6px;
-  color: #0f172a;
+  color: $neo-ink;
   font-size: 25px;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1.45;
 }
 
 .mastery-card {
   margin-top: 20px;
-  border-radius: 18px;
+  border: $border;
+  border-radius: $radius-card;
   padding: 18px;
-  background: #eef2ff;
-  color: #312e81;
+  background: $neo-muted;
+  color: $neo-ink;
+  box-shadow: $shadow-sm;
 }
 
 .mastery-title {
@@ -255,10 +299,13 @@
 
 .complete-card {
   margin-top: 24px;
-  border-radius: 18px;
+  border: $border;
+  border-radius: $radius-card;
   padding: 22px;
-  background: #dcfce7;
-  color: #166534;
+  background: $neo-green;
+  color: $neo-ink;
+  box-shadow: $shadow-md;
+  animation: stampIn 0.2s ease-out;
 }
 
 .complete-title,
@@ -274,14 +321,21 @@
 .complete-desc {
   margin-top: 8px;
   font-size: 24px;
+  font-weight: 700;
   line-height: 1.5;
 }
 
 .error-text {
   display: block;
   margin-top: 20px;
-  color: #dc2626;
+  color: $neo-ink;
   font-size: 26px;
+  font-weight: 700;
+  border: $border;
+  border-radius: $radius-card;
+  background: $neo-accent;
+  padding: 16px;
+  box-shadow: $shadow-sm;
 }
 
 .action-button {

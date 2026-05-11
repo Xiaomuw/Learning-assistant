@@ -49,6 +49,28 @@ class InMemoryLearningEventRepository:
 
 
 class QAGraphAdapterTest(unittest.TestCase):
+    def test_qa_graph_node_boundary_uses_qa_scoped_nodes(self) -> None:
+        self.assertEqual(
+            set(build_graph().nodes),
+            {
+                "input_normalize",
+                "qa_intent_classifier",
+                "context_resolver",
+                "concept_linker",
+                "knowledge_router",
+                "internal_retrieval",
+                "evidence_judge",
+                "web_search_if_needed",
+                "evidence_merge",
+                "answer_generate",
+                "answer_quality_check",
+                "answer_repair",
+                "qa_clarification_response",
+                "qa_result_compose",
+                "compose_learning_events",
+            },
+        )
+
     def test_compile_and_return_grounded_final_response(self) -> None:
         evidence = EvidenceChunk(
             id="ev-http",
@@ -134,11 +156,13 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         self.assertEqual(
             [item["capability"] for item in result["tool_requests"]],
-            [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value],
+            [ToolCapability.NOTEBOOK_RETRIEVE.value],
         )
         request_input = result["tool_requests"][0]["input"]
         self.assertEqual(request_input["subject_id"], "computer-network")
         self.assertEqual(request_input["concept_id"], "computer-network.application.http-https")
+        self.assertFalse(result["web_search_attempted"])
+        self.assertEqual(result["web_search_reason"], "not_requested_before_evidence_judge")
 
     def test_notebook_signal_plans_internal_then_web_if_evidence_insufficient(self) -> None:
         result = build_graph().compile().invoke(
@@ -152,8 +176,9 @@ class QAGraphAdapterTest(unittest.TestCase):
         )
 
         requested_capabilities = [item["capability"] for item in result["tool_requests"]]
-        self.assertEqual(requested_capabilities, [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value])
+        self.assertEqual(requested_capabilities, [ToolCapability.NOTEBOOK_RETRIEVE.value])
         self.assertEqual(result["source_policy"], SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value)
+        self.assertFalse(result["web_search_attempted"])
 
     def test_injected_tool_executor_can_supply_evidence_without_provider_coupling(self) -> None:
         class FakeToolExecutor:
@@ -211,6 +236,34 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn(result["evidence_judgement"]["status"], {"strong", "partial", "insufficient"})
         self.assertEqual(result["answer_quality"]["status"], "pass")
         self.assertEqual(result["source_usage"], "model")
+
+    def test_meta_question_is_classified_as_meta(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-meta-model",
+                "user_id": "u1",
+                "user_message": "你是什么模型？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+            }
+        )
+
+        self.assertEqual(result["intent_result"]["intent"], "meta")
+        self.assertEqual(result["question_type"], "meta")
+        self.assertEqual(result["qa_request"]["question_type"], "meta")
+        self.assertEqual(result["source_usage"], "model")
+
+    def test_domain_model_question_is_not_classified_as_meta(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-domain-model",
+                "user_id": "u1",
+                "user_message": "BERT 是什么模型？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+            }
+        )
+
+        self.assertNotEqual(result["intent_result"]["intent"], "meta")
+        self.assertEqual(result["question_type"], "qa")
 
     def test_context_resolver_expands_followup_question(self) -> None:
         result = build_graph().compile().invoke(
@@ -427,6 +480,8 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         response = FinalResponse.model_validate(result["final_response"])
         event_types = {item["event_type"] for item in result["learning_events"]}
+        self.assertEqual(result["repair_count"], 1)
+        self.assertEqual(result["max_repair_count"], 1)
         self.assertEqual(result["answer_repair_attempt_count"], 1)
         self.assertEqual(result["answer_quality"]["status"], "pass")
         self.assertEqual(response.evidence_refs, ["ev-http"])
@@ -449,6 +504,8 @@ class QAGraphAdapterTest(unittest.TestCase):
         )
 
         response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(result["repair_count"], 1)
+        self.assertEqual(result["max_repair_count"], 1)
         self.assertEqual(result["answer_repair_attempt_count"], 1)
         self.assertEqual(response.source_level, SourceLevel.NONE)
         self.assertEqual(response.ui_payload["answer_mode"], "clarification_required")

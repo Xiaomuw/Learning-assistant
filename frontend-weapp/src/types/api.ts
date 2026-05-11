@@ -14,6 +14,14 @@ export interface AuthTokenEnvelope {
   refresh_token: string;
 }
 
+export interface UserProfile {
+  user_id: string;
+  display_name: string;
+  agent_style_name: string;
+  agent_style_prompt: string;
+  onboarding_completed: boolean;
+}
+
 export interface Notebook {
   id: string;
   name: string;
@@ -21,6 +29,28 @@ export interface Notebook {
   description: string;
   doc_count: number;
   created_at: string;
+}
+
+export interface NotebookKnowledgeStatus {
+  notebookId: string;
+  collection_name: string;
+  doc_count: number;
+  shared_doc_count: number;
+  personal_doc_count: number;
+  chapter_count: number;
+  exam_pattern_count: number;
+  question_count: number;
+  url_count: number;
+  pdf_count: number;
+  personal_pdf_count: number;
+  personal_url_count: number;
+  personal_ready: boolean;
+  embedding_ready: boolean;
+  coverage_score: number;
+  coverage_level: "empty" | "sparse" | "partial" | "ready" | string;
+  missing_doc_types: string[];
+  suggested_actions: string[];
+  retrieval_ready: boolean;
 }
 
 export interface Memory {
@@ -359,6 +389,66 @@ export interface ChatProcessStage {
   label: string;
   detail: string;
   status: "running" | "completed" | "failed";
+  elapsed?: number;
+}
+
+export interface ChatProcessModelAttempt {
+  model_id?: string;
+  modelId?: string;
+  role?: string;
+  status?: string;
+  reason?: string;
+}
+
+export interface ChatProcessExecution {
+  mode?: string;
+  degraded?: boolean;
+  modelId?: string;
+  modelFamily?: string;
+  modelProvider?: string;
+  primaryModelId?: string;
+  fallbackModelId?: string;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
+  streamingMode?: string;
+  streamingTokenCount?: number;
+  streamingDegradedReason?: string;
+  modelLatencyMs?: number;
+  modelAttempts?: ChatProcessModelAttempt[];
+  callStatus?: "ok" | "failed" | "fallback" | "unknown" | string;
+}
+
+export interface ChatStreamDiagnostics {
+  transport?: "chunked" | "sync_fallback" | string;
+  chunkSupported?: boolean;
+  chunkCount?: number;
+  parsedEventCount?: number;
+  realTokenDeltaCount?: number;
+  syntheticDeltaCount?: number;
+  firstChunkMs?: number;
+  firstRealTokenDeltaMs?: number;
+  elapsedMs?: number;
+  degradedReason?: string;
+  detail?: string;
+}
+
+export interface ChatProcessToolCall {
+  name: string;
+  label: string;
+  success: boolean;
+  argsSummary: string;
+  error?: string;
+  docCount?: number;
+}
+
+export interface ChatProcess {
+  currentStage?: string;
+  stages: ChatProcessStage[];
+  reasoningSummary?: string;
+  reasoningTrace?: string;
+  execution?: ChatProcessExecution;
+  streamDiagnostics?: ChatStreamDiagnostics;
+  toolCalls?: ChatProcessToolCall[];
 }
 
 export interface ChatMessage {
@@ -370,11 +460,7 @@ export interface ChatMessage {
   quizRequest?: QuizRequestResolution;
   quizClarification?: QuizClarificationPanel;
   explanation?: Explanation;
-  process?: {
-    stages: ChatProcessStage[];
-    reasoningSummary?: string;
-    reasoningTrace?: string;
-  };
+  process?: ChatProcess;
   questionType?: string;
   route?: string;
 }
@@ -382,4 +468,26 @@ export interface ChatMessage {
 export interface SSEEvent {
   event: string;
   data: any;
+}
+
+export interface ChatSessionWire {
+  id: string;
+  subject_id: string;
+  title: string;
+  messages: ChatMessage[];
+  updated_at: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  notebookId: string;
+  updatedAt: number;
+  messageCount: number;
+}
+
+export interface ModelHealth {
+  chat_model: string;
+  chat_model_ok: boolean;
+  chat_model_error?: string;
 }

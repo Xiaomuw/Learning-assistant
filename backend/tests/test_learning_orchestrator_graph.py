@@ -45,6 +45,24 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         compiled = build_graph().compile()
         self.assertTrue(hasattr(compiled, "invoke"))
 
+    def test_orchestrator_node_boundary_contains_only_top_level_responsibilities(self) -> None:
+        self.assertEqual(
+            set(build_graph().nodes),
+            {
+                "request_guard",
+                "load_runtime_context",
+                "load_learner_context",
+                "graph_router",
+                "qa_graph",
+                "question_generation_graph",
+                "mastery_evaluation_graph",
+                "top_level_clarify_or_refuse",
+                "persist_learning_events",
+                "response_composer",
+                "persist_audit_event",
+            },
+        )
+
     def test_routes_default_learning_question_to_qa(self) -> None:
         result = build_graph().compile().invoke(
             {"user_id": "u1", "thread_id": "t1", "user_message": "什么是 HTTP？"}
@@ -52,8 +70,12 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
 
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)
+        self.assertEqual(result["child_graph_result"]["task_type"], GraphType.QA.value)
+        self.assertEqual(result["child_graph_result"]["status"], "succeeded")
         self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QA.value)
         self.assertEqual(result["final_response"]["ui_payload"]["target_graph_type"], GraphType.QA.value)
+        self.assertEqual(result["response_envelope"]["final"]["final_answer"], result["final_response"]["answer"])
+        self.assertEqual(result["response_envelope"]["sync_payload"]["final_answer"], result["final_response"]["answer"])
 
     def test_routes_question_generation_intent(self) -> None:
         result = build_graph().compile().invoke(
@@ -67,6 +89,8 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         )
         self.assertEqual(result["quiz_request"]["action"], "generate_practice_pack")
         self.assertEqual(result["quiz_request"]["topic"], "HTTP")
+        self.assertEqual(result["child_graph_result"]["task_type"], GraphType.QUESTION_GENERATION.value)
+        self.assertIn("question_items", result["child_graph_result"]["content"])
         self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
         self.assertEqual(
             result["final_response"]["ui_payload"]["target_graph_type"],

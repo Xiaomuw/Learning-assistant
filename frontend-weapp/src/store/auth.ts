@@ -18,6 +18,41 @@ export function getAuthUser(): AuthUser | null {
   return Taro.getStorageSync(USER_KEY) || null;
 }
 
+function decodeBase64Url(input: string): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const base64 = input.replace(/-/g, "+").replace(/_/g, "/");
+  let buffer = 0;
+  let bits = 0;
+  let output = "";
+
+  for (const char of base64) {
+    if (char === "=") break;
+    const value = alphabet.indexOf(char);
+    if (value < 0) continue;
+    buffer = (buffer << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      output += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+
+  return output;
+}
+
+export function isAccessTokenExpired(skewMs = 30000): boolean {
+  const token = getAccessToken();
+  const payload = token.split(".")[1];
+  if (!payload) return true;
+  try {
+    const decoded = JSON.parse(decodeBase64Url(payload)) as { exp?: number };
+    const expiresAt = typeof decoded.exp === "number" ? decoded.exp * 1000 : 0;
+    return !expiresAt || expiresAt <= Date.now() + skewMs;
+  } catch {
+    return true;
+  }
+}
+
 export function persistAuthSession(payload: AuthTokenEnvelope) {
   Taro.setStorageSync(ACCESS_TOKEN_KEY, payload.access_token);
   Taro.setStorageSync(REFRESH_TOKEN_KEY, payload.refresh_token);

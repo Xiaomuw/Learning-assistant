@@ -220,6 +220,10 @@ def stream_orchestrator_chat(
             "question_type": final_state.get("question_type"),
             "route": final_state.get("route"),
             "degraded": bool(final_state.get("graph_warnings")),
+            "streaming_mode": str(final_state.get("streaming_mode") or "node"),
+            "streaming_token_count": int(final_state.get("streaming_token_count") or 0),
+            "streaming_degraded_reason": str(final_state.get("streaming_degraded_reason") or ""),
+            "model_latency_ms": latency_ms,
             "__final_state": final_state,
         },
         "elapsed": latency_ms / 1000,
@@ -286,15 +290,36 @@ def _chat_state_from_orchestrator_result(
     question_type = _question_type_from_intent(intent, initial_state)
     route = _route_from_response(response, intent)
     child_payload = _child_payload(graph_result)
-    quiz_request = _quiz_request_payload(graph_result, child_payload, response)
-    quiz_clarification = _quiz_clarification_payload(graph_result, child_payload, response)
+    response_envelope = (
+        graph_result.get("response_envelope") if isinstance(graph_result.get("response_envelope"), dict) else {}
+    )
+    envelope_sync = response_envelope.get("sync_payload") if isinstance(response_envelope.get("sync_payload"), dict) else {}
+    quiz_request = (
+        envelope_sync.get("quiz_request")
+        if isinstance(envelope_sync.get("quiz_request"), dict)
+        else _quiz_request_payload(graph_result, child_payload, response)
+    )
+    quiz_clarification = (
+        envelope_sync.get("quiz_clarification")
+        if isinstance(envelope_sync.get("quiz_clarification"), dict)
+        else _quiz_clarification_payload(graph_result, child_payload, response)
+    )
     response_ui = response.ui_payload if isinstance(response.ui_payload, dict) else {}
     retrieval_skipped_reason = str(response_ui.get("retrieval_skipped_reason") or "")
     reasoning_summary = str(response_ui.get("reasoning_summary") or "")
     if not reasoning_summary and retrieval_skipped_reason == "stable_concept_model_first":
         reasoning_summary = "判断为稳定概念，本轮未调用知识库或搜索，直接按教学讲解回答。"
     quiz_items = _quiz_items_from_child_payload(child_payload)
-    raw_explanation = response_ui.get("explanation") if isinstance(response_ui.get("explanation"), dict) else {}
+    envelope_quiz = response_envelope.get("quiz") if isinstance(response_envelope.get("quiz"), dict) else {}
+    if not quiz_items and isinstance(envelope_quiz.get("items"), list):
+        quiz_items = list(envelope_quiz.get("items") or [])
+    raw_explanation = (
+        envelope_sync.get("explanation")
+        if isinstance(envelope_sync.get("explanation"), dict)
+        else response_ui.get("explanation")
+        if isinstance(response_ui.get("explanation"), dict)
+        else {}
+    )
     if raw_explanation:
         explanation = normalize_explanation_payload(raw_explanation).model_dump()
     else:
@@ -307,13 +332,14 @@ def _chat_state_from_orchestrator_result(
                 "similar": [item.name for item in response.concepts[1:3]],
             }
         ).model_dump()
+    final_answer = str(envelope_sync.get("final_answer") or response.answer)
     return {
         **initial_state,
-        "question_type": question_type,
-        "route": route,
+        "question_type": str(envelope_sync.get("question_type") or question_type),
+        "route": str(envelope_sync.get("route") or route),
         "source_policy": str(graph_result.get("source_policy") or initial_state.get("source_policy") or ""),
         "explanation": explanation,
-        "final_answer": response.answer,
+        "final_answer": final_answer,
         "quiz_items": quiz_items,
         "quiz_request": quiz_request,
         "quiz_clarification": quiz_clarification,
@@ -323,6 +349,7 @@ def _chat_state_from_orchestrator_result(
         ),
         "memory": dict(initial_state.get("memory") or {}),
         "final_response": response.model_dump(mode="json"),
+        "response_envelope": response_envelope,
         "orchestrator_result": _compact_orchestrator_result(graph_result),
         "reasoning_summary": reasoning_summary,
         "retrieval_skipped_reason": retrieval_skipped_reason,
@@ -788,6 +815,20 @@ def _error_orchestrator_result(
             "target_graph_type": GraphType.ORCHESTRATOR.value,
             "payload": {"answer": answer},
         },
+        "child_graph_result": {
+            "task_type": GraphType.ORCHESTRATOR.value,
+            "status": "failed",
+            "content": {"answer": answer},
+            "learning_events": [],
+            "audit_event": {"graph_type": GraphType.ORCHESTRATOR.value, "status": "failed"},
+            "ui_payload": {"target_graph_type": GraphType.ORCHESTRATOR.value, "error_type": error_type},
+            "trace_steps": [{"node": "LearningOrchestratorGraph", "status": "failed"}],
+            "error": {
+                "code": "orchestrator_runtime_error",
+                "message": error_type,
+                "node": "LearningOrchestratorGraph",
+            },
+        },
         "errors": [
             {
                 "code": "orchestrator_runtime_error",
@@ -934,19 +975,32 @@ def _trace_inputs(state: dict[str, Any], *, request_mode: str) -> dict[str, Any]
 
 
 def _compact_orchestrator_result(result: dict[str, Any]) -> dict[str, Any]:
+    child_result = result.get("child_graph_result") if isinstance(result.get("child_graph_result"), dict) else {}
     return {
         "run_id": result.get("run_id"),
         "intent_decision": result.get("intent_decision") or {},
+        "child_graph_result": {
+            "task_type": child_result.get("task_type"),
+            "status": child_result.get("status"),
+            "content_keys": sorted((child_result.get("content") or {}).keys())
+            if isinstance(child_result.get("content"), dict)
+            else [],
+        },
         "child_graph_output": {
             "target_graph_type": (result.get("child_graph_output") or {}).get("target_graph_type"),
             "payload_keys": sorted(((result.get("child_graph_output") or {}).get("payload") or {}).keys()),
         },
+        "response_envelope_present": bool(result.get("response_envelope")),
         "audit_event_count": len(list(result.get("audit_events") or [])),
         "error_count": len(list(result.get("errors") or [])),
     }
 
 
 def _child_payload(result: dict[str, Any]) -> dict[str, Any]:
+    child_result = result.get("child_graph_result") if isinstance(result.get("child_graph_result"), dict) else {}
+    content = child_result.get("content") if isinstance(child_result.get("content"), dict) else {}
+    if content:
+        return content
     child_output = result.get("child_graph_output") if isinstance(result.get("child_graph_output"), dict) else {}
     payload = child_output.get("payload") if isinstance(child_output.get("payload"), dict) else {}
     return payload

@@ -94,6 +94,9 @@ notebook 是用户资料的辅助参考，联网搜索是按需补充最新/权�
 名称：{subject_name}
 简介：{subject_description}
 
+## 当前请求模型
+标识：{model_name}
+
 ## 用户风格要求
 {user_style_instruction}
 
@@ -184,7 +187,8 @@ answer_mode: {answer_mode}
 9. 如果 source_policy=notebook 或实际使用了 notebook，必须说明“参考你的 notebook/资料”；如果资料不足，不要编造
 10. 如果 source_policy=web，说明基于最新/指定来源资料；优先概括来源名称，不暴露工具调试信息
 11. 如果 notebook_policy=skip 且问题是稳定基础概念，直接用通用知识解释，不提 notebook 或检索
-12. 所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、- 列表符号或引用符号
+12. 所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、表格、分隔线、|| 或引用符号
+13. 面向手机小屏展示：steps 每条尽量一两句话，避免长段堆叠；需要列点时用简短自然语言，不要嵌套列表
 """
 
 STRUCTURED_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
@@ -204,7 +208,8 @@ MANUAL_SCHEMA_PROMPT = ChatPromptTemplate.from_messages(
             "字段类型必须严格遵守：topic/thinking/mistakes/final_answer 是字符串；"
             "steps 是字符串数组；similar 是 2 到 3 个字符串组成的数组。"
             "如果没有易错点，mistakes 必须输出空字符串，不要输出数组。\n"
-            "所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、- 列表符号或引用符号。\n"
+            "所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、表格、分隔线、|| 或引用符号。\n"
+            "面向手机小屏展示，steps 每条保持短句，不要长段堆叠或嵌套列表。\n"
             "不要输出任何额外说明。",
         ),
         MessagesPlaceholder("conversation"),
@@ -229,6 +234,9 @@ PLAIN_ANSWER_SYSTEM_PROMPT = """\
 ## 当前笔记本
 名称：{subject_name}
 
+## 当前请求模型
+标识：{model_name}
+
 ## 用户风格要求
 {user_style_instruction}
 
@@ -237,7 +245,11 @@ PLAIN_ANSWER_SYSTEM_PROMPT = """\
 
 {style_instruction}
 
-请直接、自然、简洁地回复用户。不需要分步骤，不需要列出误区，语气自然亲切。
+请像真实对话一样直接回应用户当前这句话，简洁但不要像固定欢迎词。
+不要反复自我介绍；只有用户明确问身份、能力或模型时才说明相关信息。
+如果用户只是打招呼，可以自然接住，并结合当前笔记本给一个轻量继续聊的方向。
+如果用户询问当前模型，说明“当前这次请求使用的模型标识是 {model_name}”；不确定的供应商、版本细节或内部实现不要编造。
+面向手机小屏输出，避免 Markdown 表格、分隔线、粗体符号和长段堆叠。
 """
 
 PLAIN_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
@@ -284,6 +296,7 @@ def build_tool_system_message(request: AgentRequest) -> str:
     return TOOL_DECISION_SYSTEM_PROMPT.format(
         subject_name=request.subject_name,
         subject_description=request.subject_description or "（无简介）",
+        model_name=request.model_name or "未显式指定",
         user_style_instruction=format_user_style_instruction(
             request.user_style_name,
             request.user_style_prompt,
@@ -333,6 +346,7 @@ def build_plain_answer_prompt_payload(request: AgentRequest) -> dict[str, Any]:
     """构建 smalltalk / meta 等轻量直接回复的 prompt payload"""
     return {
         "subject_name": request.subject_name,
+        "model_name": request.model_name or "未显式指定",
         "user_style_instruction": format_user_style_instruction(
             request.user_style_name,
             request.user_style_prompt,

@@ -633,6 +633,7 @@ class ChatExecutionResult(BaseModel):
     session_id: str
     question_type: str = "concept"
     route: str = "explain"
+    final_answer: str = ""
     explanation: ExplanationPayload = Field(default_factory=ExplanationPayload)
     quiz_items: list[PracticeRecommendation] = Field(default_factory=list)
     quiz_request: QuizRequestResolution | None = None

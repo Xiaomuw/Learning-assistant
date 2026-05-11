@@ -80,6 +80,10 @@ class ChatPresenterTest(unittest.TestCase):
                     {"model_id": "primary-test-model", "role": "primary", "status": "failed"},
                     {"model_id": "fallback-test-model", "role": "fallback", "status": "ok"},
                 ],
+                "streaming_mode": "token",
+                "streaming_token_count": 18,
+                "streaming_degraded_reason": "",
+                "model_latency_ms": 1234,
             },
         )
 
@@ -92,9 +96,47 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertEqual(data["primary_model_id"], "primary-test-model")
         self.assertEqual(data["fallback_model_id"], "fallback-test-model")
         self.assertEqual(len(data["model_attempts"]), 2)
+        self.assertEqual(data["streaming_mode"], "token")
+        self.assertEqual(data["streaming_token_count"], 18)
+        self.assertEqual(data["streaming_degraded_reason"], "")
+        self.assertEqual(data["model_latency_ms"], 1234)
         self.assertTrue(data["web_search_attempted"])
         self.assertTrue(data["web_search_used"])
         self.assertEqual(data["external_tool_calls"][0]["name"], "web_search")
+
+    def test_message_process_keeps_model_call_evidence_for_history(self) -> None:
+        process = build_message_process(
+            {
+                "question_type": "meta",
+                "route": "fast",
+                "final_answer": "当前这次请求使用的模型标识是 deepseek-v4-pro。",
+                "execution_mode": "direct_answer",
+                "selected_model_profile": {
+                    "model_id": "deepseek-v4-pro",
+                    "family": "DeepSeek",
+                    "provider": "DeepSeek",
+                },
+                "primary_model_id": "deepseek-v4-pro",
+                "model_attempts": [
+                    {"model_id": "deepseek-v4-pro", "role": "primary", "status": "ok"},
+                ],
+                "streaming_mode": "token",
+                "streaming_token_count": 12,
+                "streaming_degraded_reason": "provider_stream_returned_no_chunks",
+                "model_latency_ms": 860,
+            }
+        )
+
+        self.assertIsNotNone(process)
+        execution = process["execution"]
+        self.assertEqual(execution["modelId"], "deepseek-v4-pro")
+        self.assertEqual(execution["callStatus"], "ok")
+        self.assertEqual(execution["streamingMode"], "token")
+        self.assertEqual(execution["streamingTokenCount"], 12)
+        self.assertEqual(execution["streamingDegradedReason"], "provider_stream_returned_no_chunks")
+        self.assertEqual(execution["modelLatencyMs"], 860)
+        self.assertEqual(execution["modelAttempts"][0]["status"], "ok")
+        self.assertTrue(any("流式 12 段" in stage["detail"] for stage in process["stages"]))
 
     def test_rag_event_contains_retrieval_debug_payload(self) -> None:
         data = extract_event_data(
@@ -217,6 +259,27 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertTrue(data["finalized"])
         self.assertEqual(data["final_response_type"], "explanation")
         self.assertIn("qa_agent_node", data["route_decision"])
+
+    def test_final_event_exposes_streaming_degraded_reason(self) -> None:
+        data = extract_event_data(
+            "final",
+            {
+                "finalized": True,
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": "HTTP 是应用层协议。",
+                "degraded": False,
+                "streaming_mode": "node",
+                "streaming_token_count": 0,
+                "streaming_degraded_reason": "provider_stream_returned_no_chunks",
+                "model_latency_ms": 1200,
+            },
+        )
+
+        self.assertEqual(data["streaming_mode"], "node")
+        self.assertEqual(data["streaming_token_count"], 0)
+        self.assertEqual(data["streaming_degraded_reason"], "provider_stream_returned_no_chunks")
+        self.assertEqual(data["model_latency_ms"], 1200)
 
     def test_answer_events_can_include_accumulated_question_type(self) -> None:
         data = extract_event_data(

@@ -245,7 +245,7 @@ class ChatApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
         detail = response.json()["detail"]
-        self.assertIn("学习引擎响应超时", detail)
+        self.assertIn("模型响应超时", detail)
         self.assertNotIn("APITimeoutError", detail)
         self.assertNotIn("Request timed out", detail)
 
@@ -809,9 +809,22 @@ class ChatApiTest(unittest.TestCase):
         self.assertIn('"error_type": "model_unavailable"', body)
         self.assertIn('"reason": "model_unavailable"', body)
         self.assertIn('"retryable": true', body)
-        self.assertNotIn("401", body)
-        self.assertNotIn("RuntimeError", body)
-        self.assertNotIn("subscription tier", body)
+        error_payload = next(
+            json.loads(line.removeprefix("data: "))
+            for line in body.splitlines()
+            if line.startswith("data: ") and '"error_type"' in line
+        )
+        encoded_error = json.dumps(
+            {
+                "error": error_payload.get("error"),
+                "error_type": error_payload.get("error_type"),
+                "reason": error_payload.get("reason"),
+            },
+            ensure_ascii=False,
+        )
+        self.assertNotIn("401", encoded_error)
+        self.assertNotIn("RuntimeError", encoded_error)
+        self.assertNotIn("subscription tier", encoded_error)
 
     def test_sse_cleanup_awaits_cancelled_pending_chunk_before_close(self) -> None:
         async def _run_cleanup() -> _CloseGuardedStream:

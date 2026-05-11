@@ -5,7 +5,12 @@ from uuid import uuid4
 
 from loguru import logger
 
-from app.orchestration.graphs.orchestrator.schemas import ChildGraphOutput
+from app.orchestration.graphs.orchestrator.schemas import (
+    ChildGraphOutput,
+    ChildGraphResult,
+    OrchestratorIntent,
+    ResponseEnvelope,
+)
 from app.orchestration.graphs.orchestrator.state import OrchestratorState
 from app.orchestration.graphs.shared.schemas import (
     FinalResponse,
@@ -108,30 +113,211 @@ def mastery_evaluation_graph_stub(state: OrchestratorState) -> dict[str, Any]:
     return ChildGraphInvokerFactory.from_state(state).for_graph(GraphType.MASTERY).invoke(state)
 
 
-def clarify_or_safe_response(state: OrchestratorState) -> dict[str, Any]:
+def top_level_clarify_or_refuse(state: OrchestratorState) -> dict[str, Any]:
+    """Top-level fallback for unclear intent or incomplete cross-graph requests."""
+
     quiz_request = state.get("quiz_request") if isinstance(state.get("quiz_request"), dict) else {}
     quiz_clarification = state.get("quiz_clarification") if isinstance(state.get("quiz_clarification"), dict) else {}
     if quiz_request and quiz_clarification:
-        output = ChildGraphOutput(
-            target_graph_type=GraphType.ORCHESTRATOR,
-            payload={
+        return _child_result_update(
+            GraphType.ORCHESTRATOR,
+            {
                 "answer": "我可以帮你出题，但需要先确定练习方向。",
                 "quiz_request": quiz_request,
                 "quiz_clarification": quiz_clarification,
             },
+            status="needs_clarification",
+            trace_node="top_level_clarify_or_refuse",
         )
-        return {"child_graph_output": output.model_dump(mode="json")}
 
-    output = ChildGraphOutput(
-        target_graph_type=GraphType.ORCHESTRATOR,
-        payload={"answer": "我需要更明确的学习目标，才能把请求路由到合适的学习图。", "stub": True},
+    return _child_result_update(
+        GraphType.ORCHESTRATOR,
+        {"answer": "我需要更明确的学习目标，才能把请求路由到合适的学习图。", "stub": True},
+        status="needs_clarification",
+        trace_node="top_level_clarify_or_refuse",
     )
-    return {"child_graph_output": output.model_dump(mode="json")}
+
+
+def clarify_or_safe_response(state: OrchestratorState) -> dict[str, Any]:
+    """Deprecated compatibility alias for the top-level fallback node."""
+
+    return top_level_clarify_or_refuse(state)
+
+
+def _child_result_update(
+    graph_type: GraphType,
+    payload: dict[str, Any],
+    *,
+    status: str,
+    trace_node: str,
+) -> dict[str, Any]:
+    output = ChildGraphOutput(target_graph_type=graph_type, payload=payload)
+    result = ChildGraphResult(
+        task_type=graph_type.value,
+        status=status,
+        content=payload,
+        learning_events=[item for item in list(payload.get("learning_events") or []) if isinstance(item, dict)],
+        audit_event={
+            "graph_type": graph_type.value,
+            "status": status,
+            "node": trace_node,
+        },
+        ui_payload=payload.get("ui_payload") if isinstance(payload.get("ui_payload"), dict) else {},
+        trace_steps=[{"node": trace_node, "status": status, "graph_type": graph_type.value}],
+        error=payload.get("error") if isinstance(payload.get("error"), dict) else None,
+    )
+    return {
+        "child_graph_result": result.model_dump(mode="json"),
+        "child_graph_output": output.model_dump(mode="json"),
+    }
+
+
+def _child_graph_result_from_state(state: OrchestratorState) -> dict[str, Any]:
+    result = state.get("child_graph_result") if isinstance(state.get("child_graph_result"), dict) else {}
+    if result:
+        return result
+    output = state.get("child_graph_output") if isinstance(state.get("child_graph_output"), dict) else {}
+    payload = output.get("payload") if isinstance(output.get("payload"), dict) else {}
+    task_type = str(output.get("target_graph_type") or GraphType.ORCHESTRATOR.value)
+    final_response = payload.get("final_response") if isinstance(payload.get("final_response"), dict) else {}
+    errors = [item for item in list(payload.get("errors") or []) if isinstance(item, dict)]
+    answer = str(final_response.get("answer") or payload.get("answer") or "").strip()
+    status = "failed" if errors and not answer else "degraded" if errors else "succeeded"
+    return ChildGraphResult(
+        task_type=task_type,
+        status=status,
+        content=payload,
+        learning_events=[item for item in list(payload.get("learning_events") or []) if isinstance(item, dict)],
+        audit_event={"graph_type": task_type, "status": status, "compat_source": "child_graph_output"},
+        ui_payload=final_response.get("ui_payload") if isinstance(final_response.get("ui_payload"), dict) else {},
+        trace_steps=[],
+        error=errors[0] if errors and not answer else None,
+    ).model_dump(mode="json")
+
+
+def _child_payload(state: OrchestratorState) -> dict[str, Any]:
+    child_result = state.get("child_graph_result") if isinstance(state.get("child_graph_result"), dict) else {}
+    content = child_result.get("content") if isinstance(child_result.get("content"), dict) else {}
+    if content:
+        return content
+    child_output = state.get("child_graph_output") if isinstance(state.get("child_graph_output"), dict) else {}
+    return child_output.get("payload") if isinstance(child_output.get("payload"), dict) else {}
+
+
+def _response_envelope(
+    state: OrchestratorState,
+    *,
+    response: FinalResponse,
+    child_result: dict[str, Any],
+    child_output: dict[str, Any],
+    payload: dict[str, Any],
+) -> ResponseEnvelope:
+    response_ui = response.ui_payload if isinstance(response.ui_payload, dict) else {}
+    explanation = response_ui.get("explanation") if isinstance(response_ui.get("explanation"), dict) else {}
+    if not explanation:
+        explanation = {
+            "topic": str(response_ui.get("topic") or state.get("user_message") or ""),
+            "thinking": response.answer,
+            "steps": [],
+            "mistakes": "",
+            "similar": [item.name for item in response.concepts[1:3]],
+        }
+    quiz_request = (
+        payload.get("quiz_request")
+        if isinstance(payload.get("quiz_request"), dict)
+        else state.get("quiz_request")
+        if isinstance(state.get("quiz_request"), dict)
+        else {}
+    )
+    quiz_clarification = (
+        payload.get("quiz_clarification")
+        if isinstance(payload.get("quiz_clarification"), dict)
+        else state.get("quiz_clarification")
+        if isinstance(state.get("quiz_clarification"), dict)
+        else {}
+    )
+    quiz_items = list(payload.get("quiz_items") or payload.get("question_items") or [])
+    quiz_generation_status = payload.get("quiz_generation_status")
+    if not isinstance(quiz_generation_status, dict):
+        quiz_generation_status = (
+            payload.get("generation_status") if isinstance(payload.get("generation_status"), dict) else {}
+        )
+    memory = response_ui.get("memory") if isinstance(response_ui.get("memory"), dict) else {}
+    final = {
+        "final_answer": response.answer,
+        "source_level": response.source_level.value,
+        "target_graph_type": str(child_result.get("task_type") or child_output.get("target_graph_type") or ""),
+        "status": str(child_result.get("status") or "succeeded"),
+    }
+    sync_payload = {
+        "question_type": _question_type_for_envelope(state),
+        "route": _route_for_envelope(state, response),
+        "explanation": explanation,
+        "final_answer": response.answer,
+        "quiz_items": quiz_items,
+        "quiz_request": quiz_request,
+        "quiz_clarification": quiz_clarification,
+        "quiz_generation_status": quiz_generation_status,
+        "memory": memory,
+    }
+    sse_events = [
+        {"event": "explanation", "data": {"explanation": explanation, "final_answer": response.answer}},
+        {"event": "final", "data": final},
+    ]
+    if quiz_items or quiz_clarification:
+        sse_events.insert(
+            1,
+            {
+                "event": "quiz",
+                "data": {
+                    "items": quiz_items,
+                    "quiz_request": quiz_request,
+                    "quiz_clarification": quiz_clarification,
+                    "quiz_generation_status": quiz_generation_status,
+                },
+            },
+        )
+    return ResponseEnvelope(
+        explanation=explanation,
+        quiz={
+            "items": quiz_items,
+            "quiz_request": quiz_request,
+            "quiz_clarification": quiz_clarification,
+            "quiz_generation_status": quiz_generation_status,
+        },
+        memory=memory,
+        final=final,
+        sse_events=sse_events,
+        sync_payload=sync_payload,
+    )
+
+
+def _question_type_for_envelope(state: OrchestratorState) -> str:
+    intent = str((state.get("intent_decision") or {}).get("intent") or OrchestratorIntent.QA.value)
+    if intent == OrchestratorIntent.GENERATE_QUESTION.value:
+        return "practice"
+    if intent == OrchestratorIntent.EVALUATE_MASTERY.value:
+        return "review"
+    if intent == OrchestratorIntent.FALLBACK.value:
+        return "meta"
+    return str(state.get("question_type") or "concept")
+
+
+def _route_for_envelope(state: OrchestratorState, response: FinalResponse) -> str:
+    intent = str((state.get("intent_decision") or {}).get("intent") or OrchestratorIntent.QA.value)
+    if intent == OrchestratorIntent.GENERATE_QUESTION.value:
+        return "practice"
+    if response.source_level == SourceLevel.WEB:
+        return "agent"
+    if response.source_level == SourceLevel.NOTEBOOK:
+        return "rag"
+    return "explain"
 
 
 def response_composer(state: OrchestratorState) -> dict[str, Any]:
+    child_result = _child_graph_result_from_state(state)
     child_output = state.get("child_graph_output") if isinstance(state.get("child_graph_output"), dict) else {}
-    payload = child_output.get("payload") if isinstance(child_output.get("payload"), dict) else {}
+    payload = _child_payload(state)
     raw_response = payload.get("final_response") if isinstance(payload.get("final_response"), dict) else payload
     if isinstance(raw_response, dict) and raw_response.get("answer"):
         response = FinalResponse.model_validate(raw_response)
@@ -147,11 +333,22 @@ def response_composer(state: OrchestratorState) -> dict[str, Any]:
                 "intent_decision": state.get("intent_decision") or {},
                 "quiz_request": state.get("quiz_request") or {},
                 "quiz_clarification": state.get("quiz_clarification") or {},
+                "child_graph_result": child_result,
                 "child_graph_output": child_output,
             }
         }
     )
-    return {"final_response": response.model_dump(mode="json")}
+    envelope = _response_envelope(
+        state,
+        response=response,
+        child_result=child_result,
+        child_output=child_output,
+        payload=payload,
+    )
+    return {
+        "final_response": response.model_dump(mode="json"),
+        "response_envelope": envelope.model_dump(mode="json"),
+    }
 
 
 def persist_learning_events(
@@ -161,9 +358,9 @@ def persist_learning_events(
 ) -> dict[str, Any]:
     """Persist child graph learning events at the Orchestrator boundary."""
 
-    child_output = state.get("child_graph_output") if isinstance(state.get("child_graph_output"), dict) else {}
-    payload = child_output.get("payload") if isinstance(child_output.get("payload"), dict) else {}
-    raw_events = list(payload.get("learning_events") or [])
+    child_result = _child_graph_result_from_state(state)
+    payload = _child_payload(state)
+    raw_events = list(child_result.get("learning_events") or payload.get("learning_events") or [])
     status = {
         "attempted": learning_event_repository is not None,
         "event_count": len(raw_events),
@@ -210,12 +407,17 @@ def persist_learning_events(
 
 
 def persist_audit_event(state: OrchestratorState, *, audit_repository: Any | None = None) -> dict[str, Any]:
+    child_result = _child_graph_result_from_state(state)
     audit_event = {
         "run_id": state.get("run_id", ""),
         "graph_run_id": state.get("run_id", ""),
         "node_name": "orchestrator.audit",
         "graph_type": GraphType.ORCHESTRATOR.value,
         "intent_decision": state.get("intent_decision") or {},
+        "child_audit_event": (
+            child_result.get("audit_event") if isinstance(child_result.get("audit_event"), dict) else {}
+        ),
+        "response_envelope_present": bool(state.get("response_envelope")),
         "final_response_present": bool(state.get("final_response")),
     }
     errors = list(state.get("errors") or [])

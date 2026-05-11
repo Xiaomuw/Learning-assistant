@@ -5,7 +5,6 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 
 from app.orchestration.graphs.orchestrator.nodes import (
-    clarify_or_safe_response,
     graph_router,
     invoke_qa_graph,
     load_learner_context,
@@ -16,6 +15,7 @@ from app.orchestration.graphs.orchestrator.nodes import (
     question_generation_graph_stub,
     request_guard,
     response_composer,
+    top_level_clarify_or_refuse,
 )
 from app.orchestration.graphs.orchestrator.router import (
     FALLBACK_NODE,
@@ -51,7 +51,7 @@ def build_graph(
     graph.add_node(QA_NODE, invoke_qa_graph)
     graph.add_node(QUESTION_GENERATION_NODE, question_generation_graph_stub)
     graph.add_node(MASTERY_EVALUATION_NODE, mastery_evaluation_graph_stub)
-    graph.add_node(FALLBACK_NODE, clarify_or_safe_response)
+    graph.add_node(FALLBACK_NODE, top_level_clarify_or_refuse)
     graph.add_node(
         PERSIST_LEARNING_EVENTS_NODE,
         lambda state: persist_learning_events(

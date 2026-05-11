@@ -69,6 +69,10 @@ class ChildGraphInvokerFactoryTest(unittest.TestCase):
     def test_child_graph_update_wraps_payload_contract(self) -> None:
         update = _child_graph_update(GraphType.QA, {"final_response": {"answer": "ok"}})
 
+        self.assertEqual(update["child_graph_result"]["task_type"], GraphType.QA.value)
+        self.assertEqual(update["child_graph_result"]["status"], "succeeded")
+        self.assertEqual(update["child_graph_result"]["content"]["final_response"]["answer"], "ok")
+        self.assertIn("audit_event", update["child_graph_result"])
         self.assertEqual(update["child_graph_output"]["target_graph_type"], GraphType.QA.value)
         self.assertEqual(update["child_graph_output"]["payload"]["final_response"]["answer"], "ok")
 
@@ -131,7 +135,11 @@ class ChildGraphInvokerFactoryTest(unittest.TestCase):
             update = invoker.invoke({"run_id": "run-qa-fail", "user_id": "u1", "user_message": "什么是 HTTP？"})
 
         payload = update["child_graph_output"]["payload"]
+        result = update["child_graph_result"]
         self.assertEqual(update["child_graph_output"]["target_graph_type"], GraphType.QA.value)
+        self.assertEqual(result["task_type"], GraphType.QA.value)
+        self.assertEqual(result["status"], "degraded")
+        self.assertEqual(result["learning_events"][0]["event_type"], "answer_repaired")
         self.assertEqual(payload["adapter"], "qagraph")
         self.assertTrue(payload["final_response"]["answer"])
         self.assertEqual(payload["learning_events"][0]["event_type"], "answer_repaired")

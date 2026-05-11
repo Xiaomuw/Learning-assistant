@@ -112,10 +112,30 @@ def _cases() -> list[GraphEvalCase]:
                 _assert_final_response,
                 _assert_non_empty_answer,
                 _assert_concept_filtered_tool_request,
+                _assert_no_web_fallback_planned,
+                _assert_has_learning_event("question_answered"),
+            ],
+            expected_metrics={"non_empty_response": True, "tool_requests": 1, "concept_filtered_retrieval": True},
+        ),
+        GraphEvalCase(
+            name="qa_explicit_web_fallback",
+            graph_type=GraphType.QA,
+            runner=lambda: build_qa_graph().compile().invoke(
+                {
+                    "run_id": "eval-qa-explicit-web",
+                    "user_id": "eval-user",
+                    "user_message": "HTTP/3 最新浏览器支持情况？",
+                    "question_type": "concept",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                }
+            ),
+            assertions=[
+                _assert_final_response,
+                _assert_non_empty_answer,
                 _assert_web_fallback_planned_without_provider,
                 _assert_has_learning_event("question_answered"),
             ],
-            expected_metrics={"non_empty_response": True, "tool_requests": 2, "concept_filtered_retrieval": True},
+            expected_metrics={"non_empty_response": True, "web_fallback_planned": True},
         ),
         GraphEvalCase(
             name="qa_tool_policy_stable_concept_no_tools",
@@ -129,8 +149,8 @@ def _cases() -> list[GraphEvalCase]:
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
                 }
             ),
-            assertions=[_assert_final_response, _assert_non_empty_answer, _assert_planned_request_without_result],
-            expected_metrics={"non_empty_response": True, "tool_requests": 1},
+            assertions=[_assert_final_response, _assert_non_empty_answer, _assert_no_tool_request],
+            expected_metrics={"non_empty_response": True, "tool_requests": 0},
         ),
         GraphEvalCase(
             name="qa_notebook_only_insufficient",
@@ -361,6 +381,20 @@ def _assert_web_fallback_planned_without_provider(output: dict[str, Any]) -> str
     encoded = json.dumps(requests, ensure_ascii=False).lower()
     if "tavily" in encoded:
         return "web_fallback_provider_leaked"
+    return None
+
+
+def _assert_no_web_fallback_planned(output: dict[str, Any]) -> str | None:
+    requests = list(output.get("tool_requests") or [])
+    capabilities = {str(item.get("capability") or "") for item in requests if isinstance(item, dict)}
+    if ToolCapability.WEB_SEARCH.value in capabilities:
+        return "unexpected_web_fallback_request"
+    return None
+
+
+def _assert_no_tool_request(output: dict[str, Any]) -> str | None:
+    if list(output.get("tool_requests") or []):
+        return "unexpected_tool_request"
     return None
 
 

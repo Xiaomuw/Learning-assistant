@@ -44,10 +44,10 @@ CHAT_HEARTBEAT_SECONDS = 12.0
 def _safe_chat_error_message(exc: Exception) -> str:
     reason = _chat_error_reason(exc)
     if reason == "timeout":
-        return "学习引擎响应超时，我已停止本轮处理。请稍后重试，或把问题拆小后再问。"
+        return "模型响应超时，我已停止本轮处理。请稍后重试，或把问题拆小后再问。"
     if reason == "model_unavailable":
         return "当前模型服务暂时不可用，我没有拿到稳定回答。请稍后重试，或切换模型后再问。"
-    return "学习引擎暂时无法完成本轮处理，我已安全停止。请稍后重试，或换一种问法继续。"
+    return "模型暂时无法完成本轮处理，我已安全停止。请稍后重试，或换一种问法继续。"
 
 
 def _safe_chat_error_type(exc: Exception) -> str:
@@ -129,6 +129,7 @@ class ChatResponse(BaseModel):
     session_id: str
     question_type: str
     route: str = "explain"
+    final_answer: str = ""
     explanation: dict
     quiz_items: list | None = None
     quiz_request: dict | None = None
@@ -159,7 +160,7 @@ async def chat(
                 "event": "status",
                 "data": json.dumps(
                     {
-                        "message": "已连接学习引擎，正在判断问题类型。",
+                        "message": "已接入模型，正在判断问题类型。",
                         "session_id": request.session_id,
                         "thinking_mode": request.thinking_mode,
                         "safe_decision_summary": (
@@ -309,6 +310,7 @@ async def chat_sync(
             session_id=request.session_id,
             question_type=result.question_type,
             route=result.route,
+            final_answer=result.final_answer,
             explanation=result.explanation.model_dump(),
             quiz_items=[item.model_dump() for item in result.quiz_items],
             quiz_request=result.quiz_request.model_dump() if result.quiz_request else None,

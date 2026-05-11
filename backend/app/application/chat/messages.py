@@ -247,9 +247,29 @@ def _build_process_execution(final_state: dict[str, Any]) -> dict[str, Any] | No
     execution_mode = str(final_state.get("execution_mode", "") or "").strip()
     profile = final_state.get("selected_model_profile")
     profile_data = profile if isinstance(profile, dict) else {}
+    runtime = final_state.get("graph_runtime")
+    runtime_data = runtime if isinstance(runtime, dict) else {}
+    model_attempts = list(final_state.get("model_attempts") or [])
+    streaming_token_count = int(final_state.get("streaming_token_count") or 0)
+    model_latency_ms = int(final_state.get("model_latency_ms") or runtime_data.get("latency_ms") or 0)
+    streaming_mode = str(final_state.get("streaming_mode", "") or "").strip()
+    streaming_degraded_reason = str(final_state.get("streaming_degraded_reason", "") or "").strip()
 
     if not execution_mode and not profile_data and "degraded" not in final_state:
         return None
+
+    has_successful_attempt = any(
+        isinstance(item, dict) and str(item.get("status") or "").strip().lower() == "ok"
+        for item in model_attempts
+    )
+    if bool(final_state.get("fallback_used", False)):
+        call_status = "fallback"
+    elif has_successful_attempt or streaming_token_count > 0:
+        call_status = "ok"
+    elif bool(final_state.get("degraded", False)):
+        call_status = "failed"
+    else:
+        call_status = "unknown"
 
     execution: dict[str, Any] = {
         "mode": EXECUTION_MODE_LABELS.get(execution_mode, execution_mode or "未知模式"),
@@ -260,7 +280,12 @@ def _build_process_execution(final_state: dict[str, Any]) -> dict[str, Any] | No
         "fallbackModelId": str(final_state.get("fallback_model_id", "") or "").strip(),
         "fallbackUsed": bool(final_state.get("fallback_used", False)),
         "fallbackReason": str(final_state.get("fallback_reason", "") or "").strip(),
-        "modelAttempts": list(final_state.get("model_attempts") or []),
+        "modelAttempts": model_attempts,
+        "streamingMode": streaming_mode,
+        "streamingTokenCount": streaming_token_count,
+        "streamingDegradedReason": streaming_degraded_reason,
+        "modelLatencyMs": model_latency_ms,
+        "callStatus": call_status,
     }
     model_provider = str(profile_data.get("provider", "") or "").strip()
     if model_provider:
@@ -476,6 +501,14 @@ def _build_process_stages(final_state: dict[str, Any]) -> list[dict[str, Any]]:
             execution_detail = (
                 f"{execution_detail} · 已从 {execution['primaryModelId']} 回滚到 {execution['fallbackModelId']}"
             )
+        streaming_count = int(execution.get("streamingTokenCount") or 0)
+        latency_ms = int(execution.get("modelLatencyMs") or 0)
+        if streaming_count > 0:
+            execution_detail = f"{execution_detail} · 流式 {streaming_count} 段"
+        if execution.get("streamingDegradedReason"):
+            execution_detail = f"{execution_detail} · 流式降级"
+        if latency_ms > 0:
+            execution_detail = f"{execution_detail} · {latency_ms}ms"
         stages.append(
             {
                 "key": "execution",

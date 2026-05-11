@@ -3,10 +3,10 @@
   "miniprogramRoot": "dist/",
   "compileType": "miniprogram",
   "projectname": "learning-assistant-weapp",
-  "appid": "touristappid",
+  "appid": "wxd338be42b166c393",
   "setting": {
     "urlCheck": false,
-    "es6": true,
+    "es6": false,
     "enhance": true,
     "postcss": true,
     "minified": true,

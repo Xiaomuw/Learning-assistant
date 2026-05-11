@@ -1,8 +1,40 @@
+/* ═══════════════════════════════════════════════════
+   Learning Assistant · Taro Weapp
+   Global Design Tokens — Neo-Brutalism
+   Aligned with frontend/app/globals.css
+   ═══════════════════════════════════════════════════ */
+
+/* ─── Design Tokens ─── */
+$neo-bg: #FFFDF8;
+$neo-bg-darker: #f5f0e0;
+$neo-ink: #1e293b;
+$neo-accent: #ffb3c6;
+$neo-secondary: #fdf0b0;
+$neo-muted: #c4b5fd;
+$neo-green: #a7f3d0;
+$neo-blue: #bfdbfe;
+$neo-white: #ffffff;
+$neo-error: #ff5252;
+
+$border: 3px solid $neo-ink;
+$radius-card: 24px;
+$radius-pill: 999px;
+
+$shadow-sm: 3px 4px 0px 0px $neo-ink;
+$shadow-md: 4px 6px 0px 0px $neo-ink;
+$shadow-lg: 6px 8px 0px 0px $neo-ink;
+$shadow-xl: 8px 12px 0px 0px $neo-ink;
+
 page {
   min-height: 100%;
-  background: #f8fafc;
-  color: #0f172a;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: $neo-bg;
+  background-image:
+    linear-gradient(to right, rgba(30, 41, 59, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 41, 59, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 1px 1px, rgba(30, 41, 59, 0.08) 1px, transparent 0);
+  background-size: 28px 28px, 28px 28px, 18px 18px;
+  color: $neo-ink;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", sans-serif;
 }
 
 .page {
@@ -14,56 +46,99 @@ page {
 .page-title {
   font-size: 44px;
   line-height: 1.15;
-  font-weight: 800;
-  color: #0f172a;
+  font-weight: 900;
+  color: $neo-ink;
+  letter-spacing: -0.02em;
 }
 
 .page-subtitle {
   margin-top: 10px;
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.65);
   font-size: 26px;
+  font-weight: 700;
   line-height: 1.6;
 }
 
 .card {
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  border: $border;
+  border-radius: $radius-card;
+  background: $neo-white;
+  box-shadow: $shadow-md;
 }
 
 .button-primary {
   height: 88px;
-  border-radius: 18px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 30px;
-  font-weight: 700;
+  border: $border;
+  border-radius: $radius-pill;
+  background: $neo-accent;
+  color: $neo-ink;
+  font-size: 28px;
+  font-weight: 900;
   line-height: 88px;
+  letter-spacing: 0.08em;
+  box-shadow: $shadow-sm;
+  text-transform: uppercase;
+
+  &::after { border: none; }
+
+  &:active {
+    transform: translate(4px, 4px);
+    box-shadow: none;
+  }
 }
 
 .button-secondary {
   height: 78px;
-  border: 1px solid #cbd5e1;
-  border-radius: 16px;
-  background: #ffffff;
-  color: #0f172a;
-  font-size: 28px;
-  font-weight: 700;
+  border: $border;
+  border-radius: $radius-pill;
+  background: $neo-white;
+  color: $neo-ink;
+  font-size: 26px;
+  font-weight: 900;
   line-height: 78px;
+  letter-spacing: 0.05em;
+  box-shadow: $shadow-sm;
+
+  &::after { border: none; }
+
+  &:active {
+    transform: translate(4px, 4px);
+    box-shadow: none;
+  }
 }
 
 .muted {
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.5);
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
+  border: $border;
+  border-radius: $radius-pill;
   padding: 8px 18px;
-  background: #e0f2fe;
-  color: #075985;
+  background: $neo-secondary;
+  color: $neo-ink;
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 2px 3px 0px 0px $neo-ink;
+}
+
+/* ─── Animations ─── */
+@keyframes stampIn {
+  0% { opacity: 0; transform: translateY(14px) rotate(-2deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+
+@keyframes dotPulse {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+.stamp-in { animation: stampIn 0.2s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp-in { animation: none; }
 }

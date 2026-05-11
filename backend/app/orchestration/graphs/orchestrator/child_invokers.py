@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from loguru import logger
 
 from app.infrastructure.llm.langsmith import trace_run
-from app.orchestration.graphs.orchestrator.schemas import ChildGraphOutput
+from app.orchestration.graphs.orchestrator.schemas import ChildGraphOutput, ChildGraphResult
 from app.orchestration.graphs.orchestrator.state import OrchestratorState
 from app.orchestration.graphs.shared.schemas import (
     FinalResponse,
@@ -77,8 +77,8 @@ class QAGraphInvoker:
         requested_token_stream = bool(runtime_context.get("stream_answer_tokens"))
         qa_runtime_context = {
             "graph_run_id": f"{state.get('run_id', '')}:{self.graph_type.value}",
-            "stream_answer_tokens": False,
-            "streaming_degraded_reason": "buffered_until_quality_gate" if requested_token_stream else "",
+            "stream_answer_tokens": requested_token_stream,
+            "streaming_degraded_reason": "",
             "thinking_mode": bool(runtime_context.get("thinking_mode", False)),
         }
         if qa_runtime_context["stream_answer_tokens"]:
@@ -197,7 +197,70 @@ class ChildGraphInvokerFactory:
 
 def _child_graph_update(graph_type: GraphType, payload: dict[str, Any]) -> dict[str, Any]:
     output = ChildGraphOutput(target_graph_type=graph_type, payload=payload)
-    return {"child_graph_output": output.model_dump(mode="json")}
+    result = _child_graph_result(graph_type, payload)
+    return {
+        "child_graph_result": result.model_dump(mode="json"),
+        "child_graph_output": output.model_dump(mode="json"),
+    }
+
+
+def _child_graph_result(graph_type: GraphType, payload: dict[str, Any]) -> ChildGraphResult:
+    final_response = payload.get("final_response") if isinstance(payload.get("final_response"), dict) else {}
+    ui_payload = final_response.get("ui_payload") if isinstance(final_response.get("ui_payload"), dict) else {}
+    errors = [item for item in list(payload.get("errors") or []) if isinstance(item, dict)]
+    answer = str(final_response.get("answer") or payload.get("answer") or "").strip()
+    if errors and not answer:
+        status = "failed"
+    elif errors:
+        status = "degraded"
+    else:
+        status = "succeeded"
+    audit_event = {
+        "graph_type": graph_type.value,
+        "adapter": str(payload.get("adapter") or ""),
+        "status": status,
+        "learning_event_count": len(list(payload.get("learning_events") or [])),
+        "error_count": len(errors),
+    }
+    trace_steps = _child_trace_steps(graph_type, payload)
+    error = errors[0] if errors and not answer else None
+    return ChildGraphResult(
+        task_type=graph_type.value,
+        status=status,
+        content=payload,
+        learning_events=[item for item in list(payload.get("learning_events") or []) if isinstance(item, dict)],
+        audit_event=audit_event,
+        ui_payload=dict(ui_payload),
+        trace_steps=trace_steps,
+        error=error,
+    )
+
+
+def _child_trace_steps(graph_type: GraphType, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    final_response = payload.get("final_response") if isinstance(payload.get("final_response"), dict) else {}
+    response_ui = final_response.get("ui_payload") if isinstance(final_response.get("ui_payload"), dict) else {}
+    runtime_summary = payload.get("runtime_summary") if isinstance(payload.get("runtime_summary"), dict) else {}
+    steps: list[dict[str, Any]] = [
+        {
+            "node": "child_graph_invoker",
+            "graph_type": graph_type.value,
+            "adapter": str(payload.get("adapter") or ""),
+            "status": "completed",
+        }
+    ]
+    retrieval_report = response_ui.get("retrieval_report")
+    if isinstance(retrieval_report, dict) and retrieval_report:
+        steps.append({"node": "retrieval", "status": "completed", "metadata": retrieval_report})
+    tool_rounds = runtime_summary.get("tool_decision_rounds")
+    if isinstance(tool_rounds, list) and tool_rounds:
+        steps.append(
+            {
+                "node": "tool_decision",
+                "status": "completed",
+                "metadata": {"round_count": len(tool_rounds)},
+            }
+        )
+    return steps
 
 
 def _child_trace(graph_type: GraphType, state: OrchestratorState):

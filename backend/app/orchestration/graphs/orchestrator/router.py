@@ -7,7 +7,7 @@ from app.orchestration.graphs.orchestrator.state import OrchestratorState
 QA_NODE = "qa_graph"
 QUESTION_GENERATION_NODE = "question_generation_graph"
 MASTERY_EVALUATION_NODE = "mastery_evaluation_graph"
-FALLBACK_NODE = "clarify_or_safe_response"
+FALLBACK_NODE = "top_level_clarify_or_refuse"
 
 _INTENT_TO_NODE: dict[str, str] = {
     OrchestratorIntent.QA.value: QA_NODE,

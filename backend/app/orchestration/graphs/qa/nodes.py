@@ -47,6 +47,8 @@ def input_normalize_node(state: QAGraphState) -> dict[str, Any]:
         "signals": _context_dependency_signals(normalized_question),
     }
     question_type = str(state.get("question_type") or _infer_question_type(normalized_question))
+    repair_count = int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0)
+    max_repair_count = int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS)
     return {
         "run_id": str(state.get("run_id") or uuid4()),
         "graph_type": GraphType.QA.value,
@@ -62,6 +64,9 @@ def input_normalize_node(state: QAGraphState) -> dict[str, Any]:
         "tool_requests": list(state.get("tool_requests") or []),
         "learning_events": list(state.get("learning_events") or []),
         "errors": list(state.get("errors") or []),
+        "repair_count": repair_count,
+        "max_repair_count": max_repair_count,
+        "answer_repair_attempt_count": repair_count,
         "qa_request": {
             "question": normalized_question,
             "question_type": question_type,
@@ -426,16 +431,15 @@ def web_search_if_needed_node(
     existing_requests = list(state.get("tool_requests") or [])
     existing_results = [item.model_dump(mode="json") for item in _collect_tool_results(state)]
     retrieval_report = dict(state.get("retrieval_report") or {})
-    allowed = source_policy in {
-        SourcePolicy.OPEN_TOOLS.value,
-        SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
-    }
+    allowed = _should_run_web_retrieval(state, question, source_policy)
     should_run_web = bool(not gate.get("sufficient") and allowed)
 
     if not should_run_web:
         blocked_reason = "internal_evidence_sufficient" if gate.get("sufficient") else "source_policy_disallows_web"
         if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
             blocked_reason = "source_policy_notebook_only"
+        elif not _has_external_search_signal(question):
+            blocked_reason = "no_external_search_signal"
         _emit_status(
             stream_stage="web_search_if_needed",
             stage_label="联网补充",
@@ -589,6 +593,19 @@ def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
+def route_after_evidence_judge(state: QAGraphState) -> str:
+    """Run web fallback only when the judged evidence is insufficient and policy/signals allow it."""
+
+    gate = dict(state.get("evidence_gate") or {})
+    if gate.get("sufficient"):
+        return "evidence_merge"
+    source_policy = _source_policy(state)
+    question = _resolved_question(state)
+    if _should_run_web_retrieval(state, question, source_policy):
+        return "web_search_if_needed"
+    return "evidence_merge"
+
+
 def answer_generate_node(
     state: QAGraphState,
     *,
@@ -636,11 +653,12 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
         issues.append("notebook_claim_without_evidence")
 
     passed = not issues
-    repair_attempt_count = int(state.get("answer_repair_attempt_count") or 0)
+    repair_count = int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0)
+    max_repair_count = int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS)
     repair_action = "none"
     if issues:
         repairable = any(issue in {"empty_answer", "evidence_ref_missing"} for issue in issues)
-        if repairable and repair_attempt_count < MAX_ANSWER_REPAIR_ATTEMPTS:
+        if repairable and repair_count < max_repair_count:
             repair_action = "rewrite_with_evidence"
         elif any(issue in {"notebook_claim_without_evidence", "time_sensitive_without_web"} for issue in issues):
             repair_action = "ask_clarification"
@@ -652,8 +670,10 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
         "reason": issues[0] if issues else "quality_pass",
         "repair_action": repair_action,
         "issues": issues,
-        "repair_attempt_count": repair_attempt_count,
-        "max_repair_attempts": MAX_ANSWER_REPAIR_ATTEMPTS,
+        "repair_count": repair_count,
+        "max_repair_count": max_repair_count,
+        "repair_attempt_count": repair_count,
+        "max_repair_attempts": max_repair_count,
     }
     return {
         "quality_check": quality_check,
@@ -666,7 +686,9 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
             "reason": quality_check["reason"],
             "repair_action": repair_action,
             "web_repair_count": int(state.get("web_search_iteration") or 0),
-            "answer_repair_count": repair_attempt_count,
+            "answer_repair_count": repair_count,
+            "repair_count": repair_count,
+            "max_repair_count": max_repair_count,
         }
     }
 
@@ -674,17 +696,18 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
 def route_after_answer_quality(state: QAGraphState) -> str:
     quality = dict(state.get("quality_check") or state.get("answer_quality") or {})
     if quality.get("passed") or str(quality.get("status") or "") == "pass":
-        return "final_response_compose"
+        return "qa_result_compose"
     action = str(quality.get("repair_action") or "ask_clarification")
     if action == "rewrite_with_evidence":
         return "answer_repair"
-    return "clarification_response"
+    return "qa_clarification_response"
 
 
 def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
     """Repair a failed candidate answer once, using only merged evidence."""
 
-    attempt_count = int(state.get("answer_repair_attempt_count") or 0) + 1
+    attempt_count = int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0) + 1
+    max_repair_count = int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS)
     response = FinalResponse.model_validate(state.get("final_response") or {})
     evidence = _collect_answer_evidence(state)
     source_usage = _source_usage_from_evidence(evidence)
@@ -705,6 +728,8 @@ def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
         )
         return {
             "final_response": repaired.model_dump(mode="json"),
+            "repair_count": attempt_count,
+            "max_repair_count": max_repair_count,
             "answer_repair_attempt_count": attempt_count,
         }
 
@@ -733,11 +758,13 @@ def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
     )
     return {
         "final_response": repaired.model_dump(mode="json"),
+        "repair_count": attempt_count,
+        "max_repair_count": max_repair_count,
         "answer_repair_attempt_count": attempt_count,
     }
 
 
-def clarification_response_node(state: QAGraphState) -> dict[str, Any]:
+def qa_clarification_response_node(state: QAGraphState) -> dict[str, Any]:
     """Return a safe clarification/degraded response when quality cannot be repaired."""
 
     quality = dict(state.get("quality_check") or state.get("answer_quality") or {})
@@ -764,7 +791,7 @@ def clarification_response_node(state: QAGraphState) -> dict[str, Any]:
     error = GraphError(
         code="qa_clarification_response",
         message=str(quality.get("reason") or "answer_quality_failed"),
-        node="clarification_response",
+        node="qa_clarification_response",
         severity=GraphErrorSeverity.WARNING,
         metadata={"repair_action": str(quality.get("repair_action") or "")},
     )
@@ -773,6 +800,9 @@ def clarification_response_node(state: QAGraphState) -> dict[str, Any]:
         "source_usage": "model",
         "errors": [*list(state.get("errors") or []), error.model_dump(mode="json")],
     }
+
+
+clarification_response_node = qa_clarification_response_node
 
 
 def should_run_web_search(state: QAGraphState) -> str:
@@ -859,7 +889,7 @@ def evidence_merge_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
-def final_response_node(state: QAGraphState) -> dict[str, Any]:
+def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
     """Compose the final contract response with v2 QA process metadata."""
 
     response = FinalResponse.model_validate(state.get("final_response") or {})
@@ -902,6 +932,8 @@ def final_response_node(state: QAGraphState) -> dict[str, Any]:
         "evidence_judgement": dict(state.get("evidence_judgement") or {}),
         "answer_quality": dict(state.get("answer_quality") or {}),
         "quality_check": dict(state.get("quality_check") or {}),
+        "repair_count": int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0),
+        "max_repair_count": int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS),
         "answer_repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
         "source_usage": source_usage,
         "web_search_attempted": bool(state.get("web_search_attempted")),
@@ -928,6 +960,9 @@ def final_response_node(state: QAGraphState) -> dict[str, Any]:
         }
     )
     return {"final_response": final_response.model_dump(mode="json"), "errors": update_errors}
+
+
+final_response_node = qa_result_compose_node
 
 
 def prepare_qa_request(state: QAGraphState) -> dict[str, Any]:
@@ -1195,6 +1230,8 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
                 graph_run_id=str(state.get("run_id") or ""),
                 payload={
                     "answer_mode": answer_mode,
+                    "repair_count": int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0),
+                    "max_repair_count": int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS),
                     "repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
                     "quality_check": dict(state.get("quality_check") or {}),
                 },
@@ -1305,6 +1342,8 @@ def _infer_question_type(question: str) -> str:
 
 def _infer_intent(question: str) -> str:
     normalized = question.lower()
+    if _has_meta_signal(question):
+        return "meta"
     if any(term in question for term in ("出题", "练习题", "刷题", "生成题目", "测验")):
         return "question_generation"
     if any(term in question for term in ("批改", "判一下", "对不对", "看看我写的", "检查答案")):
@@ -1329,6 +1368,8 @@ def _qa_scoped_intent(intent: str) -> str:
 
 
 def _question_type_from_intent(intent: str, question: str) -> str:
+    if intent == "meta":
+        return "meta"
     if intent == "concept_explain":
         return "concept"
     if intent == "question_generation":
@@ -1350,6 +1391,7 @@ def _intent_confidence(intent: str) -> float:
 
 def _intent_reason(intent: str) -> str:
     reasons = {
+        "meta": "meta_question_signal",
         "concept_explain": "concept_explanation_signal",
         "question_generation": "practice_generation_signal",
         "answer_review": "answer_review_signal",
@@ -1359,6 +1401,34 @@ def _intent_reason(intent: str) -> str:
         "smalltalk": "smalltalk_signal",
     }
     return reasons.get(intent, "no_strong_intent_signal")
+
+
+def _has_meta_signal(question: str) -> bool:
+    normalized = question.lower()
+    chinese_terms = (
+        "你是什么模型",
+        "你用的什么模型",
+        "你现在是什么模型",
+        "现在用的什么模型",
+        "当前模型",
+        "模型版本",
+        "你是谁",
+        "你叫什么",
+        "你能做什么",
+        "介绍一下你",
+    )
+    english_terms = (
+        "what model are you",
+        "what model do you use",
+        "which model are you",
+        "which model do you use",
+        "model are you",
+        "who are you",
+        "what can you do",
+    )
+    return any(term in question for term in chinese_terms) or any(
+        term in normalized for term in english_terms
+    )
 
 
 def _is_context_dependent_question(question: str) -> bool:

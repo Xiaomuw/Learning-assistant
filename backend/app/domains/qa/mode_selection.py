@@ -37,23 +37,27 @@ def select_execution_mode(request: AgentRequest, model_profile: ModelProfile) ->
     allow_tools = bool(request.runtime_context.get("allow_tools", False) or guard.get("allow_tools", False))
     allow_search = bool(request.runtime_context.get("allow_search", False) or guard.get("allow_search", False))
     if route == "fast":
+        if model_profile.provider == "DeepSeek" and not model_profile.supports_structured_output:
+            return "direct_answer"
         return _non_tool_answer_mode(model_profile)
 
     rag_precomputed = bool(request.runtime_context.get("rag_precomputed", False))
     rag_ready = bool(request.runtime_context.get("rag_ready", False))
     notebook_policy = str(request.runtime_context.get("notebook_policy", "") or "").strip()
 
+    if rag_precomputed and request.question_type in _RAG_DETERMINISTIC_TYPES and (
+        rag_ready or notebook_policy == "strict"
+    ):
+        return "deterministic_context"
+
     if model_profile.provider == "DeepSeek":
-        return _non_tool_answer_mode(model_profile)
+        # DeepSeek 当前端点不走稳定结构化输出；当 notebook 只是可选且没有
+        # 预检索证据时，应直接让模型回答，避免落入“暂无资料”的确定性模板。
+        return "direct_answer"
 
     if model_profile.supports_tool_calling and allow_tools:
         # 模型优先：route/guard 只提供工具边界，是否真的调用工具由模型循环决定。
         return "tool_calling"
 
     # 兼容旧 graph 预检索分支：不支持工具调用时，才消费预检索上下文走确定性链路。
-    if rag_precomputed and request.question_type in _RAG_DETERMINISTIC_TYPES and (
-        rag_ready or notebook_policy == "strict"
-    ):
-        return "deterministic_context"
-
     return _non_tool_answer_mode(model_profile)

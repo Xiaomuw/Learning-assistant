@@ -1,14 +1,30 @@
+$neo-bg: #FFFDF8;
+$neo-ink: #1e293b;
+$neo-accent: #ffb3c6;
+$neo-secondary: #fdf0b0;
+$neo-muted: #c4b5fd;
+$neo-green: #a7f3d0;
+$neo-white: #ffffff;
+$neo-error: #ff5252;
+$border: 3px solid $neo-ink;
+$radius-card: 24px;
+$radius-pill: 999px;
+$shadow-sm: 3px 4px 0px 0px $neo-ink;
+$shadow-md: 4px 6px 0px 0px $neo-ink;
+
 .profile-page {
   display: flex;
   flex-direction: column;
   gap: 22px;
 }
 
+/* ── 用户卡片 ── */
 .profile-card {
   display: flex;
   align-items: center;
   gap: 22px;
   padding: 30px;
+  background: $neo-white;
 }
 
 .avatar {
@@ -17,40 +33,129 @@
   justify-content: center;
   width: 96px;
   height: 96px;
-  border-radius: 28px;
-  background: #2563eb;
-  color: #ffffff;
+  border: $border;
+  border-radius: $radius-card;
+  background: $neo-muted;
+  color: $neo-ink;
   font-size: 42px;
   font-weight: 900;
+  box-shadow: $shadow-sm;
+  flex-shrink: 0;
 }
 
 .profile-main {
   flex: 1;
+  min-width: 0;
 }
 
 .profile-name,
-.profile-email {
+.profile-email,
+.profile-style {
   display: block;
 }
 
 .profile-name {
   font-size: 34px;
-  font-weight: 800;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-email {
   margin-top: 8px;
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.5);
   font-size: 24px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.profile-style {
+  margin-top: 8px;
+  color: rgba(30, 41, 59, 0.65);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.edit-button {
+  flex-shrink: 0;
+  width: auto;
+  height: auto;
+  padding: 12px 22px;
+  border: $border;
+  border-radius: $radius-pill;
+  background: $neo-secondary;
+  color: $neo-ink;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 2px 2px 0px 0px $neo-ink;
+  margin: 0;
+
+  &::after { border: none; }
+
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+}
+
+/* ── 统计概览 ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.stat-card {
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.stat-card.stat-a {
+  background: $neo-muted;
+}
+
+.stat-card.stat-b {
+  background: $neo-secondary;
+}
+
+.stat-number {
+  display: block;
+  color: $neo-ink;
+  font-size: 48px;
+  font-weight: 900;
+}
+
+.stat-label {
+  display: block;
+  margin-top: 8px;
+  color: rgba(30, 41, 59, 0.5);
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── 功能区块 ── */
 .section-card,
 .error-card {
   padding: 28px;
+  background: $neo-white;
 }
 
 .error-card {
-  color: #dc2626;
+  color: $neo-ink;
+  background: $neo-accent;
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .section-title,
@@ -61,48 +166,203 @@
 
 .section-title {
   font-size: 30px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .section-value {
   margin-top: 12px;
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 900;
 }
 
 .section-desc {
   margin-top: 10px;
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.65);
   font-size: 26px;
+  font-weight: 700;
   line-height: 1.6;
 }
 
+.section-badge {
+  flex-shrink: 0;
+  border: $border;
+  border-radius: $radius-pill;
+  padding: 8px 16px;
+  background: $neo-secondary;
+  box-shadow: 2px 2px 0px 0px $neo-ink;
+}
+
+.badge-text {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+/* ── 推荐练习 ── */
+.recommended-body {
+  margin-top: 18px;
+}
+
+.empty-text {
+  display: block;
+  color: rgba(30, 41, 59, 0.5);
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.quiz-preview-card {
+  margin-top: 14px;
+  border: $border;
+  border-radius: $radius-card;
+  padding: 18px;
+  background: $neo-bg;
+  box-shadow: 2px 3px 0px 0px $neo-ink;
+}
+
+.quiz-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tag {
+  display: inline-flex;
+  border: $border;
+  border-radius: $radius-pill;
+  padding: 4px 14px;
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 1px 1px 0px 0px $neo-ink;
+}
+
+.tag.accent {
+  background: $neo-accent;
+}
+
+.tag.secondary {
+  background: $neo-white;
+}
+
+.quiz-preview-text {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.go-practice-button {
+  margin-top: 18px;
+}
+
+/* ── 笔记本列表 ── */
 .notebook-row {
-  border-top: 1px solid #e2e8f0;
+  border-top: 3px solid rgba(30, 41, 59, 0.1);
   padding: 18px 0;
 }
 
 .notebook-row:first-of-type {
   border-top: 0;
+  margin-top: 14px;
 }
 
 .notebook-name,
-.notebook-desc {
+.notebook-desc,
+.notebook-meta {
   display: block;
 }
 
 .notebook-name {
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .notebook-desc {
   margin-top: 6px;
-  color: #64748b;
+  color: rgba(30, 41, 59, 0.55);
   font-size: 23px;
+  font-weight: 700;
   line-height: 1.5;
 }
 
+.notebook-meta {
+  margin-top: 6px;
+  border: $border;
+  border-radius: $radius-pill;
+  display: inline-flex;
+  padding: 4px 12px;
+  background: $neo-bg;
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 1px 1px 0px 0px $neo-ink;
+}
+
+/* ── 退出按钮 ── */
 .logout-button {
   margin-top: 10px;
+  background: $neo-error;
+  color: $neo-white;
+  border-color: $neo-ink;
+  font-weight: 900;
+}
+
+/* ── 编辑昵称弹窗 ── */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 32px;
+}
+
+.modal-card {
+  width: 100%;
+  border: $border;
+  border-radius: $radius-card;
+  background: $neo-white;
+  box-shadow: $shadow-md;
+  padding: 32px;
+  animation: stampIn 0.2s ease-out;
+}
+
+.modal-title {
+  display: block;
+  font-size: 34px;
+  font-weight: 900;
+  margin-bottom: 20px;
+}
+
+.modal-input {
+  width: 100%;
+  height: 80px;
+  box-sizing: border-box;
+  border: $border;
+  border-radius: $radius-card;
+  padding: 0 22px;
+  background: $neo-bg;
+  color: $neo-ink;
+  font-size: 28px;
+  font-weight: 700;
+  box-shadow: $shadow-sm;
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.modal-btn {
+  width: 100%;
+  margin: 0;
 }
