@@ -1,6 +1,6 @@
 """add durable practice finalizer and mastery idempotency fields
 
-Revision ID: 0011_practice_finalizer_idempotency
+Revision ID: 0011_practice_finalizer
 Revises: 0010_readiness_required_indexes
 Create Date: 2026-05-12
 """
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision: str = "0011_practice_finalizer_idempotency"
+revision: str = "0011_practice_finalizer"
 down_revision: str | None = "0010_readiness_required_indexes"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

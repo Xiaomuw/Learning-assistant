@@ -193,7 +193,7 @@ class GraphMigrationContractTest(unittest.TestCase):
         revision = BACKEND_ROOT / "alembic" / "versions" / "0011_practice_finalizer_idempotency.py"
         self.assertTrue(revision.exists())
         content = revision.read_text(encoding="utf-8")
-        self.assertIn('revision: str = "0011_practice_finalizer_idempotency"', content)
+        self.assertIn('revision: str = "0011_practice_finalizer"', content)
         self.assertIn('down_revision: str | None = "0010_readiness_required_indexes"', content)
         self.assertIn("practice_attempt_finalization_jobs", content)
         self.assertIn("idempotency_key", content)
@@ -244,7 +244,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                 ).fetchone()[0]
             finally:
                 connection.close()
-            self.assertEqual(applied_revision, "0011_practice_finalizer_idempotency")
+            self.assertEqual(applied_revision, "0011_practice_finalizer")
             self.assertTrue(
                 {
                     "users",
