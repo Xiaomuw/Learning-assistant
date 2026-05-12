@@ -16,7 +16,7 @@ flowchart LR
     G --> M["MasteryEvaluationGraph"]
     B --> DB["PostgreSQL"]
     G --> V["PGVector"]
-    G --> C["PostgresSaver"]
+    G --> GF["graph-era facts repositories"]
     G --> MP["app/infrastructure/llm/provider façade"]
 ```
 
@@ -38,7 +38,8 @@ app.main
 - `app/infrastructure/db/repositories/__init__.py` 只导出正式 record 仓储能力，真实实现已拆到 `db/repositories/*`
 - `app/services/retrieval/*` 已删除；正式 RAG 入口是 `app/services/rag/{loader,splitter,embeddings,vector_store,retriever,rag_service}.py`
 - `app/infrastructure/llm/provider.py` 是模型与 Embedding façade；真实实现拆在 `config.py / catalog.py / clients.py`
-- `app/services/tools/runtime.py` 是 QA 工具聚合入口；registry、internal tools、MCP tools 已拆到 `app/services/tools/*`
+- `app/services/tooling/*` 是 ToolCapability 聚合入口；executor、policy、registry 和 provider adapter 在这里收口
+- 旧 `app/services/tools/*` 仅保留 provider / legacy internal tool 兼容实现，不作为业务 Graph 直接依赖入口
 - `app/services/notebook_knowledge_base.py` 是 notebook 知识库 gateway，负责文档计数、知识库删除和内容写入
 - `app/interfaces/*` 是唯一 HTTP 翻译层：application 错误与内部契约都在这里映射成现有 API 响应
 
@@ -60,9 +61,9 @@ app.main
 ### 3.3 LangGraph
 
 - 生产入口由 [backend/app/orchestration/graphs/orchestrator/graph.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/orchestration/graphs/orchestrator/graph.py) 管理
-- 使用 `PostgresSaver` 编译 graph
 - `session_id` 同时作为 LangGraph `thread_id`
 - `chat_sessions` 仍然是前端历史页的事实来源，不被 checkpointer 替代
+- 业务长期事实写入 Alembic 管理的 graph-era 表，包括 `graph_runs`、`learning_events`、`attempts`、`mastery_snapshots` 等
 
 ## 4. 工作流
 

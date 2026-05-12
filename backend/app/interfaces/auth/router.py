@@ -26,6 +26,7 @@ from app.interfaces.auth.cookies import (
     set_auth_cookies,
 )
 from app.interfaces.auth.dependencies import AuthenticatedUser, require_current_user
+from app.interfaces.client_ip import client_host_from_request
 from app.interfaces.http_errors import to_http_exception
 from app.shared.schemas.contracts import AuthSessionResult, AuthUserView
 
@@ -116,7 +117,7 @@ async def send_register_code(body: SendRegisterCodeRequest, request: Request):
     try:
         result = send_register_code_service(
             str(body.email),
-            client_host=request.client.host if request.client else None,
+            client_host=client_host_from_request(request),
         )
     except ApplicationError as exc:
         raise to_http_exception(exc) from exc
@@ -161,11 +162,12 @@ async def login(body: LoginRequest, response: Response):
 
 
 @router.post("/auth/wechat-mini/login", response_model=AuthTokenEnvelope)
-async def wechat_mini_login(body: WechatMiniLoginRequest):
+def wechat_mini_login(body: WechatMiniLoginRequest, request: Request):
     try:
         result = login_with_wechat_mini_code_service(
             code=body.code,
             display_name=body.display_name,
+            client_host=client_host_from_request(request),
         )
     except ApplicationError as exc:
         raise to_http_exception(exc) from exc

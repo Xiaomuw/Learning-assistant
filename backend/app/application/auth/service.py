@@ -74,6 +74,8 @@ _REFRESH_REPLAY_TTL_SECONDS = float(os.getenv("AUTH_REFRESH_REPLAY_TTL_SECONDS",
 _REFRESH_REPLAY_MAX_USES = int(os.getenv("AUTH_REFRESH_REPLAY_MAX_USES", "1"))
 _REGISTER_CODE_IP_WINDOW_SECONDS = float(os.getenv("AUTH_REGISTER_CODE_IP_WINDOW_SECONDS", "60"))
 _REGISTER_CODE_IP_MAX_REQUESTS = int(os.getenv("AUTH_REGISTER_CODE_IP_MAX_REQUESTS", "20"))
+_WECHAT_LOGIN_IP_WINDOW_SECONDS = float(os.getenv("AUTH_WECHAT_LOGIN_IP_WINDOW_SECONDS", "60"))
+_WECHAT_LOGIN_IP_MAX_REQUESTS = int(os.getenv("AUTH_WECHAT_LOGIN_IP_MAX_REQUESTS", "30"))
 REGISTER_CODE_DISPATCH_MESSAGE = "如果该邮箱可以注册，验证码会发送到邮箱，请检查收件箱。"
 
 
@@ -88,6 +90,8 @@ _refresh_replay_cache: dict[str, _RefreshReplayEntry] = {}
 _refresh_replay_lock = Lock()
 _register_code_ip_attempts: dict[str, list[float]] = {}
 _register_code_ip_lock = Lock()
+_wechat_login_ip_attempts: dict[str, list[float]] = {}
+_wechat_login_ip_lock = Lock()
 
 
 def _refresh_replay_key(user_id: str, token_jti: str, token_hash: str) -> str:
@@ -163,6 +167,26 @@ def _enforce_register_code_ip_rate_limit(client_host: str | None) -> None:
         _register_code_ip_attempts[host] = attempts
 
 
+def _enforce_wechat_login_ip_rate_limit(client_host: str | None) -> None:
+    host = str(client_host or "").strip()
+    if not host or _WECHAT_LOGIN_IP_WINDOW_SECONDS <= 0 or _WECHAT_LOGIN_IP_MAX_REQUESTS <= 0:
+        return
+
+    now = time.monotonic()
+    window_start = now - _WECHAT_LOGIN_IP_WINDOW_SECONDS
+    with _wechat_login_ip_lock:
+        attempts = [
+            item
+            for item in _wechat_login_ip_attempts.get(host, [])
+            if item > window_start
+        ]
+        if len(attempts) >= _WECHAT_LOGIN_IP_MAX_REQUESTS:
+            _wechat_login_ip_attempts[host] = attempts
+            raise RateLimitError("微信登录请求过于频繁，请稍后重试", reason="rate_limited")
+        attempts.append(now)
+        _wechat_login_ip_attempts[host] = attempts
+
+
 def _issue_auth_session(user: AuthUserView) -> AuthSessionResult:
     access_token, _ = create_access_token(user.id, user.email)
     refresh_token, refresh_jti, refresh_expires_at = create_refresh_token(user.id, user.email)
@@ -231,11 +255,13 @@ def login_with_wechat_mini_code(
     *,
     code: str,
     display_name: str | None = None,
+    client_host: str | None = None,
 ) -> AuthSessionResult:
     normalized_code = code.strip()
     if not normalized_code:
         raise ValidationError("缺少微信登录凭证")
 
+    _enforce_wechat_login_ip_rate_limit(client_host)
     payload = _exchange_wechat_mini_code(normalized_code)
     openid = str(payload.get("openid", "") or "").strip()
     unionid = str(payload.get("unionid", "") or "").strip()

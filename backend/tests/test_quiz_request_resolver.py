@@ -90,6 +90,21 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertEqual(result.question_type, "single_choice")
         self.assertEqual(result.count, 5)
 
+    def test_unsupported_question_type_returns_clarification_instead_of_generation(self) -> None:
+        result = resolve_quiz_request("围绕 HashMap 出 3 道多选题", {})
+
+        self.assertEqual(result.action, "clarify_quiz_request")
+        self.assertTrue(result.need_clarification)
+        self.assertEqual(result.clarification_reason, "unsupported_question_type")
+        self.assertEqual(result.topic, "HashMap")
+        self.assertEqual(result.question_type, "multiple_choice")
+
+    def test_chinese_quiz_regression_terms_are_detected(self) -> None:
+        for message in ("来一组 HTTP", "做一套 TCP", "小测一下 HashMap"):
+            with self.subTest(message=message):
+                result = resolve_quiz_request(message, {})
+                self.assertEqual(result.action, "generate_practice_pack")
+
     def test_chinese_quoted_topic_with_408_style_generates_pack(self) -> None:
         result = resolve_quiz_request("针对「栈」生成 5 道 408 风格单选题", {})
 
@@ -157,6 +172,22 @@ class QuizRequestResolverTest(unittest.TestCase):
         self.assertIsNone(result.requested_topic)
         self.assertEqual(result.active_topic, "HTTP")
         self.assertFalse(result.should_switch_topic)
+
+    def test_continue_generation_short_phrase_inherits_last_topic(self) -> None:
+        result = resolve_quiz_request("再来几道", {"last_topic": "HTTP"})
+
+        self.assertEqual(result.action, "generate_practice_pack")
+        self.assertEqual(result.intent, "continue_quiz_generation")
+        self.assertEqual(result.topic, "HTTP")
+        self.assertEqual(result.source, "last_topic")
+
+    def test_continue_generation_without_context_needs_clarification(self) -> None:
+        result = resolve_quiz_request("再来几道", {})
+
+        self.assertTrue(result.is_quiz_request)
+        self.assertEqual(result.action, "clarify_quiz_request")
+        self.assertTrue(result.need_clarification)
+        self.assertEqual(result.clarification_reason, "missing_topic")
 
     def test_explicit_data_structure_subject_overrides_last_topic(self) -> None:
         result = resolve_quiz_request("出一些数据与结构类型的题目给我", {"last_topic": "TCP"})

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import unittest
@@ -103,6 +104,9 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertTrue(data["web_search_attempted"])
         self.assertTrue(data["web_search_used"])
         self.assertEqual(data["external_tool_calls"][0]["name"], "web_search")
+        self.assertEqual(data["external_tool_calls"][0]["source"], "web")
+        self.assertNotIn("provider", data["external_tool_calls"][0])
+        self.assertNotIn("tavily", json.dumps(data, ensure_ascii=False).lower())
 
     def test_message_process_keeps_model_call_evidence_for_history(self) -> None:
         process = build_message_process(
@@ -215,6 +219,27 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertEqual(data["top_scores"], [0.91, 0.74])
         self.assertTrue(data["web_search_used"])
         self.assertEqual(data["external_tool_calls"][0]["name"], "web_search")
+        self.assertEqual(data["external_tool_calls"][0]["source"], "web")
+        self.assertNotIn("tavily", json.dumps(data, ensure_ascii=False).lower())
+
+    def test_unknown_tool_provider_is_not_exposed_as_source(self) -> None:
+        data = extract_event_data(
+            "qa_agent_node",
+            {
+                "external_tool_calls": [
+                    {
+                        "name": "custom_tool",
+                        "capability": "custom",
+                        "provider": "raw-provider-name",
+                        "success": True,
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(data["external_tool_calls"][0]["source"], "tool")
+        self.assertNotIn("provider", data["external_tool_calls"][0])
+        self.assertNotIn("raw-provider-name", json.dumps(data, ensure_ascii=False))
 
     def test_message_process_displays_web_search_tool_call(self) -> None:
         process = build_message_process(
@@ -241,7 +266,7 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertIsNotNone(process)
         self.assertEqual(process["toolCalls"][0]["label"], "网络搜索")
         self.assertEqual(process["toolCalls"][0]["docCount"], 2)
-        self.assertFalse(any("Tavily" in stage["detail"] for stage in process["stages"]))
+        self.assertNotIn("tavily", json.dumps(process, ensure_ascii=False).lower())
         self.assertTrue(any(stage["key"] == "routing" and "工具增强" in stage["detail"] for stage in process["stages"]))
 
     def test_finalize_event_exposes_observability_without_changing_done_contract(self) -> None:

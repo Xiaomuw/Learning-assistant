@@ -69,7 +69,7 @@ flowchart TD
     I --> Z
     H --> Z
     J --> Z
-    Z --> R["chat_sessions / user_memories / user_knowledge_stats"]
+    Z --> R["chat_sessions / user_memories / graph-era facts"]
     E -.空问题 / 子图异常.-> J
 ```
 
@@ -82,19 +82,21 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["聊天 review 或 Practice 页请求题包"] --> B["domains/practice/generation.py"]
-    B --> C["优先 question_bank_items"]
+    A["聊天 review 或 Practice 页请求题包"] --> B["QuestionGenerationGraph / PracticePackService"]
+    B --> C["优先 question_bank_items / question_items"]
     C --> D{"题量足够?"}
     D -->|足够| E["返回题包"]
-    D -->|不足| F["AI 生成补题"]
+    D -->|不足| F["AI 生成补题 + quality gate"]
     F -->|失败或超时| G["fallback 补足请求题数"]
     E --> H["latest_quiz / practice 页面"]
     G --> H
     I["用户选择 A/B/C/D 提交"] --> J["POST /api/practice/attempts"]
     J --> K["domains/practice/attempts.py"]
     K --> L["practice_attempts"]
-    K --> M["domains/mastery/service.py"]
-    M --> N["user_knowledge_stats"]
+    K --> M["practice_attempt_finalization_jobs"]
+    M --> N["attempts / learning_events"]
+    N --> P["MasteryEvaluationGraph"]
+    P --> Q["mastery_snapshots"]
     K --> O["user_memories 兼容更新"]
 ```
 
@@ -110,11 +112,11 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A["聊天讲解完成"] --> B["exposure_count +1"]
-    C["做题提交"] --> D["attempt / correct / wrong 更新"]
-    B --> E["user_knowledge_stats"]
+    A["聊天讲解完成"] --> B["LearningEvent"]
+    C["做题提交"] --> D["attempt / scored signal"]
+    B --> E["MasteryEvaluationGraph"]
     D --> E
-    E --> F["mastery_score / mastery_level"]
+    E --> F["mastery_snapshots"]
     F --> G["GET /api/users/{user_id}/knowledge/mastery"]
     G --> H["Dashboard / KnowledgePanel"]
 ```
@@ -125,6 +127,7 @@ V1 算法口径：
 - exposure 提供少量加成。
 - 错题提供惩罚。
 - `mastered >= 80`、`learning >= 50`、`weak < 50`。
+- 旧 `user_knowledge_stats` 可作为历史兼容读取来源，不再是 graph-era mastery 的唯一事实表。
 
 ## 6. Profile / Dashboard 数据流
 

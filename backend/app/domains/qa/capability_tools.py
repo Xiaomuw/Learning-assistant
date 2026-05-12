@@ -87,16 +87,17 @@ class CapabilityToolRegistry:
             if isinstance(runtime_context.get("guard"), dict)
             else {}
         )
-        has_guard_policy = bool(guard) or "allow_tools" in runtime_context or "allow_search" in runtime_context
+        has_tool_policy = bool(guard) or "allow_tools" in runtime_context
+        has_search_policy = bool(guard) or "allow_search" in runtime_context
         allow_tools = (
             bool(runtime_context.get("allow_tools", False) or guard.get("allow_tools", False))
-            if has_guard_policy
-            else True
+            if has_tool_policy
+            else False
         )
         allow_search = (
             bool(runtime_context.get("allow_search", False) or guard.get("allow_search", False))
-            if has_guard_policy
-            else True
+            if has_search_policy
+            else False
         )
         notebook_policy = str(runtime_context.get("notebook_policy") or guard.get("notebook_policy") or "").strip()
         search_policy = str(runtime_context.get("search_policy") or guard.get("search_policy") or "").strip()
@@ -104,7 +105,7 @@ class CapabilityToolRegistry:
         for definition in self._definitions.values():
             if definition.scope != scope:
                 continue
-            if agent_request is not None and has_guard_policy and not allow_tools:
+            if agent_request is not None and not allow_tools:
                 continue
             if agent_request is not None and definition.capability == NOTEBOOK_RETRIEVE and notebook_policy == "skip":
                 continue

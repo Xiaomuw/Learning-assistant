@@ -133,6 +133,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                 "0008_core_data_integrity.py",
                 "0009_pgvector_core_tables.py",
                 "0010_readiness_required_indexes.py",
+                "0011_practice_finalizer_idempotency.py",
             }.issubset(revision_files)
         )
 
@@ -188,6 +189,19 @@ class GraphMigrationContractTest(unittest.TestCase):
         ):
             self.assertIn(index_name, content)
 
+    def test_alembic_practice_finalizer_idempotency_migration_exists(self) -> None:
+        revision = BACKEND_ROOT / "alembic" / "versions" / "0011_practice_finalizer_idempotency.py"
+        self.assertTrue(revision.exists())
+        content = revision.read_text(encoding="utf-8")
+        self.assertIn('revision: str = "0011_practice_finalizer_idempotency"', content)
+        self.assertIn('down_revision: str | None = "0010_readiness_required_indexes"', content)
+        self.assertIn("practice_attempt_finalization_jobs", content)
+        self.assertIn("idempotency_key", content)
+        self.assertIn("finalized_practice_attempt_ids", content)
+        self.assertIn("consumed_signal_ids", content)
+        self.assertIn("version", content)
+        self.assertIn("uq_practice_attempts_idempotency_key", content)
+
     def test_alembic_upgrade_head_on_empty_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "graph_facts.db"
@@ -230,7 +244,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                 ).fetchone()[0]
             finally:
                 connection.close()
-            self.assertEqual(applied_revision, "0010_readiness_required_indexes")
+            self.assertEqual(applied_revision, "0011_practice_finalizer_idempotency")
             self.assertTrue(
                 {
                     "users",
@@ -254,6 +268,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "kb_chunk",
                     "practice_question",
                     "alembic_version",
+                    "practice_attempt_finalization_jobs",
                 }.issubset(table_names)
             )
             expected_columns = {
@@ -348,6 +363,21 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "created_at",
                     "updated_at",
                 },
+                "practice_attempt_finalization_jobs": {
+                    "id",
+                    "legacy_attempt_id",
+                    "status",
+                    "attempt_count",
+                    "locked_at",
+                    "next_run_at",
+                    "last_error",
+                    "created_at",
+                    "updated_at",
+                },
+                "mastery_snapshots": {
+                    "consumed_signal_ids",
+                    "version",
+                },
                 "learning_events": {
                     "id",
                     "event_type",
@@ -380,6 +410,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "weak_points",
                     "error_count",
                     "recent_topics",
+                    "finalized_practice_attempt_ids",
                     "last_session",
                     "updated_at",
                 },
@@ -468,6 +499,11 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "ix_question_items_subject_id",
                     "ix_question_items_primary_concept_id",
                     "idx_question_items_user_concept",
+                },
+                "practice_attempt_finalization_jobs": {
+                    "ix_practice_attempt_finalization_jobs_legacy_attempt_id",
+                    "ix_practice_attempt_finalization_jobs_status",
+                    "idx_practice_attempt_finalization_jobs_due",
                 },
             }
             for table_name, indexes in expected_indexes.items():

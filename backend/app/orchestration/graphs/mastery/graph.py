@@ -86,12 +86,32 @@ def _persist_snapshots(mastery_repository: MasterySnapshotRepository | None):
     def persist_snapshots_node(state: MasteryEvaluationState) -> dict[str, Any]:
         snapshot_ids: list[str] = []
         snapshots = state.get("mastery_snapshots", []) or []
+        updates_by_key = {
+            (
+                str(update.get("user_id") or ""),
+                str(update.get("subject_id") or "general"),
+                str(update.get("concept_id") or ""),
+            ): dict(update)
+            for update in state.get("mastery_updates", []) or []
+        }
         if mastery_repository is None:
             snapshot_ids = [str(item.get("id")) for item in snapshots if item.get("id")]
         else:
             for snapshot in snapshots:
                 try:
-                    snapshot_ids.append(mastery_repository.upsert_snapshot(dict(snapshot)))
+                    payload = dict(snapshot)
+                    update = updates_by_key.get(
+                        (
+                            str(payload.get("user_id") or ""),
+                            str(payload.get("subject_id") or "general"),
+                            str(payload.get("concept_id") or ""),
+                        ),
+                        {},
+                    )
+                    if update:
+                        payload.setdefault("delta", update.get("delta"))
+                        payload.setdefault("consumed_signal_ids", update.get("consumed_signal_ids", []))
+                    snapshot_ids.append(mastery_repository.upsert_snapshot(payload))
                 except Exception as exc:
                     existing_errors = list(state.get("errors") or [])
                     existing_errors.append(

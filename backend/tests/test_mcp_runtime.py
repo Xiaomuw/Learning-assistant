@@ -15,10 +15,10 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
+from app.domains.qa.capability_tools import WEB_EXTRACT, WEB_SEARCH, tool_executor, tool_registry
 from app.infrastructure.mcp.client import get_mcp_settings, reset_mcp_client_cache
 from app.infrastructure.mcp.query import build_external_query
 from app.domains.qa.schemas import AgentRequest, ToolCall
-from app.services.tools.runtime import tool_executor, tool_registry
 
 
 class MCPRuntimeTest(unittest.TestCase):
@@ -51,9 +51,7 @@ class MCPRuntimeTest(unittest.TestCase):
         settings = get_mcp_settings()
         self.assertFalse(settings.enabled)
 
-    def test_tool_registry_includes_mcp_tools_when_remote_schema_exists(self) -> None:
-        os.environ["MCP_ENABLED"] = "true"
-        os.environ["MCP_WEB_SERVER_URL"] = "https://example.com/mcp"
+    def test_capability_registry_is_deny_by_default_without_policy(self) -> None:
         request = AgentRequest(
             user_id="u1",
             session_id="s1",
@@ -64,6 +62,24 @@ class MCPRuntimeTest(unittest.TestCase):
             question_type="concept",
         )
 
+        tools = tool_registry.get_available_tools(scope="qa", agent_request=request)
+
+        self.assertEqual(tools, [])
+
+    def test_capability_registry_includes_mcp_capabilities_when_policy_allows(self) -> None:
+        os.environ["MCP_ENABLED"] = "true"
+        os.environ["MCP_WEB_SERVER_URL"] = "https://example.com/mcp"
+        request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="general",
+            subject_name="通用知识",
+            subject_description="",
+            question="请帮我搜索 Python asyncio 官方文档",
+            question_type="concept",
+            runtime_context={"allow_tools": True, "allow_search": True},
+        )
+
         with patch(
             "app.services.tools.mcp_tools.is_tool_available",
             side_effect=lambda name: name in {"web_search", "web_read"},
@@ -71,8 +87,8 @@ class MCPRuntimeTest(unittest.TestCase):
             tools = tool_registry.get_available_tools(scope="qa", agent_request=request)
 
         tool_names = {tool.name for tool in tools}
-        self.assertIn("mcp_web_search", tool_names)
-        self.assertIn("mcp_web_read", tool_names)
+        self.assertIn(WEB_SEARCH, tool_names)
+        self.assertIn(WEB_EXTRACT, tool_names)
 
     def test_mcp_web_search_normalizes_results(self) -> None:
         os.environ["MCP_ENABLED"] = "true"
@@ -86,31 +102,41 @@ class MCPRuntimeTest(unittest.TestCase):
             question="帮我查一下 asyncio 官方文档",
             question_type="concept",
             session_memory={"active_topic": "异步编程"},
+            runtime_context={"allow_tools": True, "allow_search": True},
         )
 
-        with patch(
-            "app.services.tools.mcp_tools.call_mcp_tool",
-            return_value={
-                "structuredContent": {
-                    "results": [
-                        {
-                            "title": "Python asyncio docs",
-                            "url": "https://docs.python.org/3/library/asyncio.html",
-                            "snippet": "asyncio 是 Python 的异步 IO 标准库。",
-                            "source": "python-docs",
-                        }
-                    ]
-                }
-            },
+        with (
+            patch("app.domains.qa.capability_tools.tavily_available", return_value=False),
+            patch(
+                "app.services.tools.mcp_tools.is_tool_available",
+                side_effect=lambda name: name == "web_search",
+            ),
+            patch(
+                "app.services.tools.mcp_tools.call_mcp_tool",
+                return_value={
+                    "structuredContent": {
+                        "results": [
+                            {
+                                "title": "Python asyncio docs",
+                                "url": "https://docs.python.org/3/library/asyncio.html",
+                                "snippet": "asyncio 是 Python 的异步 IO 标准库。",
+                                "source": "python-docs",
+                            }
+                        ]
+                    }
+                },
+            ),
         ):
             result = tool_executor.execute(
-                ToolCall(name="mcp_web_search", args={"query": "asyncio 官方文档", "max_results": 3}),
+                ToolCall(name=WEB_SEARCH, args={"query": "asyncio 官方文档", "max_results": 3}),
                 agent_request=request,
             )
 
         self.assertTrue(result.success)
         self.assertEqual(result.payload["doc_count"], 1)
-        self.assertEqual(result.payload["documents"][0]["metadata"]["tool"], "mcp_web_search")
+        self.assertEqual(result.payload["_tool_capability"], WEB_SEARCH)
+        self.assertEqual(result.payload["_tool_provider"], "mcp")
+        self.assertEqual(result.payload["documents"][0]["metadata"]["retrieval_source"], "web")
         self.assertIn("https://docs.python.org", request.runtime_context["mcp_allowed_urls"][0])
 
     def test_mcp_web_read_rejects_unknown_url(self) -> None:
@@ -128,7 +154,7 @@ class MCPRuntimeTest(unittest.TestCase):
 
         with patch("app.services.tools.mcp_tools.call_mcp_tool") as mock_call:
             result = tool_executor.execute(
-                ToolCall(name="mcp_web_read", args={"url": "https://example.com/secret"}),
+                ToolCall(name=WEB_EXTRACT, args={"url": "https://example.com/secret"}),
                 agent_request=request,
             )
 

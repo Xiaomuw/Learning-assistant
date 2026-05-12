@@ -94,10 +94,10 @@ npm run dev -- --hostname 127.0.0.1 --port 3000
 
 - 登录注册：`interfaces/auth/router.py -> application/auth/service.py -> infrastructure/auth + db repositories`
 - 聊天问答：`interfaces/api/chat.py -> application/chat/* -> orchestration/graphs/orchestrator -> QAGraph -> domains/qa/runtime.py`
-- RAG：`orchestration/graphs/qa -> services/tooling -> services/rag/{retriever,vector_store,rag_service}.py`
+- RAG：`QAGraph -> services/tooling -> services/rag/{retriever,vector_store,rag_service}.py`
 - Notebook 入库：`interfaces/api/upload.py or subjects.py -> application/ingest or notebooks -> services/notebook_knowledge_base.py`
-- 练习：`interfaces/api/practice.py -> application/practice/service.py -> domains/practice/*`
-- 掌握度：聊天 exposure 和做题 attempt 更新 `domains/mastery/service.py` 与 `user_knowledge_stats`
+- 练习：`interfaces/api/practice.py -> application/practice/service.py -> QuestionGenerationGraph / domains/practice/*`
+- 掌握度：`MasteryEvaluationGraph` 消费 `LearningEvent / attempts` 并写入 `mastery_snapshots`；旧 `user_knowledge_stats` 只作兼容读取
 
 Graph 边界：
 

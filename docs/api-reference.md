@@ -1,6 +1,6 @@
 # 多 Agent 学习助手 API 文档
 
-> 更新日期：2026-04-28
+> 更新日期：2026-05-12
 
 ## 1. Base URL
 
@@ -31,9 +31,51 @@
 }
 ```
 
-## 3. 聊天接口
+## 3. 认证接口
 
-### 3.1 POST `/api/chat`
+认证接口统一挂在 `/api/auth/*`，浏览器端使用 `HttpOnly Cookie` 保存 access / refresh；微信小程序路径返回 token envelope。
+
+### 3.1 POST `/api/auth/register/send-code`
+
+发送邮箱注册验证码。SMTP 未配置时会返回明确错误，不会假装发信。
+
+### 3.2 POST `/api/auth/register/complete`
+
+使用邮箱、验证码和密码完成注册，并写入登录 cookie。
+
+### 3.3 POST `/api/auth/register`
+
+兼容注册入口。
+
+### 3.4 POST `/api/auth/login`
+
+邮箱密码登录，并写入登录 cookie。
+
+### 3.5 POST `/api/auth/refresh`
+
+刷新 access token。
+
+### 3.6 POST `/api/auth/logout`
+
+注销当前 refresh token 并清理 cookie。
+
+### 3.7 POST `/api/auth/change-password`
+
+修改当前用户密码。
+
+### 3.8 GET `/api/auth/me`
+
+返回当前登录用户 envelope。
+
+### 3.9 微信小程序认证
+
+- `POST /api/auth/wechat-mini/login`
+- `POST /api/auth/wechat-mini/refresh`
+- `POST /api/auth/wechat-mini/logout`
+
+## 4. 聊天接口
+
+### 4.1 POST `/api/chat`
 
 SSE 流式接口。
 
@@ -91,10 +133,10 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 说明：
 
 - `meta` 与 `smalltalk` 路径不会进入检索节点
-- `meta_node` 的返回也复用 `explanation` 事件
+- `meta / smalltalk` 等非检索回答也复用 `explanation` 事件
 - 服务端会发送 `ping=10` 心跳，避免长时间无字节输出导致前端误判断线
 
-### 3.2 POST `/api/chat/sync`
+### 4.2 POST `/api/chat/sync`
 
 同步接口，一次性返回最终状态摘要。
 请求体与 `/api/chat` 相同，支持可选 `thinking_mode`。
@@ -122,10 +164,10 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 }
 ```
 
-## 4. 笔记本 / 学科接口
+## 5. 笔记本 / 学科接口
 
-### 4.1 GET `/api/subjects`
-### 4.2 GET `/api/notebooks`
+### 5.1 GET `/api/subjects`
+### 5.2 GET `/api/notebooks`
 
 返回相同结果：
 
@@ -146,8 +188,8 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 `computer-organization`、`operating-system`。旧的 `general` 等历史知识库不再作为可选项；
 模型通用知识由模型自身提供，知识库只作为辅助参考。
 
-### 4.3 POST `/api/subjects`
-### 4.4 POST `/api/notebooks`
+### 5.3 POST `/api/subjects`
+### 5.4 POST `/api/notebooks`
 
 ```json
 {
@@ -157,28 +199,28 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 }
 ```
 
-### 4.5 PUT `/api/subjects/{subject_id}`
-### 4.6 PUT `/api/notebooks/{subject_id}`
+### 5.5 PUT `/api/subjects/{subject_id}`
+### 5.6 PUT `/api/notebooks/{subject_id}`
 
 更新名称、图标、简介。
 
-### 4.7 GET `/api/subjects/{subject_id}`
-### 4.8 GET `/api/notebooks/{subject_id}`
+### 5.7 GET `/api/subjects/{subject_id}`
+### 5.8 GET `/api/notebooks/{subject_id}`
 
 获取单个笔记本详情。
 
-### 4.9 DELETE `/api/subjects/{subject_id}`
-### 4.10 DELETE `/api/notebooks/{subject_id}`
+### 5.9 DELETE `/api/subjects/{subject_id}`
+### 5.10 DELETE `/api/notebooks/{subject_id}`
 
 删除结构化记录并尝试删除对应 PGVector collection。
 
-### 4.11 POST `/api/subjects/{subject_id}/generate`
-### 4.12 POST `/api/notebooks/{subject_id}/generate`
+### 5.11 POST `/api/subjects/{subject_id}/generate`
+### 5.12 POST `/api/notebooks/{subject_id}/generate`
 
 为没有上传资料的笔记本自动生成基础知识内容并入库。
 
-### 4.13 GET `/api/subjects/{subject_id}/knowledge/status`
-### 4.14 GET `/api/notebooks/{subject_id}/knowledge/status`
+### 5.13 GET `/api/subjects/{subject_id}/knowledge/status`
+### 5.14 GET `/api/notebooks/{subject_id}/knowledge/status`
 
 查看 notebook 对应 PGVector 知识库状态：
 
@@ -195,9 +237,9 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 }
 ```
 
-## 5. 知识入库接口
+## 6. 知识入库接口
 
-### 5.1 POST `/api/upload`
+### 6.1 POST `/api/upload`
 
 `multipart/form-data`
 
@@ -218,7 +260,7 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 }
 ```
 
-### 5.2 POST `/api/upload/urls`
+### 6.2 POST `/api/upload/urls`
 
 ```json
 {
@@ -229,15 +271,15 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 }
 ```
 
-## 6. 用户数据接口
+## 7. 用户数据与练习接口
 
-### 6.1 GET `/api/users/{user_id}/memory`
+### 7.1 GET `/api/users/{user_id}/memory`
 
 获取学习记忆。
 
-### 6.2 GET `/api/users/{user_id}/knowledge/mastery?subject_id=...`
+### 7.2 GET `/api/users/{user_id}/knowledge/mastery?subject_id=...`
 
-获取精细化知识点掌握度。`subject_id` 可选，不传则返回该用户全部 notebook 的统计。
+获取掌握度视图。`subject_id` 可选，不传则返回该用户全部 notebook 的统计；当前后端可从 graph-era `mastery_snapshots` 和历史兼容数据聚合。
 
 ```json
 {
@@ -257,7 +299,11 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 }
 ```
 
-### 6.3 GET `/api/users/{user_id}/sessions`
+### 7.3 GET `/api/users/{user_id}/learning-center`
+
+获取学习中心聚合数据。
+
+### 7.4 GET `/api/users/{user_id}/sessions`
 
 获取最近聊天历史。
 
@@ -272,19 +318,19 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
   - `last_question_type`
   - `last_updated_at`
 
-### 6.4 DELETE `/api/users/{user_id}/sessions/{session_id}`
+### 7.5 DELETE `/api/users/{user_id}/sessions/{session_id}`
 
 删除一条聊天历史。
 
-### 6.5 GET `/api/users/{user_id}/quiz/latest`
+### 7.6 GET `/api/users/{user_id}/quiz/latest`
 
 获取最近一组题包。
 
-### 6.5 GET `/api/users/{user_id}/profile`
+### 7.7 GET `/api/users/{user_id}/profile`
 
 获取用户昵称与 Agent 风格配置。
 
-### 6.6 PUT `/api/users/{user_id}/profile`
+### 7.8 PUT `/api/users/{user_id}/profile`
 
 ```json
 {
@@ -295,9 +341,21 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 }
 ```
 
-## 7. 模型配置接口
+### 7.9 GET `/api/users/{user_id}/practice/recommendations`
 
-### 7.1 GET `/api/settings/model`
+获取当前用户推荐练习。
+
+### 7.10 POST `/api/practice/attempts`
+
+提交选择题作答。接口保持兼容写入 `practice_attempts`，同时通过 finalizer / repository 路径进入 graph-era facts。
+
+### 7.11 POST `/api/practice/packs`
+
+生成或补齐练习题包，供 Practice 页基于当前题目知识点继续 AI 补题。
+
+## 8. 模型配置与观测接口
+
+### 8.1 GET `/api/settings/model`
 
 返回：
 
@@ -307,7 +365,7 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 
 如果数据库里保存的当前模型不再出现在可选列表内，后端会自动回退到默认或首个可用模型，并写回 `app_settings.chat_model`。
 
-### 7.2 PUT `/api/settings/model`
+### 8.2 PUT `/api/settings/model`
 
 ```json
 {
@@ -321,7 +379,15 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 - 更新前会做一次轻量可用性校验
 - 如果账号当前不能调用该模型，会返回 `400`
 
-## 8. 错误格式
+### 8.3 GET `/api/settings/model/health`
+
+检查当前模型配置和轻量可用性状态。
+
+### 8.4 GET `/api/settings/observability/langsmith/health`
+
+检查 LangSmith 观测配置状态。该接口只代表配置与连通性状态，不等于 remote evaluator 已运行。
+
+## 9. 错误格式
 
 ```json
 {

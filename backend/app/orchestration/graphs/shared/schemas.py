@@ -19,6 +19,8 @@ from app.shared.schemas.agent_graphs import (  # noqa: F401
     ToolCapability,
     ToolResult,
     ToolStatus,
+    build_learning_event,
+    learning_event_hash_key,
     new_event_id,
     utc_now_iso,
 )

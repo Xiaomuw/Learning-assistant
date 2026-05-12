@@ -14,6 +14,9 @@ class BaseLearningState(TypedDict, total=False):
     run_id: str
     tenant_id: str | None
     user_id: str
+    message_id: str | None
+    request_id: str | None
+    client_request_id: str | None
     notebook_id: str | None
     course_id: str | None
     thread_id: str | None
@@ -28,4 +31,3 @@ class BaseLearningState(TypedDict, total=False):
     learning_events: list[dict[str, Any]]
     final_response: dict[str, Any]
     errors: list[dict[str, Any]]
-

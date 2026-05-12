@@ -34,7 +34,7 @@ flowchart LR
     ORCH --> MEM["app/domains/memory"]
     ORCH --> PRA["app/domains/practice"]
     QA --> RET["app/services/rag"]
-    QA --> TOOLS["app/services/tools"]
+    QA --> TOOLS["app/services/tooling"]
     QA --> LLM["app/infrastructure/llm"]
     MEM --> DB["app/infrastructure/db"]
     PRA --> DB
@@ -70,7 +70,7 @@ flowchart LR
   - 基础设施层。
   - `llm`：模型 provider、model profile、LangSmith。
   - `db`：SQLAlchemy engine、models、repositories。
-  - `tools`：内部 tool registry / executor / facade。
+  - `mcp`：外部 MCP client 与 adapter。
 
 - `backend/app/shared/*`
   - 跨模块共享 schema 与契约。
@@ -261,7 +261,7 @@ flowchart LR
 
 - 业务事实表：PostgreSQL
 - 向量检索：PGVector
-- LangGraph 线程持久化：PostgresSaver
+- Graph-era 业务事实：Alembic 管理的 SQL 表与 repository
 
 历史 MySQL / SQLite / Chroma 只作为迁移来源或兼容资产，不再是正式主链路。
 
@@ -274,18 +274,31 @@ flowchart LR
 - `user_profiles`
 - `user_memories`
 - `auth_refresh_tokens`
+- `wechat_mini_identities`
 - `email_verification_challenges`
 - `chat_sessions`
 - `question_bank_items`
+- `practice_question`
 - `practice_attempts`
+- `practice_attempt_finalization_jobs`
 - `app_settings`
+- `graph_runs`
+- `node_runs`
+- `tool_runs`
+- `learning_events`
+- `attempts`
+- `mastery_snapshots`
+- `question_items`
+- `concepts`
+- `kb_subject / kb_chapter / kb_topic / kb_concept / kb_chunk`
 
 其中：
 
 - `subjects` 在产品语义上等价于 notebook
 - `chat_sessions` 是前端历史页的产品事实来源
 - `user_profiles + user_memories` 是用户学习状态事实来源
-- `question_bank_items + practice_attempts` 是题库和做题事实来源
+- `question_bank_items + practice_attempts` 仍承担旧题库和做题兼容事实
+- `learning_events + attempts + mastery_snapshots + question_items` 是 graph-era 学习事件、答题、掌握度和题目事实来源
 
 ---
 
@@ -308,21 +321,23 @@ flowchart LR
 ### 9.2 Tool Layer
 
 目录：
-- `backend/app/services/tools/*`
+- `backend/app/services/tooling/*`
 
 职责：
-- 内部 tool registry
-- tool schema
-- tool executor
-- MCP tool adapter 封装
-- 给 QA runtime 提供统一调用界面
+- capability schema
+- provider registry
+- `ToolExecutor`
+- `ToolPolicyResolver`
+- notebook / web provider adapter 封装
+- 给业务 Graph 提供统一工具能力入口
 
 当前内置工具包括：
 
-- `search_notebook_context`
-- `get_session_summary`
-- `get_user_learning_profile`
-- `recommend_questions`
+- `notebook_retrieve`
+- `web_search`
+- `web_extract`
+
+旧 `backend/app/services/tools/*` 中剩余 provider / internal 实现只作为兼容 adapter 支撑，业务 Graph 节点不能直接依赖 provider-specific Tavily 模块。
 
 ### 9.3 MCP Layer
 
@@ -392,7 +407,7 @@ flowchart LR
 5. [backend/app/domains/qa/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/domains/qa/runtime.py)
 6. [backend/app/domains/memory/service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/domains/memory/service.py)
 7. [backend/app/services/rag/rag_service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/rag/rag_service.py)
-8. [backend/app/services/tools/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/tools/runtime.py)
+8. [backend/app/services/tooling/executor.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/tooling/executor.py)
 9. [backend/app/infrastructure/db/repositories](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/infrastructure/db/repositories)
 
 ---
@@ -404,5 +419,5 @@ flowchart LR
 - 先分类问题，
 - 再进入主问答或专项分支，
 - 必要时调用内部工具和外部 MCP，
-- 最后把学习结果沉淀进数据库与三层记忆，
+- 最后把学习结果沉淀进数据库、三层记忆和 graph-era facts，
 - 并通过同步或流式协议反馈给前端。

@@ -22,6 +22,7 @@ def run_chat_once(
     question: str,
     subject_id: str,
     thinking_mode: bool = False,
+    client_request_id: str | None = None,
 ) -> ChatExecutionResult:
     initial_state = build_initial_state(
         user_id=user_id,
@@ -30,6 +31,7 @@ def run_chat_once(
         subject_id=subject_id,
         request_mode="sync",
         thinking_mode=thinking_mode,
+        client_request_id=client_request_id,
     )
     final_state = run_orchestrator_chat(initial_state, request_mode="sync")
     persist_chat_session(
@@ -59,6 +61,7 @@ async def stream_chat(
     question: str,
     subject_id: str,
     thinking_mode: bool = False,
+    client_request_id: str | None = None,
     stream_writer: Callable[[dict[str, Any]], None] | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     initial_state = build_initial_state(
@@ -68,6 +71,7 @@ async def stream_chat(
         subject_id=subject_id,
         request_mode="sse",
         thinking_mode=thinking_mode,
+        client_request_id=client_request_id,
     )
     if callable(stream_writer):
         initial_state["stream_writer"] = stream_writer

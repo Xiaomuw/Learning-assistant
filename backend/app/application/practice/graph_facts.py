@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Any
-from uuid import uuid4
 
 from loguru import logger
 
@@ -12,7 +12,7 @@ from app.orchestration.graphs.mastery.graph import (
     build_production_graph as build_mastery_graph,
 )
 from app.persistence.repositories.graph_facts import build_graph_fact_repositories, is_graph_facts_enabled
-from app.shared.schemas.agent_graphs import LearningEvent, LearningEventType
+from app.shared.schemas.agent_graphs import LearningEventType, build_learning_event
 from app.shared.schemas.contracts import PracticeRecommendation, PracticeSubmissionResult
 from app.shared.schemas.subject import normalize_subject_id
 
@@ -125,16 +125,24 @@ def _dual_write_practice_attempt(
     normalized_subject_id = normalize_subject_id(subject_id)
     concept_id = quiz_item.concept_id or quiz_item.knowledge_point or "综合"
     concept_name = quiz_item.concept_name or quiz_item.knowledge_point or concept_id
-    graph_run_id = f"practice-attempt-{uuid4()}"
-    attempt_id = f"attempt-{uuid4()}"
-    submitted = LearningEvent(
+    attempt_id = stable_graph_attempt_id_for_practice_submission(
+        user_id=user_id,
+        session_id=session_id,
+        subject_id=normalized_subject_id,
+        question_id=str(quiz_item.question_id or ""),
+    )
+    graph_run_id = f"practice-attempt-{attempt_id}"
+    submitted = build_learning_event(
         event_type=LearningEventType.PRACTICE_ATTEMPT_SUBMITTED.value,
         user_id=user_id,
         concept_id=concept_id,
         graph_run_id=graph_run_id,
+        source_object_type="practice_attempt",
+        source_object_id=attempt_id,
         payload={
             "session_id": session_id,
             "subject_id": normalized_subject_id,
+            "attempt_id": attempt_id,
             "question_id": quiz_item.question_id,
             "concept_id": concept_id,
             "concept_name": concept_name,
@@ -144,13 +152,16 @@ def _dual_write_practice_attempt(
             "is_correct": result.is_correct,
         },
     )
-    scored = LearningEvent(
+    scored = build_learning_event(
         event_type=LearningEventType.ATTEMPT_SCORED.value,
         user_id=user_id,
         concept_id=concept_id,
         graph_run_id=graph_run_id,
+        source_object_type="practice_attempt",
+        source_object_id=attempt_id,
         payload={
             "subject_id": normalized_subject_id,
+            "attempt_id": attempt_id,
             "question_id": quiz_item.question_id,
             "concept_id": concept_id,
             "concept_name": concept_name,
@@ -241,6 +252,24 @@ def graph_attempt_id_for_practice_attempt(legacy_attempt_id: str) -> str:
     graph_attempt_id = f"practice:{legacy_attempt_id}"
     if len(graph_attempt_id) <= 100:
         return graph_attempt_id
-    import hashlib
 
     return f"practice:{hashlib.sha1(legacy_attempt_id.encode('utf-8')).hexdigest()[:32]}"
+
+
+def stable_graph_attempt_id_for_practice_submission(
+    *,
+    user_id: str,
+    session_id: str,
+    subject_id: str,
+    question_id: str,
+) -> str:
+    raw = ":".join(
+        [
+            "practice",
+            str(user_id or "").strip(),
+            str(session_id or "").strip(),
+            str(subject_id or "general").strip(),
+            str(question_id or "").strip(),
+        ]
+    )
+    return f"practice:{hashlib.sha1(raw.encode('utf-8')).hexdigest()[:32]}"

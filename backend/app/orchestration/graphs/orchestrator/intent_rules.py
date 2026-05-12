@@ -70,7 +70,7 @@ class QuizClarifyIntentRule:
 
 class KeywordQuestionGenerationIntentRule:
     def decide(self, context: IntentRoutingContext) -> dict[str, Any] | None:
-        if not any(token in context.message for token in ("出题", "练习题", "刷题", "生成题目")):
+        if not any(token in context.message for token in ("出题", "练习题", "刷题", "生成题目", "来一组", "做一套", "小测一下")):
             return None
         return _decision_update(
             intent=OrchestratorIntent.GENERATE_QUESTION,
@@ -80,9 +80,24 @@ class KeywordQuestionGenerationIntentRule:
         )
 
 
+class AnswerCheckIntentRule:
+    def decide(self, context: IntentRoutingContext) -> dict[str, Any] | None:
+        message = context.message
+        if "答案" not in message and "批改" not in message and "哪里不对" not in message:
+            return None
+        if not any(token in message for token in ("对不对", "是否正确", "对吗", "错在哪", "哪里错", "哪里不对", "评估一下", "帮我批改", "批改一下")):
+            return None
+        return _decision_update(
+            intent=OrchestratorIntent.QA,
+            confidence=0.84,
+            reason="命中答案讲解/判别意图，交给 QAGraph 解释。",
+            target_graph_type=GraphType.QA,
+        )
+
+
 class MasteryIntentRule:
     def decide(self, context: IntentRoutingContext) -> dict[str, Any] | None:
-        if not any(token in context.message for token in ("掌握度", "评估", "评分", "薄弱", "学习状态")):
+        if not any(token in context.message for token in ("掌握度", "评估", "评分", "薄弱", "学习状态", "弱项", "短板")):
             return None
         return _decision_update(
             intent=OrchestratorIntent.EVALUATE_MASTERY,
@@ -122,6 +137,7 @@ DEFAULT_INTENT_RULES: tuple[IntentRule, ...] = (
     QuizGenerateIntentRule(),
     QuizClarifyIntentRule(),
     KeywordQuestionGenerationIntentRule(),
+    AnswerCheckIntentRule(),
     MasteryIntentRule(),
     HelpStatusIntentRule(),
     DefaultQAIntentRule(),

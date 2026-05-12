@@ -142,13 +142,14 @@ flowchart LR
 - 跨领域应用服务
 - notebook 知识库 gateway
 - retrieval 高层服务
-- QA tools registry / executor
+- capability 工具 registry / executor / policy
 - 当前活动模型决策
 
 当前正式入口：
 
 - [backend/app/services/rag/rag_service.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/rag/rag_service.py)
-- [backend/app/services/tools/runtime.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/tools/runtime.py)
+- [backend/app/services/tooling/executor.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/tooling/executor.py)
+- [backend/app/services/tooling/policy.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/tooling/policy.py)
 - [backend/app/services/runtime_models.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/runtime_models.py)
 - [backend/app/services/notebook_knowledge_base.py](/Users/xiaomu/Desktop/Python/Code/learning-assistant/backend/app/services/notebook_knowledge_base.py)
 
@@ -211,7 +212,7 @@ flowchart LR
     E --> H["QAGraph / QuestionGenerationGraph / MasteryEvaluationGraph"]
     H --> I["domains/qa/runtime.py 或 practice/mastery domain"]
     I --> J["services/rag/rag_service.py"]
-    I --> K["services/tools/runtime.py"]
+    I --> K["services/tooling/{executor,policy,registry}.py"]
     I --> L["infrastructure/llm/provider.py"]
 ```
 
@@ -228,7 +229,7 @@ flowchart LR
 - `domains/qa/runtime.py` 负责主问答 runtime façade
 - `domains/qa/mode_selection.py`、`tool_loop.py`、`answer_generation.py` 拆分主问答执行细节
 - `services/rag/rag_service.py` 是 RAG 正式入口
-- `services/tools/runtime.py` 是工具执行聚合入口；registry / internal tools / MCP tools 已拆到 `services/tools/*`
+- `services/tooling/*` 是业务 Graph 的 capability 工具入口；旧 `services/tools/*` 只保留 provider / legacy adapter 支撑，不作为业务 Graph 直接依赖入口
 
 ## 5. 现在的 notebook / ingest 链路
 

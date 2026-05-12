@@ -296,6 +296,7 @@ class LearningCenterResponse(BaseModel):
     subject_id: str | None = None
     subjects: list[LearningCenterSubject] = Field(default_factory=list)
     next_move: LearningCenterNextMove | None = None
+    facts_source: Literal["graph", "legacy_fallback"] = "graph"
 
 
 class AnswerNormalizationResult(BaseModel):
@@ -573,6 +574,7 @@ class PracticeAttemptRecord(BaseModel):
     concept_name: str = ""
     concept_mapping_status: str = ""
     source_type: str = "ai_generated"
+    idempotency_key: str = ""
     created_at: str = ""
 
 
@@ -597,6 +599,7 @@ class PracticeSubmissionResult(BaseModel):
     mastery_evaluation: MasteryEvaluationResult | None = None
     personalized_feedback: str = ""
     duplicate_submission: bool = False
+    analysis_status: Literal["queued", "completed", "duplicate"] | str = "completed"
 
 
 class ModelOptionRecord(BaseModel):

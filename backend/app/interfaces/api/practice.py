@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.exc import DataError, IntegrityError, StatementError
 
 from app.application.practice.pack_service import create_pack_from_request
-from app.application.practice.service import get_recommendations, submit_attempt
+from app.application.practice.service import finalize_attempt_analysis_job, get_recommendations, submit_attempt
 from app.infrastructure.llm.langsmith import trace_run
 from app.interfaces.auth.dependencies import AuthenticatedUser, require_current_user, verify_user_access
 from app.shared.schemas.contracts import PracticeRecommendation
@@ -88,6 +88,7 @@ class PracticeAttemptResponse(BaseModel):
     session_memory: dict[str, Any] | None = None
     mastery_evaluation: dict[str, Any] | None = None
     personalized_feedback: str = ""
+    analysis_status: str = "completed"
 
 
 class PracticePackRequest(BaseModel):
@@ -145,6 +146,7 @@ async def get_practice_recommendations(
 @router.post("/practice/attempts", response_model=PracticeAttemptResponse)
 async def submit_practice_attempt(
     body: PracticeAttemptRequest,
+    background_tasks: BackgroundTasks,
     current_user: AuthenticatedUser = Depends(require_current_user),
 ):
     if body.user_id != current_user.id:
@@ -176,6 +178,10 @@ async def submit_practice_attempt(
                 subject_id=body.subject_id,
                 quiz_item=body.quiz_item,
                 selected_option=body.selected_option,
+                schedule_finalizer=lambda job_id: background_tasks.add_task(
+                    finalize_attempt_analysis_job,
+                    job_id,
+                ),
             )
             run.end(
                 outputs={
@@ -185,6 +191,7 @@ async def submit_practice_attempt(
                     "explanation": result.explanation,
                     "knowledge_point": body.quiz_item.knowledge_point,
                     "mastery_evaluation": result.mastery_evaluation.model_dump(mode="json") if result.mastery_evaluation else None,
+                    "analysis_status": result.analysis_status,
                 }
             )
     except ValueError as exc:
@@ -232,6 +239,7 @@ async def submit_practice_attempt(
         "session_memory": result.session_memory,
         "mastery_evaluation": result.mastery_evaluation.model_dump() if result.mastery_evaluation else None,
         "personalized_feedback": result.personalized_feedback,
+        "analysis_status": result.analysis_status,
     }
 
 

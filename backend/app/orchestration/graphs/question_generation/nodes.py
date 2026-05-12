@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import time
-from typing import Any
+import re
+import unicodedata
+from typing import Any, Protocol
 from uuid import uuid4
 
 from app.orchestration.graphs.question_generation.adapter import (
@@ -30,18 +33,58 @@ from app.orchestration.graphs.shared.schemas import (
     LearningEventType,
     SourceLevel,
     SourcePolicy,
-    new_event_id,
+    build_learning_event,
 )
 from app.persistence.interfaces import LearningEventRepository, QuestionItemRepository
 from app.knowledge.concept_registry import get_concept_registry
 
 OPTION_KEYS = ("A", "B", "C", "D")
+SUPPORTED_ITEM_TYPE = "single_choice"
 ALLOWED_QGEN_EVENTS = {
     LearningEventType.QUESTION_GENERATED.value,
     LearningEventType.QUESTION_REVIEWED.value,
     LearningEventType.QUESTION_GENERATION_DEGRADED.value,
     LearningEventType.QUESTION_GENERATION_FAILED.value,
 }
+
+
+class QuestionQualityVerifier(Protocol):
+    def verify(self, candidates: list[QuestionCandidate]) -> SolverVerification:
+        """Verify generated questions independently from the candidate generator."""
+
+
+class RuleBasedQuestionQualityVerifier:
+    def verify(self, candidates: list[QuestionCandidate]) -> SolverVerification:
+        issues: list[str] = []
+        selected_option = None
+        for index, candidate in enumerate(candidates, start=1):
+            option_keys = [option.key for option in candidate.options]
+            option_texts = [option.text.strip() for option in candidate.options]
+            selected_option = candidate.answer_key.correct_option
+            combined_text = " ".join(
+                [
+                    candidate.stem,
+                    candidate.answer_key.explanation,
+                    candidate.rubric.full_credit,
+                ]
+            )
+            if option_keys != list(OPTION_KEYS):
+                issues.append(f"第 {index} 题选项不是完整 A/B/C/D")
+            if selected_option not in option_keys:
+                issues.append(f"第 {index} 题答案不在选项中")
+            if len(set(option_texts)) != len(option_texts):
+                issues.append(f"第 {index} 题存在重复选项文本")
+            correct_text = next((option.text for option in candidate.options if option.key == selected_option), "")
+            if correct_text != candidate.answer_key.correct_option_text:
+                issues.append(f"第 {index} 题 answer_key.correct_option_text 与选项不一致")
+            if any(marker in combined_text for marker in ("没有唯一答案", "无唯一答案", "存在争议", "争议题")):
+                issues.append(f"第 {index} 题缺少无争议的唯一答案")
+        return SolverVerification(
+            passed=not issues and bool(candidates),
+            selected_option=selected_option,
+            issues=issues,
+            verifier_source=self.__class__.__name__,
+        )
 
 
 def _repair_model_skip_reason(status: dict[str, Any]) -> str:
@@ -67,6 +110,8 @@ def build_blueprint_node(state: QuestionGenerationState) -> dict[str, Any]:
     quiz_request = state.get("quiz_request") if isinstance(state.get("quiz_request"), dict) else {}
     count = _bounded_count(quiz_request.get("count") or state.get("count") or state.get("requested_count") or 1)
     status = dict(state.get("generation_status") or {})
+    requested_question_type = str(quiz_request.get("question_type") or state.get("question_type") or SUPPORTED_ITEM_TYPE).strip()
+    unsupported_question_type = requested_question_type not in {"", SUPPORTED_ITEM_TYPE, "unknown"}
     blueprint = ItemBlueprint(
         primary_concept_id=concept.concept_id or _stable_concept_id(concept.name),
         concept_name=concept.name,
@@ -79,11 +124,15 @@ def build_blueprint_node(state: QuestionGenerationState) -> dict[str, Any]:
             "active_topic": str(quiz_request.get("active_topic") or quiz_request.get("topic") or ""),
             "previous_topic": str(quiz_request.get("previous_topic") or ""),
             "subject_id": str(quiz_request.get("subject_id") or state.get("subject_id") or state.get("notebook_id") or ""),
+            "requested_question_type": requested_question_type or SUPPORTED_ITEM_TYPE,
         },
     )
     status.update(
         {
             "requested_count": count,
+            "requested_question_type": requested_question_type or SUPPORTED_ITEM_TYPE,
+            "supported_question_type": SUPPORTED_ITEM_TYPE,
+            "unsupported_question_type": unsupported_question_type,
             "generated_count": int(status.get("generated_count") or 0),
             "persisted_count": int(status.get("persisted_count") or 0),
             "retry_count": int(status.get("retry_count") or 0),
@@ -224,30 +273,19 @@ def make_generate_candidates_node(generator: QuestionCandidateGenerator):
     return generate_candidates_node
 
 
-def solver_verifier_node(state: QuestionGenerationState) -> dict[str, Any]:
-    candidates = _candidate_list(state)
-    issues: list[str] = []
-    selected_option = None
-    for index, candidate in enumerate(candidates, start=1):
-        option_keys = [option.key for option in candidate.options]
-        option_texts = [option.text.strip() for option in candidate.options]
-        selected_option = candidate.answer_key.correct_option
-        if option_keys != list(OPTION_KEYS):
-            issues.append(f"第 {index} 题选项不是完整 A/B/C/D")
-        if selected_option not in option_keys:
-            issues.append(f"第 {index} 题答案不在选项中")
-        if len(set(option_texts)) != len(option_texts):
-            issues.append(f"第 {index} 题存在重复选项文本")
-        correct_text = next((option.text for option in candidate.options if option.key == selected_option), "")
-        if correct_text != candidate.answer_key.correct_option_text:
-            issues.append(f"第 {index} 题 answer_key.correct_option_text 与选项不一致")
+def make_solver_verifier_node(verifier: QuestionQualityVerifier | None = None):
+    active_verifier = verifier or RuleBasedQuestionQualityVerifier()
 
-    report = SolverVerification(
-        passed=not issues and bool(candidates),
-        selected_option=selected_option,
-        issues=issues,
-    )
-    return {"solver_report": report.model_dump(mode="json")}
+    def solver_verifier_node(state: QuestionGenerationState) -> dict[str, Any]:
+        candidates = _candidate_list(state)
+        report = active_verifier.verify(candidates)
+        return {"solver_report": report.model_dump(mode="json")}
+
+    return solver_verifier_node
+
+
+def solver_verifier_node(state: QuestionGenerationState) -> dict[str, Any]:
+    return make_solver_verifier_node()(state)
 
 
 def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
@@ -258,6 +296,11 @@ def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
     issues = list(solver.issues)
     topic_alignment_issues: list[str] = []
     topic_alignment_reasons: list[str] = []
+    if status.get("unsupported_question_type"):
+        issues.append(
+            "暂不支持该题型: "
+            f"requested={status.get('requested_question_type')}, supported={SUPPORTED_ITEM_TYPE}"
+        )
 
     if len(candidates) < blueprint.count:
         issues.append(f"题目数量不足: expected={blueprint.count}, actual={len(candidates)}")
@@ -275,6 +318,7 @@ def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
             issues.append(f"第 {index} 题缺少标准解析")
         if not candidate.rubric.criteria or not candidate.rubric.full_credit.strip():
             issues.append(f"第 {index} 题缺少 rubric")
+        issues.extend(_semantic_quality_issues(candidate, index))
         if blueprint.source_policy == SourcePolicy.NOTEBOOK_ONLY.value and not _grounded_in_notebook(candidate):
             issues.append(f"第 {index} 题不满足 notebook_only grounding")
         topic_issue, topic_reason = _topic_alignment_check(blueprint, candidate, index)
@@ -304,6 +348,8 @@ def quality_reviewer_node(state: QuestionGenerationState) -> dict[str, Any]:
                 "source_policy_grounding",
                 "topic_alignment",
                 "in_pack_dedupe",
+                "semantic_quality",
+                "supported_item_type",
             ],
             "issues": issues,
             "topic_alignment_passed": topic_alignment_passed,
@@ -572,6 +618,19 @@ def make_persist_question_items_node(
             else {}
         )
         errors = list(state.get("errors") or [])
+        if status.get("unsupported_question_type"):
+            report = report.model_copy(
+                update={
+                    "passed": False,
+                    "issues": [
+                        *list(report.issues),
+                        (
+                            "暂不支持该题型: "
+                            f"requested={status.get('requested_question_type')}, supported={SUPPORTED_ITEM_TYPE}"
+                        ),
+                    ],
+                }
+            )
 
         review_event = _learning_event(
             state,
@@ -714,7 +773,10 @@ def compose_response_node(state: QuestionGenerationState) -> dict[str, Any]:
         else:
             answer = f"已围绕「{blueprint.concept_name}」生成并保存 {len(item_ids)} 道{blueprint.difficulty}单选题。"
     else:
-        answer = f"围绕「{blueprint.concept_name}」的出题未通过质量门，本轮没有保存题目。"
+        if status.get("unsupported_question_type"):
+            answer = f"暂不支持生成「{status.get('requested_question_type')}」题型。本轮没有保存题目，请改用单选题。"
+        else:
+            answer = f"围绕「{blueprint.concept_name}」的出题未通过质量门，本轮没有保存题目。"
         if quality_failure_summary:
             answer += f"原因：{quality_failure_summary}"
 
@@ -1134,7 +1196,7 @@ def _bounded_repair_attempts(value: Any) -> int:
 def _has_repairable_quality_issues(report: QualityReport) -> bool:
     if not report.issues:
         return False
-    non_repairable_markers = ("notebook_only grounding",)
+    non_repairable_markers = ("notebook_only grounding", "暂不支持该题型")
     return any(
         not any(marker in issue for marker in non_repairable_markers)
         for issue in report.issues
@@ -1208,6 +1270,34 @@ def _grounded_in_notebook(candidate: QuestionCandidate) -> bool:
     return any(ref.source_type in {"notebook", "course", "question_bank"} for ref in candidate.source_refs)
 
 
+def _semantic_quality_issues(candidate: QuestionCandidate, index: int) -> list[str]:
+    issues: list[str] = []
+    stem = candidate.stem.strip()
+    stem_key = _normalize_semantic_text(stem)
+    if any(marker in stem_key for marker in ("todo", "待补充", "占位", "模板题", "示例题")):
+        issues.append(f"第 {index} 题疑似模板化题干")
+    if re.search(r"\{[^{}]+\}|<[^<>]+>|\[[^\[\]]+\]", stem):
+        issues.append(f"第 {index} 题包含未替换占位符")
+    option_texts = [option.text.strip() for option in candidate.options]
+    normalized_options = [_normalize_semantic_text(text) for text in option_texts]
+    if len(set(normalized_options)) != len(normalized_options):
+        issues.append(f"第 {index} 题存在同义或规范化后重复的干扰项")
+    if any(_is_placeholder_option(text) for text in option_texts):
+        issues.append(f"第 {index} 题存在模板化选项")
+    return issues
+
+
+def _normalize_semantic_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value or "")).lower()
+    normalized = re.sub(r"(?:正确|错误|不正确|最合适|最能说明|以下|下列|选项|说法|一项|的是)", "", normalized)
+    return re.sub(r"[\s\-_./:：,，。;；、()（）\[\]【】{}<>《》\"'“”‘’!?！？]+", "", normalized)
+
+
+def _is_placeholder_option(value: str) -> bool:
+    key = _normalize_semantic_text(value)
+    return key in {"以上都对", "以上都不对", "无法判断", "都可以", "选项a", "选项b", "选项c", "选项d"}
+
+
 def _blueprint_concept_id(state: QuestionGenerationState) -> str:
     blueprint = ItemBlueprint.model_validate(state.get("generation_blueprint") or {})
     return blueprint.primary_concept_id
@@ -1246,14 +1336,61 @@ def _learning_event(
 ) -> LearningEvent:
     if event_type not in ALLOWED_QGEN_EVENTS:
         raise ValueError(f"Unsupported QuestionGenerationGraph event_type: {event_type}")
-    return LearningEvent(
-        id=new_event_id(),
+    source_object_type = str(payload.get("source_object_type") or "")
+    source_object_id = str(payload.get("source_object_id") or "")
+    if not source_object_type:
+        if event_type == LearningEventType.QUESTION_GENERATED.value:
+            source_object_type = "question_item"
+        elif event_type == LearningEventType.QUESTION_REVIEWED.value:
+            source_object_type = "question_generation_review"
+        else:
+            source_object_type = "question_generation_run"
+    if not source_object_id:
+        if event_type == LearningEventType.QUESTION_GENERATED.value:
+            source_object_id = str(payload.get("question_item_id") or concept_id)
+        else:
+            source_object_id = question_generation_request_source_id(state)
+    return build_learning_event(
         event_type=event_type,
         user_id=str(state.get("user_id") or ""),
         concept_id=concept_id,
         graph_run_id=str(state.get("run_id") or state.get("graph_run_id") or ""),
         payload=payload,
+        source_object_type=source_object_type,
+        source_object_id=source_object_id,
     )
+
+
+def question_generation_request_source_id(state: QuestionGenerationState) -> str:
+    explicit = str(
+        state.get("message_id")
+        or state.get("request_id")
+        or state.get("client_request_id")
+        or ""
+    ).strip()
+    if explicit:
+        return f"qgen_request:{explicit}"
+    quiz_request = state.get("quiz_request") if isinstance(state.get("quiz_request"), dict) else {}
+    blueprint = state.get("generation_blueprint") if isinstance(state.get("generation_blueprint"), dict) else {}
+    topic = str(
+        quiz_request.get("topic")
+        or quiz_request.get("knowledge_point")
+        or blueprint.get("topic")
+        or blueprint.get("concept_id")
+        or _blueprint_concept_id(state)
+        or ""
+    ).strip()
+    parts = [
+        str(state.get("user_id") or ""),
+        str(state.get("thread_id") or state.get("session_id") or ""),
+        str(state.get("notebook_id") or state.get("course_id") or ""),
+        topic,
+        str(state.get("requested_count") or state.get("count") or quiz_request.get("count") or ""),
+        str(state.get("difficulty") or quiz_request.get("difficulty") or ""),
+        str(state.get("question_type") or quiz_request.get("question_type") or SUPPORTED_ITEM_TYPE),
+    ]
+    digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:24]
+    return f"qgen_request:{digest}"
 
 
 def _source_level(source_refs: list[dict[str, Any]]) -> SourceLevel:

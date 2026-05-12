@@ -173,6 +173,7 @@ export interface PracticeAttemptResult {
   session_memory?: Record<string, any> | null;
   mastery_evaluation?: MasteryEvaluationResult | null;
   personalized_feedback?: string;
+  analysis_status?: "queued" | "completed" | "duplicate" | string;
 }
 
 export interface QuizRecommendedOption {

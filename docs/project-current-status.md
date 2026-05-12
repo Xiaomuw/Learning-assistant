@@ -1,6 +1,6 @@
 # 学习助手项目当前状态
 
-> 更新日期：2026-05-10
+> 更新日期：2026-05-12
 > 目标读者：项目维护者、接手开发同学、协作 AI / Agent  
 > 当前事实源：`backend/app/*`、`frontend/app/*`、`frontend/lib/api.ts`、`backend/langgraph.json`
 
@@ -70,11 +70,11 @@ LearningOrchestratorGraph -> QAGraph / QuestionGenerationGraph / MasteryEvaluati
 
 ### 工具、MCP 与 LangSmith
 
-- 内部工具：
-  - `search_notebook_context`
-  - `get_session_summary`
-  - `get_user_learning_profile`
-  - `recommend_questions`
+- 工具能力：
+  - 正式 capability 层在 `backend/app/services/tooling/`
+  - 业务 Graph 只请求 `ToolCapability`，不能直接 import Tavily provider
+  - 当前主能力包括 `notebook_retrieve`、`web_search`、`web_extract`
+  - 会话摘要、学习画像、推荐题等旧内部工具保留在 QA runtime adapter 内部
 - MCP V1：
   - 仅支持 HTTP MCP
   - 仅接网页搜索 / 网页读取
@@ -89,9 +89,10 @@ LearningOrchestratorGraph -> QAGraph / QuestionGenerationGraph / MasteryEvaluati
 
 - 练习题统一为 4 选 1 单选题。
 - 题目来源：本地题库优先，不足时 AI 补题，AI 超时则 fallback 补足请求题数。
-- 做题提交写入 `practice_attempts`。
-- 知识点掌握度写入 `user_knowledge_stats`。
-- Dashboard 优先展示 `GET /api/users/{user_id}/knowledge/mastery`，失败时 fallback 到旧记忆数据。
+- 出题请求由 `QuestionGenerationGraph` 处理，刷题页可通过 `POST /api/practice/packs` 基于当前知识点继续补题。
+- 做题提交仍兼容写入 `practice_attempts`，并通过 finalizer / repository adapter 转成 graph-era attempt 与学习事件。
+- 掌握度由 `MasteryEvaluationGraph` 消费 `LearningEvent / attempts` 并写入 `mastery_snapshots`；旧 `user_knowledge_stats` 只作为历史兼容读取。
+- Dashboard 仍通过 `GET /api/users/{user_id}/knowledge/mastery` 获取掌握度视图。
 
 ## 3. 后端结构
 
@@ -101,7 +102,7 @@ backend/app/
 ├── application/     # auth / chat / notebooks / ingest / model_config / practice / user_data
 ├── orchestration/   # LangGraph enterprise graphs / platform
 ├── domains/         # qa / memory / practice / mastery
-├── services/        # rag / tools / notebook_knowledge_base / runtime_models
+├── services/        # rag / tooling / notebook_knowledge_base / runtime_models
 ├── infrastructure/  # db / llm / auth / ingest / mcp / config
 └── shared/          # AgentState、内部契约、model profile 等共享 schema
 ```
@@ -144,11 +145,28 @@ frontend/
 - `subjects`
 - `user_profiles`
 - `user_memories`
-- `user_knowledge_stats`
 - `chat_sessions`
 - `question_bank_items`
+- `practice_question`
 - `practice_attempts`
+- `practice_attempt_finalization_jobs`
 - `app_settings`
+- `kb_subject`
+- `kb_chapter`
+- `kb_topic`
+- `kb_concept`
+- `kb_chunk`
+- `wechat_mini_identities`
+- `graph_runs`
+- `node_runs`
+- `tool_runs`
+- `learning_events`
+- `attempts`
+- `mastery_snapshots`
+- `question_items`
+- `concepts`
+
+`user_knowledge_stats` 仍存在于数据库中，但当前 graph-era mastery 事实源是 `mastery_snapshots`；旧表用于兼容读取和历史 backfill。
 
 当前正式运行时不支持 MySQL / SQLite 作为主数据库；它们只在历史迁移或历史文档语境中出现。Chroma 也只作为历史迁移来源，当前向量运行时是 PGVector。
 

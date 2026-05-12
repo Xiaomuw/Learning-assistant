@@ -30,11 +30,13 @@ from app.interfaces.auth.dependencies import verify_user_access
 from app.infrastructure.db.database import Base
 from app.infrastructure.db.models import (
     GraphAttemptModel,
+    GraphQuestionItemModel,
     KbChapterModel,
     KbConceptModel,
     KbSubjectModel,
     KbTopicModel,
     MasterySnapshotModel,
+    PracticeAttemptModel,
     PracticeQuestionModel,
     UserKnowledgeStatModel,
 )
@@ -57,6 +59,8 @@ class LearningCenterTest(unittest.TestCase):
             KbConceptModel.__table__,
             MasterySnapshotModel.__table__,
             GraphAttemptModel.__table__,
+            GraphQuestionItemModel.__table__,
+            PracticeAttemptModel.__table__,
             PracticeQuestionModel.__table__,
             UserKnowledgeStatModel.__table__,
         ]
@@ -182,6 +186,20 @@ class LearningCenterTest(unittest.TestCase):
                         subject_id="data-structure",
                         concept_id="data-structure.binary-tree.threaded-tree",
                     ),
+                    GraphQuestionItemModel(
+                        id="gq-1",
+                        user_id="u1",
+                        subject_id="data-structure",
+                        primary_concept_id="data-structure.binary-tree.traversal",
+                        stem="二叉树遍历 graph-era 题",
+                    ),
+                    GraphQuestionItemModel(
+                        id="gq-other-subject",
+                        user_id="u1",
+                        subject_id="computer-network",
+                        primary_concept_id="data-structure.binary-tree.traversal",
+                        stem="其他学科题不应计入 data-structure 过滤结果",
+                    ),
                 ]
             )
 
@@ -198,7 +216,7 @@ class LearningCenterTest(unittest.TestCase):
         self.assertEqual(traversal.attempt_count, 2)
         self.assertEqual(traversal.correct_count, 1)
         self.assertEqual(traversal.wrong_count, 1)
-        self.assertEqual(traversal.question_count, 2)
+        self.assertEqual(traversal.question_count, 3)
         self.assertTrue(traversal.last_practiced_at.startswith("2026-01-02"))
         self.assertEqual(threaded.status, "unstarted")
         self.assertEqual(threaded.question_count, 1)
@@ -214,6 +232,7 @@ class LearningCenterTest(unittest.TestCase):
         self.assertEqual(subject.wrong_count, 1)
         self.assertTrue(result.next_move.concept_id.startswith("data-structure."))
         self.assertNotEqual(result.next_move.concept_id, traversal.concept_id)
+        self.assertEqual(result.facts_source, "graph")
 
     def test_attempt_without_snapshot_marks_tested_but_unstarted(self) -> None:
         self._seed_minimal_taxonomy()
@@ -278,6 +297,105 @@ class LearningCenterTest(unittest.TestCase):
         self.assertEqual(traversal.p_mastery, 0.0)
         self.assertEqual(traversal.attempt_count, 0)
         self.assertEqual(traversal.correct_count, 0)
+
+    def test_learning_center_uses_legacy_fallback_when_graph_facts_disabled(self) -> None:
+        self._seed_minimal_taxonomy()
+        with self.session_scope() as session:
+            session.add(
+                UserKnowledgeStatModel(
+                    user_id="u1",
+                    subject_id="data-structure",
+                    knowledge_point="data-structure.binary-tree.traversal",
+                    concept_id="data-structure.binary-tree.traversal",
+                    concept_name="二叉树遍历",
+                    mastery_score=0.72,
+                    mastery_level="learning",
+                    attempt_count=1,
+                    correct_count=1,
+                    wrong_count=0,
+                )
+            )
+            session.add(
+                PracticeAttemptModel(
+                    id="legacy-attempt-1",
+                    user_id="u1",
+                    session_id="s1",
+                    subject_id="data-structure",
+                    question_id="q1",
+                    question_snapshot={},
+                    selected_option="A",
+                    is_correct=True,
+                    knowledge_point="二叉树遍历",
+                    concept_id="data-structure.binary-tree.traversal",
+                    concept_name="二叉树遍历",
+                )
+            )
+
+        with patch.dict(os.environ, {"ENABLE_GRAPH_FACTS": "false"}, clear=False):
+            result = get_learning_center("u1", subject_id="data-structure")
+        traversal = _find_concept(result, "data-structure.binary-tree.traversal")
+
+        self.assertEqual(result.facts_source, "legacy_fallback")
+        self.assertEqual(traversal.status, "learning")
+        self.assertEqual(traversal.p_mastery, 0.72)
+        self.assertEqual(traversal.attempt_count, 1)
+        self.assertEqual(traversal.correct_count, 1)
+
+    def test_legacy_fallback_resolves_chinese_knowledge_point_to_canonical_concept(self) -> None:
+        self._seed_minimal_taxonomy()
+        with self.session_scope() as session:
+            session.add(
+                UserKnowledgeStatModel(
+                    user_id="u1",
+                    subject_id="data-structure",
+                    knowledge_point="二叉树遍历",
+                    concept_id="",
+                    concept_name="",
+                    mastery_score=68,
+                    mastery_level="learning",
+                )
+            )
+            session.add(
+                PracticeAttemptModel(
+                    id="legacy-attempt-cn",
+                    user_id="u1",
+                    session_id="s1",
+                    subject_id="data-structure",
+                    question_id="legacy-q-cn",
+                    question_snapshot={},
+                    selected_option="A",
+                    is_correct=False,
+                    knowledge_point="二叉树遍历",
+                    concept_id="",
+                    concept_name="",
+                )
+            )
+            session.add(
+                PracticeQuestionModel(
+                    question_id="legacy-question-cn",
+                    subject_id="data-structure",
+                    subject_name="数据结构与算法",
+                    chapter_name="树与二叉树",
+                    topic_name="二叉树",
+                    concept_id="",
+                    concept_name="二叉树遍历",
+                    difficulty="medium",
+                    stem="二叉树遍历相关题目",
+                    options_json={"A": "A", "B": "B", "C": "C", "D": "D"},
+                    answer="A",
+                    explanation="解析",
+                )
+            )
+
+        with patch.dict(os.environ, {"ENABLE_GRAPH_FACTS": "false"}, clear=False):
+            result = get_learning_center("u1", subject_id="data-structure")
+        traversal = _find_concept(result, "data-structure.binary-tree.traversal")
+
+        self.assertEqual(traversal.status, "learning")
+        self.assertEqual(traversal.p_mastery, 0.68)
+        self.assertEqual(traversal.attempt_count, 1)
+        self.assertEqual(traversal.wrong_count, 1)
+        self.assertEqual(traversal.question_count, 1)
 
     def _seed_minimal_taxonomy(self) -> None:
         with self.session_scope() as session:

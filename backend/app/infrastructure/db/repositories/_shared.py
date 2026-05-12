@@ -298,6 +298,7 @@ def serialize_practice_attempt_record(attempt: PracticeAttemptModel) -> Practice
         concept_name=getattr(attempt, "concept_name", "") or "",
         concept_mapping_status=getattr(attempt, "concept_mapping_status", "") or "",
         source_type=attempt.source_type,
+        idempotency_key=getattr(attempt, "idempotency_key", "") or "",
         created_at=to_iso8601(attempt.created_at),
     )
 

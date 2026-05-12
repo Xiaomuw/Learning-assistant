@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 from typing import Any, Protocol
 
 from app.domains.qa.runtime import create_agent
@@ -20,6 +21,7 @@ from app.orchestration.graphs.shared.schemas import (
     ToolCapability,
     ToolResult,
     ToolStatus,
+    build_learning_event,
 )
 from app.shared.schemas.subject import DEFAULT_SUBJECTS, DEFAULT_SUBJECT_ID
 
@@ -173,6 +175,7 @@ class ProductionQARuntimeAdapter:
             evidence=evidence,
             evidence_gate=evidence_gate,
         )
+        message_id = str(runtime_context.get("message_id") or runtime_context.get("request_id") or "").strip()
         request = AgentRequest(
             user_id=runtime_user_id,
             session_id=self.session_id,
@@ -207,6 +210,8 @@ class ProductionQARuntimeAdapter:
                 evidence_gate=evidence_gate,
                 user_id=runtime_user_id,
                 graph_run_id=runtime_graph_run_id,
+                session_id=self.session_id,
+                message_id=message_id,
             )
         return _contract_result_from_runtime_result(
             result=result,
@@ -217,6 +222,8 @@ class ProductionQARuntimeAdapter:
             evidence_gate=evidence_gate,
             user_id=runtime_user_id,
             graph_run_id=runtime_graph_run_id,
+            session_id=self.session_id,
+            message_id=message_id,
         )
 
     def _build_runtime_context(
@@ -231,6 +238,8 @@ class ProductionQARuntimeAdapter:
         notebook_required = bool(evidence_gate.get("notebook_required")) or source_policy == SourcePolicy.NOTEBOOK_ONLY.value
         notebook_policy = "strict" if source_policy == SourcePolicy.NOTEBOOK_ONLY.value else ("required" if notebook_required else "optional")
         runtime_source_policy = _runtime_source_policy(source_policy=source_policy, evidence=evidence)
+        runtime_allow_tools = False
+        runtime_allow_search = False
         base_context = {
             "rag_precomputed": True,
             "rag_ready": bool(evidence),
@@ -250,15 +259,26 @@ class ProductionQARuntimeAdapter:
             "source_policy": runtime_source_policy,
             "notebook_policy": notebook_policy,
             "notebook_required": notebook_required,
-            "allow_tools": self.allow_tools,
-            "allow_search": self.allow_search,
+            "allow_tools": runtime_allow_tools,
+            "allow_search": runtime_allow_search,
+            "qagraph_runtime_tools_disabled": True,
+            "qagraph_requested_allow_tools": self.allow_tools,
+            "qagraph_requested_allow_search": self.allow_search,
             "guard": {
-                "allow_tools": self.allow_tools,
-                "allow_search": self.allow_search,
-                "reason": "qagraph_read_only_adapter",
+                "allow_tools": runtime_allow_tools,
+                "allow_search": runtime_allow_search,
+                "reason": "qagraph_runtime_adapter_uses_precomputed_evidence_only",
             },
         }
         base_context.update(dict(self.runtime_context))
+        base_context["allow_tools"] = runtime_allow_tools
+        base_context["allow_search"] = runtime_allow_search
+        base_context["guard"] = {
+            **dict(base_context.get("guard") or {}),
+            "allow_tools": runtime_allow_tools,
+            "allow_search": runtime_allow_search,
+            "reason": "qagraph_runtime_adapter_uses_precomputed_evidence_only",
+        }
         return base_context
 
 
@@ -340,6 +360,8 @@ def _contract_result_from_runtime_result(
     evidence_gate: dict[str, Any],
     user_id: str,
     graph_run_id: str,
+    session_id: str = "",
+    message_id: str = "",
 ) -> QARuntimeContractResult:
     runtime_evidence = _evidence_from_runtime_docs(result.retrieved_docs)
     evidence = _merge_evidence(input_evidence, runtime_evidence)
@@ -351,6 +373,9 @@ def _contract_result_from_runtime_result(
         user_id=user_id,
         graph_run_id=graph_run_id,
         source_policy=source_policy,
+        question=question,
+        session_id=session_id,
+        message_id=message_id,
     )
     final_response = _final_response_from_runtime_result(
         result=result,
@@ -481,6 +506,8 @@ def _contract_result_from_exception(
     evidence_gate: dict[str, Any],
     user_id: str,
     graph_run_id: str,
+    session_id: str = "",
+    message_id: str = "",
 ) -> QARuntimeContractResult:
     _ = evidence_gate
     final_response = FinalResponse(
@@ -504,7 +531,7 @@ def _contract_result_from_exception(
         severity=GraphErrorSeverity.ERROR,
         metadata={"source_policy": source_policy},
     )
-    event = LearningEvent(
+    event = build_learning_event(
         event_type=LearningEventType.ANSWER_REPAIRED.value,
         user_id=user_id,
         graph_run_id=graph_run_id,
@@ -512,6 +539,13 @@ def _contract_result_from_exception(
             "reason": "production_qa_runtime_error",
             "error_type": exc.__class__.__name__,
         },
+        source_object_type="qa_runtime_error",
+        source_object_id=_qa_runtime_source_id(
+            question=question,
+            user_id=user_id,
+            session_id=session_id,
+            message_id=message_id,
+        ),
     )
     return QARuntimeContractResult(
         final_response=final_response,
@@ -601,20 +635,20 @@ def _tool_results_from_runtime(
             continue
         name = str(raw_call.get("name") or raw_call.get("capability") or f"runtime_tool_{index}")
         capability = _capability_from_tool_call(raw_call)
-        provider = _provider_from_tool_call(raw_call)
         success = bool(raw_call.get("success", False))
         error = str(raw_call.get("error") or "").strip()
         status = ToolStatus.SUCCESS if success else _tool_status_from_error(error)
+        public_source = _public_source_for_tool(capability)
         tool_results.append(
             ToolResult(
                 tool_id=f"runtime:{capability.value}:{index}",
-                provider=provider,
+                provider=public_source,
                 capability=capability,
                 status=status,
                 input_summary=_input_summary_from_tool_call(raw_call),
                 output={
                     "tool_capability": capability.value,
-                    "provider": provider,
+                    "source": public_source,
                     "doc_count": int(raw_call.get("doc_count") or 0),
                     "is_external": bool(raw_call.get("is_external", False)),
                     "payload_keys": sorted(
@@ -648,17 +682,10 @@ def _capability_from_tool_call(raw_call: dict[str, Any]) -> ToolCapability:
     return ToolCapability.NOTEBOOK_RETRIEVE
 
 
-def _provider_from_tool_call(raw_call: dict[str, Any]) -> str:
-    explicit = str(raw_call.get("provider") or "").strip()
-    if explicit:
-        return explicit
-    name = str(raw_call.get("name") or "")
-    normalized = name.lower()
-    if "tavily" in normalized:
-        return "tavily"
-    if normalized.startswith("mcp_"):
-        return "mcp"
-    if "notebook" in normalized:
+def _public_source_for_tool(capability: ToolCapability) -> str:
+    if capability in {ToolCapability.WEB_SEARCH, ToolCapability.WEB_EXTRACT}:
+        return "web"
+    if capability == ToolCapability.NOTEBOOK_RETRIEVE:
         return "notebook"
     return "runtime"
 
@@ -672,11 +699,11 @@ def _tool_status_from_error(error: str) -> ToolStatus:
 
 def _input_summary_from_tool_call(raw_call: dict[str, Any]) -> str:
     capability = _capability_from_tool_call(raw_call)
-    provider = _provider_from_tool_call(raw_call)
+    source = _public_source_for_tool(capability)
     doc_count = int(raw_call.get("doc_count") or 0)
     if doc_count:
-        return f"{capability.value} via {provider} · docs={doc_count}"
-    return f"{capability.value} via {provider}"
+        return f"{capability.value} · source={source} · docs={doc_count}"
+    return f"{capability.value} · source={source}"
 
 
 def _evidence_for_capability(
@@ -733,7 +760,6 @@ def _errors_from_runtime_result(
         if not isinstance(raw_call, dict) or bool(raw_call.get("success", False)):
             continue
         capability = _capability_from_tool_call(raw_call)
-        provider = _provider_from_tool_call(raw_call)
         error = str(raw_call.get("error") or "tool_call_failed")
         errors.append(
             GraphError(
@@ -741,7 +767,7 @@ def _errors_from_runtime_result(
                 message=error[:240],
                 node="ProductionQARuntimeAdapter",
                 severity=GraphErrorSeverity.WARNING,
-                metadata={"tool_capability": capability.value, "provider": provider},
+                metadata={"tool_capability": capability.value, "source": _public_source_for_tool(capability)},
             )
         )
     return errors
@@ -754,24 +780,36 @@ def _adapter_learning_events(
     user_id: str,
     graph_run_id: str,
     source_policy: str,
+    question: str,
+    session_id: str = "",
+    message_id: str = "",
 ) -> list[LearningEvent]:
     events: list[LearningEvent] = []
+    source_id = _qa_runtime_source_id(
+        question=question,
+        user_id=user_id,
+        session_id=session_id,
+        message_id=message_id,
+    )
     if tool_results:
+        tool_refs = [item.tool_id for item in tool_results]
         events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.TOOL_FALLBACK_USED.value,
                 user_id=user_id,
                 graph_run_id=graph_run_id,
                 payload={
-                    "tool_result_refs": [item.tool_id for item in tool_results],
+                    "tool_result_refs": tool_refs,
                     "tool_statuses": [item.status.value for item in tool_results],
                     "source_policy": source_policy,
                 },
+                source_object_type="tool_results",
+                source_object_id=f"{source_id}:tools:{_short_hash('|'.join(tool_refs))}",
             )
         )
     if result.degraded:
         events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.ANSWER_REPAIRED.value,
                 user_id=user_id,
                 graph_run_id=graph_run_id,
@@ -780,9 +818,24 @@ def _adapter_learning_events(
                     "execution_mode": result.execution_mode,
                     "source_policy": source_policy,
                 },
+                source_object_type="qa_runtime",
+                source_object_id=f"{source_id}:degraded:{result.execution_mode}",
             )
         )
     return events
+
+
+def _qa_runtime_source_id(*, question: str, user_id: str, session_id: str = "", message_id: str = "") -> str:
+    explicit = str(message_id or "").strip()
+    if explicit:
+        return f"qa_message:{explicit}"
+    scope = str(session_id or user_id or "unknown").strip()
+    digest = hashlib.sha256(str(question or "").strip().encode("utf-8")).hexdigest()[:16]
+    return f"qa_message:{scope}:{digest}"
+
+
+def _short_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
 def _runtime_source_policy(*, source_policy: str, evidence: list[EvidenceChunk]) -> str:

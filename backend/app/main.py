@@ -9,7 +9,9 @@
   5. 启动基础设施初始化流程
 """
 
+import asyncio
 from contextlib import asynccontextmanager
+import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -35,6 +37,56 @@ from app.interfaces.auth.router import router as auth_router  # noqa: E402
 
 ensure_model_env_aliases()
 
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _practice_finalizer_worker_enabled() -> bool:
+    return str(os.getenv("ENABLE_PRACTICE_FINALIZER_WORKER", "")).strip().lower() in _TRUE_VALUES
+
+
+def _practice_finalizer_worker_interval_seconds() -> float:
+    raw = str(os.getenv("PRACTICE_FINALIZER_WORKER_INTERVAL_SECONDS", "30")).strip()
+    try:
+        return max(5.0, float(raw))
+    except ValueError:
+        return 30.0
+
+
+def _practice_finalizer_worker_limit() -> int:
+    raw = str(os.getenv("PRACTICE_FINALIZER_WORKER_LIMIT", "20")).strip()
+    try:
+        return max(1, min(int(raw), 100))
+    except ValueError:
+        return 20
+
+
+async def _practice_finalizer_worker() -> None:
+    from app.application.practice.service import run_due_practice_attempt_finalization_jobs
+
+    interval = _practice_finalizer_worker_interval_seconds()
+    limit = _practice_finalizer_worker_limit()
+    logger.info("✅ Practice finalizer worker 已启动 | interval={}s | limit={}", interval, limit)
+    try:
+        while True:
+            try:
+                summary = await asyncio.to_thread(run_due_practice_attempt_finalization_jobs, limit=limit)
+                if summary.get("due"):
+                    logger.info(
+                        "✅ Practice finalizer worker 本轮完成 | due={} | claimed={} | completed={} | failed={} | dead={} | skipped={}",
+                        summary.get("due", 0),
+                        summary.get("claimed", 0),
+                        summary.get("completed", 0),
+                        summary.get("failed", 0),
+                        summary.get("dead", 0),
+                        summary.get("skipped", 0),
+                    )
+            except Exception as exc:  # pragma: no cover - 后台恢复循环必须 fail-open
+                logger.exception("Practice finalizer worker 本轮失败: {}", exc.__class__.__name__)
+            await asyncio.sleep(interval)
+    except asyncio.CancelledError:
+        logger.info("👋 Practice finalizer worker 已停止")
+        raise
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -59,10 +111,20 @@ async def lifespan(app: FastAPI):
     build_graph().compile()
     logger.info("✅ LearningOrchestratorGraph 已编译")
 
+    finalizer_worker_task = None
+    if _practice_finalizer_worker_enabled():
+        finalizer_worker_task = asyncio.create_task(_practice_finalizer_worker())
+
     logger.info("🚀 启动完成，服务就绪")
     try:
         yield
     finally:
+        if finalizer_worker_task is not None:
+            finalizer_worker_task.cancel()
+            try:
+                await finalizer_worker_task
+            except asyncio.CancelledError:
+                pass
         logger.info("👋 学习问答助手后端已关闭")
 
 

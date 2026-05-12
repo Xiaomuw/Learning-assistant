@@ -23,7 +23,13 @@ from app.orchestration.graphs.question_generation.adapter import (
     LegacyPracticeQuestionCandidateGenerator,
 )
 from app.orchestration.graphs.question_generation.graph import build_graph
-from app.orchestration.graphs.question_generation.nodes import _topic_alignment_issue
+from app.orchestration.graphs.question_generation.nodes import (
+    RuleBasedQuestionQualityVerifier,
+    _learning_event,
+    _topic_alignment_issue,
+    question_generation_request_source_id,
+    quality_reviewer_node,
+)
 from app.orchestration.graphs.question_generation.schemas import (
     AnswerKey,
     ItemBlueprint,
@@ -135,6 +141,180 @@ class QuestionGenerationGraphAdapterTest(unittest.TestCase):
         self.assertIn("source_refs", encoded)
         self.assertIn("answer_key", encoded)
         self.assertIn("rubric", encoded)
+
+    def test_quality_golden_fixture_covers_unique_answer_topic_and_disputed_items(self) -> None:
+        cases = json.loads((Path(__file__).parent / "fixtures" / "qgen_quality_golden.json").read_text(encoding="utf-8"))
+        verifier = RuleBasedQuestionQualityVerifier()
+
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                candidate = QuestionCandidate.model_validate(case["candidate"])
+                solver = verifier.verify([candidate])
+                report = QualityReport.model_validate(
+                    quality_reviewer_node(
+                        {
+                            "generation_blueprint": case["blueprint"],
+                            "question_candidates": [candidate.model_dump(mode="json")],
+                            "solver_report": solver.model_dump(mode="json"),
+                        }
+                    )["quality_report"]
+                )
+
+                self.assertEqual(report.passed, case["expected_pass"])
+                if not case["expected_pass"]:
+                    self.assertTrue(
+                        any(case["expected_issue"] in issue for issue in report.issues),
+                        report.issues,
+                    )
+                if case["name"] == "valid_http_unique_answer":
+                    self.assertEqual(report.solver_verifier.verifier_source, "RuleBasedQuestionQualityVerifier")
+                    self.assertEqual(report.reviewer["topic_alignment_passed"], True)
+
+    def test_graph_refuses_unsupported_question_type_without_persisting_fake_single_choice(self) -> None:
+        question_repo = MockQuestionItemRepository()
+        result = build_graph(question_item_repository=question_repo).compile().invoke(
+            {
+                "run_id": "run-qgen-unsupported-type",
+                "user_id": "u1",
+                "user_message": "围绕 HTTP 出 2 道多选题",
+                "quiz_request": {
+                    "is_quiz_request": True,
+                    "action": "generate_practice_pack",
+                    "topic": "HTTP",
+                    "requested_topic": "HTTP",
+                    "active_topic": "HTTP",
+                    "question_type": "multiple_choice",
+                    "difficulty": "easy",
+                    "count": 2,
+                },
+            }
+        )
+
+        self.assertEqual(question_repo.created, [])
+        self.assertEqual(result["question_item_ids"], [])
+        self.assertFalse(result["quality_report"]["passed"])
+        self.assertTrue(result["generation_status"]["unsupported_question_type"])
+        self.assertIn("暂不支持生成", result["final_response"]["answer"])
+
+    def test_quality_reviewer_rejects_template_and_duplicate_distractors(self) -> None:
+        candidate = QuestionCandidate(
+            stem="TODO：关于 {concept} 的题干",
+            options=[
+                {"key": "A", "text": "正确答案"},
+                {"key": "B", "text": "正确 答案"},
+                {"key": "C", "text": "以上都不对"},
+                {"key": "D", "text": "选项D"},
+            ],
+            primary_concept_id="http",
+            source_refs=[SourceRef(source_type="generator", source_id="test")],
+            answer_key=AnswerKey(
+                correct_option="A",
+                correct_option_text="正确答案",
+                explanation="这是一个用于测试质量规则的解析。",
+                option_rationales={
+                    "A": "A 解析",
+                    "B": "B 解析",
+                    "C": "C 解析",
+                    "D": "D 解析",
+                },
+            ),
+            rubric=Rubric(criteria=["single_correct_option"], full_credit="选 A。"),
+        )
+
+        result = quality_reviewer_node(
+            {
+                "generation_blueprint": ItemBlueprint(primary_concept_id="http", concept_name="HTTP").model_dump(mode="json"),
+                "question_candidates": [candidate.model_dump(mode="json")],
+                "solver_report": {"passed": True, "selected_option": "A", "issues": []},
+                "generation_status": {},
+            }
+        )
+
+        issues = result["quality_report"]["issues"]
+        self.assertTrue(any("模板化题干" in issue for issue in issues))
+        self.assertTrue(any("占位符" in issue for issue in issues))
+        self.assertTrue(any("重复的干扰项" in issue for issue in issues))
+        self.assertFalse(result["quality_report"]["passed"])
+
+    def test_review_and_failed_events_use_stable_request_source_id_without_run_id(self) -> None:
+        base_state = {
+            "user_id": "u1",
+            "thread_id": "session-qgen",
+            "notebook_id": "computer-network",
+            "quiz_request": {
+                "topic": "HTTP 缓存",
+                "count": 2,
+                "difficulty": "基础",
+                "question_type": "single_choice",
+            },
+            "requested_count": 2,
+            "difficulty": "基础",
+            "question_type": "single_choice",
+        }
+        first_state = {**base_state, "run_id": "run-a"}
+        second_state = {**base_state, "run_id": "run-b"}
+
+        self.assertEqual(
+            question_generation_request_source_id(first_state),
+            question_generation_request_source_id(second_state),
+        )
+        for event_type in (
+            LearningEventType.QUESTION_REVIEWED.value,
+            LearningEventType.QUESTION_GENERATION_FAILED.value,
+        ):
+            with self.subTest(event_type=event_type):
+                first = _learning_event(
+                    first_state,
+                    event_type=event_type,
+                    concept_id="http-cache",
+                    payload={"reason": "quality_gate_failed"},
+                )
+                second = _learning_event(
+                    second_state,
+                    event_type=event_type,
+                    concept_id="http-cache",
+                    payload={"reason": "quality_gate_failed"},
+                )
+
+                self.assertEqual(first.payload["source_object_id"], second.payload["source_object_id"])
+                self.assertEqual(first.payload["hash_key"], second.payload["hash_key"])
+                self.assertNotIn("run-a", first.payload["source_object_id"])
+                self.assertNotIn("run-b", second.payload["source_object_id"])
+
+    def test_request_message_id_separates_distinct_question_generation_turns(self) -> None:
+        base_state = {
+            "user_id": "u1",
+            "thread_id": "session-qgen",
+            "quiz_request": {
+                "topic": "HTTP 缓存",
+                "count": 2,
+                "difficulty": "基础",
+                "question_type": "single_choice",
+            },
+        }
+        first = _learning_event(
+            {**base_state, "run_id": "run-a", "message_id": "msg-a"},
+            event_type=LearningEventType.QUESTION_REVIEWED.value,
+            concept_id="http-cache",
+            payload={"passed": True},
+        )
+        second = _learning_event(
+            {**base_state, "run_id": "run-b", "message_id": "msg-b"},
+            event_type=LearningEventType.QUESTION_REVIEWED.value,
+            concept_id="http-cache",
+            payload={"passed": True},
+        )
+        retry = _learning_event(
+            {**base_state, "run_id": "run-c", "message_id": "msg-a"},
+            event_type=LearningEventType.QUESTION_REVIEWED.value,
+            concept_id="http-cache",
+            payload={"passed": True},
+        )
+
+        self.assertEqual(first.payload["source_object_id"], "qgen_request:msg-a")
+        self.assertEqual(second.payload["source_object_id"], "qgen_request:msg-b")
+        self.assertNotEqual(first.payload["hash_key"], second.payload["hash_key"])
+        self.assertEqual(first.payload["hash_key"], retry.payload["hash_key"])
 
     def test_graph_compiles_generates_persists_and_emits_learning_events(self) -> None:
         question_repo = MockQuestionItemRepository()

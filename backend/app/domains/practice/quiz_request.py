@@ -18,6 +18,9 @@ QUIZ_INTENT_TERMS = (
     "练习",
     "考我",
     "测试我",
+    "来一组",
+    "做一套",
+    "小测一下",
     "来几道题",
     "再来几题",
     "再出一些题",
@@ -47,7 +50,7 @@ ENGLISH_QUIZ_INTENT_TERMS = (
 )
 CONTINUATION_TERMS = ("再", "继续", "还有吗", "换几道", "难一点", "简单一点", "再来", "more", "again", "another", "continue")
 CURRENT_CONTEXT_TERMS = ("当前问题", "刚才这个", "这道题相关", "这道题", "当前题")
-WEAK_POINT_TERMS = ("错题", "薄弱点", "不会的地方", "薄弱", "错的")
+WEAK_POINT_TERMS = ("错题", "薄弱点", "不会的地方", "薄弱", "错的", "弱项", "短板")
 GENERIC_SUBJECT_SUFFIX_TERMS = {
     "",
     "有关",
@@ -129,6 +132,16 @@ def resolve_quiz_request(user_input: str, context: dict[str, Any] | None = None)
     difficulty = _parse_difficulty(message, context)
     explicit_topic, explicit_subject_id = _extract_explicit_topic(message)
     if explicit_topic:
+        if not _is_supported_generation_question_type(question_type):
+            return _unsupported_question_type_resolution(
+                topic=explicit_topic,
+                subject_id=explicit_subject_id,
+                source="explicit_user_input",
+                previous_topic=previous_topic,
+                question_type=question_type,
+                difficulty=difficulty,
+                count=count,
+            )
         return _generate_resolution(
             topic=explicit_topic,
             subject_id=explicit_subject_id,
@@ -144,6 +157,15 @@ def resolve_quiz_request(user_input: str, context: dict[str, Any] | None = None)
     if _mentions_weak_points(message):
         weak_points = _string_list(context.get("weak_points"))
         if weak_points:
+            if not _is_supported_generation_question_type(question_type):
+                return _unsupported_question_type_resolution(
+                    topic=weak_points[0],
+                    source="weak_point",
+                    previous_topic=previous_topic,
+                    question_type=question_type,
+                    difficulty=difficulty,
+                    count=count,
+                )
             return _generate_resolution(
                 topic=weak_points[0],
                 source="weak_point",
@@ -157,6 +179,15 @@ def resolve_quiz_request(user_input: str, context: dict[str, Any] | None = None)
 
     context_topic, context_source = _topic_from_current_context(message, context)
     if context_topic:
+        if not _is_supported_generation_question_type(question_type):
+            return _unsupported_question_type_resolution(
+                topic=context_topic,
+                source=context_source,
+                previous_topic=previous_topic,
+                question_type=question_type,
+                difficulty=difficulty,
+                count=count,
+            )
         return _generate_resolution(
             topic=context_topic,
             source=context_source,
@@ -169,6 +200,7 @@ def resolve_quiz_request(user_input: str, context: dict[str, Any] | None = None)
         )
 
     recommended = _recommended_options(context)
+    unsupported_question_type = not _is_supported_generation_question_type(question_type)
     return QuizRequestResolution(
         is_quiz_request=True,
         action="clarify_quiz_request",
@@ -181,10 +213,10 @@ def resolve_quiz_request(user_input: str, context: dict[str, Any] | None = None)
         count=count,
         target_module="practice",
         need_clarification=True,
-        clarification_reason="missing_topic",
+        clarification_reason="unsupported_question_type" if unsupported_question_type else "missing_topic",
         recommended_options=recommended,
         custom_input_placeholder=_custom_placeholder(),
-        reason="quiz_intent_without_usable_topic",
+        reason="unsupported_question_type" if unsupported_question_type else "quiz_intent_without_usable_topic",
     )
 
 def build_quiz_clarification_panel(resolution: QuizRequestResolution) -> QuizClarificationPanel:
@@ -238,6 +270,8 @@ def context_from_practice_question(
 
 def _has_quiz_intent(message: str, context: dict[str, Any]) -> bool:
     lowered = message.lower()
+    if _is_question_construction_explanation(message):
+        return False
     if any(term in message or term.lower() in lowered for term in QUIZ_INTENT_TERMS):
         return True
     if any(term in lowered for term in ENGLISH_QUIZ_INTENT_TERMS):
@@ -252,6 +286,8 @@ def _has_quiz_intent(message: str, context: dict[str, Any]) -> bool:
     if re.search(r"(?:围绕|关于|针对|有关).{1,40}(?:出|生成|做|练|考|测试|题|练习|测验|单选|选择)", message):
         return True
     if "做题" in message:
+        return True
+    if _has_continuation_signal(message) and re.search(r"(?:题|道|练习|测验|单选|选择)", message):
         return True
     if _has_continuation_signal(message):
         return bool(
@@ -314,6 +350,42 @@ def _generate_resolution(
         custom_input_placeholder=None,
         reason=reason,
     )
+
+
+def _unsupported_question_type_resolution(
+    *,
+    topic: str | None,
+    subject_id: str | None = None,
+    source: str,
+    previous_topic: str | None,
+    question_type: str,
+    difficulty: str,
+    count: int,
+) -> QuizRequestResolution:
+    return QuizRequestResolution(
+        is_quiz_request=True,
+        action="clarify_quiz_request",
+        intent="quiz_generation",
+        topic=topic,
+        subject_id=subject_id,
+        requested_topic=topic,
+        previous_topic=previous_topic,
+        active_topic=topic,
+        source=source,  # type: ignore[arg-type]
+        question_type=question_type,  # type: ignore[arg-type]
+        difficulty=difficulty,  # type: ignore[arg-type]
+        count=count,
+        target_module="practice",
+        need_clarification=True,
+        clarification_reason="unsupported_question_type",
+        recommended_options=_default_recommendations(),
+        custom_input_placeholder=_custom_placeholder(),
+        reason="unsupported_question_type",
+    )
+
+
+def _is_supported_generation_question_type(question_type: str) -> bool:
+    return question_type in {"single_choice", "unknown", ""}
 
 
 def _previous_topic(context: dict[str, Any]) -> str | None:
@@ -454,6 +526,7 @@ def _strip_followup_instruction(message: str) -> str:
 def _remove_count_and_type_terms(message: str) -> str:
     cleaned = str(message or "")
     cleaned = re.sub(r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(?:几|若干|一些)\s*(?:道|题)", " ", cleaned)
     cleaned = re.sub(r"[一两二三四五六七八九十0-9]+\s*道", " ", cleaned)
     cleaned = re.sub(r"(?:单选题|单选|选择题|选择|多选题|多选|判断题|判断|简答题|简答|问答题|问答|题目|练习题|题|练习)", " ", cleaned)
     return " ".join(cleaned.split()).strip()
@@ -498,7 +571,9 @@ def _is_context_only_topic_candidate(message: str) -> bool:
         "ai补",
         "AI补",
         "帮我再出一些",
+        "帮我再出",
         "再出一些",
+        "再出",
         "再来",
         "继续出",
         "继续",
@@ -674,6 +749,21 @@ def _context_explicit_topic(value: Any) -> str:
 
 def _mentions_weak_points(message: str) -> bool:
     return any(term in message for term in WEAK_POINT_TERMS)
+
+
+def _is_question_construction_explanation(message: str) -> bool:
+    compact = _normalize_topic_for_compare(message)
+    return any(
+        marker in compact
+        for marker in (
+            "怎么出这道题",
+            "如何出这道题",
+            "为什么这么出题",
+            "讲讲怎么出",
+            "讲一下怎么出",
+            "解释怎么出",
+        )
+    )
 
 
 def _recommended_options(context: dict[str, Any]) -> list[QuizRecommendedOption]:

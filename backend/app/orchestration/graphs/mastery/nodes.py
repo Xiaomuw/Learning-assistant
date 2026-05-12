@@ -13,7 +13,7 @@ from app.orchestration.graphs.mastery.schemas import (
     SignalStrength,
 )
 from app.orchestration.graphs.mastery.state import MasteryEvaluationState
-from app.orchestration.graphs.shared.schemas import FinalResponse, GraphType, LearningEvent, LearningEventType
+from app.orchestration.graphs.shared.schemas import FinalResponse, GraphType, LearningEvent, LearningEventType, build_learning_event
 
 
 STRONG_EVENT_TYPES = {
@@ -391,11 +391,14 @@ def response_composer_node(state: MasteryEvaluationState) -> dict[str, Any]:
     user_id = str(state.get("user_id") or "")
     for update in updates:
         output_events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.MASTERY_UPDATED.value,
                 user_id=str(update.get("user_id") or user_id),
                 concept_id=str(update.get("concept_id") or ""),
                 graph_run_id=graph_run_id,
+                source_object_type="mastery_update",
+                source_object_id="|".join(str(item) for item in update.get("consumed_signal_ids", []) or [])
+                or f"{update.get('user_id') or user_id}:{update.get('subject_id') or 'general'}:{update.get('concept_id') or ''}",
                 payload={
                     "subject_id": update.get("subject_id"),
                     "p_mastery": update.get("p_mastery"),
@@ -407,11 +410,13 @@ def response_composer_node(state: MasteryEvaluationState) -> dict[str, Any]:
         )
     for action in actions:
         output_events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.NEXT_STEP_RECOMMENDED.value,
                 user_id=user_id,
                 concept_id=str(action.get("concept_id") or ""),
                 graph_run_id=graph_run_id,
+                source_object_type="next_learning_action",
+                source_object_id=f"{user_id}:{action.get('concept_id') or ''}:{action.get('action_type') or ''}",
                 payload=dict(action),
             ).model_dump(mode="json")
         )

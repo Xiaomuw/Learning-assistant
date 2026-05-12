@@ -24,10 +24,12 @@ class AuthRefreshReplayTest(unittest.TestCase):
     def setUp(self) -> None:
         auth_service._refresh_replay_cache.clear()
         auth_service._register_code_ip_attempts.clear()
+        auth_service._wechat_login_ip_attempts.clear()
 
     def tearDown(self) -> None:
         auth_service._refresh_replay_cache.clear()
         auth_service._register_code_ip_attempts.clear()
+        auth_service._wechat_login_ip_attempts.clear()
 
     def test_refresh_token_short_replay_returns_same_session_once(self) -> None:
         user = AuthUserView(
@@ -79,6 +81,16 @@ class AuthRefreshReplayTest(unittest.TestCase):
             auth_service._enforce_register_code_ip_rate_limit("127.0.0.1")
             with self.assertRaises(auth_service.RateLimitError):
                 auth_service._enforce_register_code_ip_rate_limit("127.0.0.1")
+
+    def test_wechat_login_ip_rate_limit_blocks_bursts(self) -> None:
+        with (
+            patch.object(auth_service, "_WECHAT_LOGIN_IP_WINDOW_SECONDS", 60),
+            patch.object(auth_service, "_WECHAT_LOGIN_IP_MAX_REQUESTS", 2),
+        ):
+            auth_service._enforce_wechat_login_ip_rate_limit("127.0.0.1")
+            auth_service._enforce_wechat_login_ip_rate_limit("127.0.0.1")
+            with self.assertRaises(auth_service.RateLimitError):
+                auth_service._enforce_wechat_login_ip_rate_limit("127.0.0.1")
 
     def test_complete_registration_rejects_weak_password_before_code_verification(self) -> None:
         with (

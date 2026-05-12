@@ -24,6 +24,18 @@ _SMTP_PLACEHOLDER_MARKERS = (
     "no-reply@example.com",
 )
 
+_WECHAT_PLACEHOLDER_MARKERS = (
+    "replace-with",
+    "placeholder",
+    "your-wechat",
+    "your-mini",
+    "your-app",
+    "appsecret",
+    "appid",
+)
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
 
 def _is_blank(value: str | None) -> bool:
     return not (value or "").strip()
@@ -84,6 +96,22 @@ def _auth_cookie_secure_enabled() -> bool:
     }
 
 
+def _wechat_mini_configured() -> bool:
+    app_id = (os.getenv("WECHAT_MINI_APP_ID") or "").strip()
+    app_secret = (os.getenv("WECHAT_MINI_APP_SECRET") or "").strip()
+    return not (
+        _looks_like_placeholder(app_id, _WECHAT_PLACEHOLDER_MARKERS)
+        or _looks_like_placeholder(app_secret, _WECHAT_PLACEHOLDER_MARKERS)
+    )
+
+
+def _env_truthy(name: str, *, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in _TRUE_VALUES
+
+
 def validate_startup_environment() -> None:
     """Validate startup-blocking environment variables."""
     _get_database_url()
@@ -96,6 +124,11 @@ def validate_startup_environment() -> None:
         if not _auth_cookie_secure_enabled():
             raise EnvironmentValidationError(
                 "APP_ENV=production 时必须设置 AUTH_COOKIE_SECURE=true，确保认证 Cookie 只通过 HTTPS 发送。"
+            )
+        if not _wechat_mini_configured():
+            raise EnvironmentValidationError(
+                "APP_ENV=production 时必须配置真实 WECHAT_MINI_APP_ID / WECHAT_MINI_APP_SECRET，"
+                "否则微信小程序登录不可用。"
             )
 
 
@@ -147,6 +180,12 @@ def collect_environment_warnings() -> list[str]:
                 "当前使用个人邮箱 SMTP 发信，Gmail 可能将验证码放入垃圾邮件；生产建议配置 SPF/DKIM/DMARC 或专用邮件服务。"
             )
 
+    if not _is_production() and not _wechat_mini_configured():
+        warnings.append(
+            "微信小程序登录配置未完成，/api/auth/wechat-mini/login 会返回 missing_config；"
+            "本地真实登录需配置 WECHAT_MINI_APP_ID / WECHAT_MINI_APP_SECRET。"
+        )
+
     if (os.getenv("LANGSMITH_TRACING") or "").strip().lower() == "true" and _is_blank(
         os.getenv("LANGSMITH_API_KEY")
     ):
@@ -159,6 +198,15 @@ def collect_environment_warnings() -> list[str]:
     ):
         warnings.append(
             "MCP_ENABLED=true 但未配置 MCP_WEB_SERVER_URL，外部 MCP 增强会自动降级为关闭。"
+        )
+
+    if (
+        (_env_truthy("ENABLE_GRAPH_FACTS", default=True) or _env_truthy("ENABLE_GRAPH_DUAL_WRITE"))
+        and not _env_truthy("ENABLE_PRACTICE_FINALIZER_WORKER")
+    ):
+        warnings.append(
+            "graph-era facts 已启用但 ENABLE_PRACTICE_FINALIZER_WORKER 未开启；"
+            "practice durable finalizer job 只能依赖请求内 opportunistic 执行，生产建议设置为 true。"
         )
 
     return warnings

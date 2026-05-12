@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from loguru import logger
 
 from app.domains.memory.service import build_request_context
@@ -17,6 +19,7 @@ def build_initial_state(
     subject_id: str,
     request_mode: str,
     thinking_mode: bool = False,
+    client_request_id: str | None = None,
 ) -> AgentState:
     """Build the LangGraph state for a chat turn."""
     context = build_request_context(user_id, session_id)
@@ -25,10 +28,15 @@ def build_initial_state(
     fallback_subject = DEFAULT_SUBJECTS[0]
     subject_name = subject.name if subject else str(fallback_subject["name"])
     subject_description = subject.description if subject else str(fallback_subject["description"])
+    normalized_client_request_id = str(client_request_id or "").strip()
+    message_id = normalized_client_request_id or str(uuid4())
 
     initial_state: AgentState = {
         "user_id": user_id,
         "session_id": session_id,
+        "message_id": message_id,
+        "request_id": message_id,
+        "client_request_id": normalized_client_request_id,
         "subject_id": normalized_subject_id,
         "subject_name": subject_name,
         "subject_description": subject_description,

@@ -990,6 +990,7 @@ class ChatApiTest(unittest.TestCase):
             session_id="session-1",
             question="那为什么会这样？",
             subject_id="general",
+            client_request_id="client-turn-1",
         )
 
         state = chat_state_builder.build_initial_state(
@@ -998,8 +999,12 @@ class ChatApiTest(unittest.TestCase):
             question=request.question,
             subject_id=request.subject_id,
             request_mode="sync",
+            client_request_id=request.client_request_id,
         )
 
+        self.assertEqual(state["message_id"], "client-turn-1")
+        self.assertEqual(state["request_id"], "client-turn-1")
+        self.assertEqual(state["client_request_id"], "client-turn-1")
         self.assertEqual(len(state["short_term_messages"]), 2)
         self.assertEqual(state["request_mode"], "sync")
         self.assertEqual(state["subject_id"], "data-structure")
@@ -1007,6 +1012,26 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(state["session_memory"]["active_topic"], "HTTP")
         self.assertIn("当前主主题：HTTP", state["session_memory_context"])
         self.assertIn("用户昵称：测试用户", state["long_term_context"])
+
+    def test_initial_state_generates_distinct_message_ids_without_client_request_id(self) -> None:
+        first = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-1",
+            question="什么是 HTTP？",
+            subject_id="general",
+            request_mode="sync",
+        )
+        second = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-1",
+            question="什么是 HTTP？",
+            subject_id="general",
+            request_mode="sync",
+        )
+
+        self.assertTrue(first["message_id"])
+        self.assertTrue(second["message_id"])
+        self.assertNotEqual(first["message_id"], second["message_id"])
 
     def test_build_assistant_message_includes_process_with_tool_calls(self) -> None:
         final_state = {

@@ -115,9 +115,9 @@ const TOOL_LABELS: Record<string, string> = {
   get_session_summary: "读取会话摘要",
   get_user_learning_profile: "读取学习画像",
   recommend_questions: "推荐练习题",
-  mcp_web_search: "网页搜索(MCP)",
-  mcp_web_read: "网页读取(MCP)",
-  tavily_web_search: "网络搜索(Tavily)",
+  mcp_web_search: "网页搜索",
+  mcp_web_read: "网页读取",
+  tavily_web_search: "网络搜索",
 };
 
 const PROCESS_STAGE_ORDER: Record<string, number> = {
@@ -577,11 +577,11 @@ function buildRetrievalStageDetail(data: Record<string, unknown>) {
     detail = `${detail.slice(0, -1)}，但相关度偏低。`;
   }
   if (webSearchUsed) {
-    detail = `当前 notebook 未命中足够内容，已使用 Tavily 网络搜索补充 ${docCount} 条上下文。`;
+    detail = `当前 notebook 未命中足够内容，已使用网络搜索补充 ${docCount} 条上下文。`;
   } else if (webSearchAttempted && webSearchError) {
-    detail = `${detail} Tavily 网络搜索失败：${webSearchError}。`;
+    detail = `${detail} 网络搜索失败：${webSearchError}。`;
   } else if (webSearchAttempted) {
-    detail = `${detail} 已尝试 Tavily 网络搜索但未获得可用结果。`;
+    detail = `${detail} 已尝试网络搜索但未获得可用结果。`;
   }
   if (isRewritten) {
     detail = `${detail.slice(0, -1)}，并自动改写了查询。`;
@@ -618,13 +618,13 @@ function buildWebSearchStageDetail(data: Record<string, unknown>) {
     typeof data.web_search_error === "string" ? data.web_search_error : "";
 
   if (webSearchUsed) {
-    return `Tavily 网络搜索成功，补充 ${docCount} 条上下文。`;
+    return `网络搜索成功，补充 ${docCount} 条上下文。`;
   }
   if (webSearchAttempted && webSearchError) {
-    return `Tavily 网络搜索失败：${webSearchError}，已继续使用通用问答兜底。`;
+    return `网络搜索失败：${webSearchError}，已继续使用通用问答兜底。`;
   }
   if (webSearchAttempted) {
-    return "已尝试 Tavily 网络搜索，但没有获得可用结果。";
+    return "已尝试网络搜索，但没有获得可用结果。";
   }
   return "本轮未触发网络搜索。";
 }

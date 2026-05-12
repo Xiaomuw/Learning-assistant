@@ -239,6 +239,9 @@ def _orchestrator_state_from_chat_state(
         "run_id": graph_run_id,
         "user_id": str(state.get("user_id") or ""),
         "thread_id": str(state.get("session_id") or state.get("thread_id") or ""),
+        "message_id": str(state.get("message_id") or state.get("request_id") or ""),
+        "request_id": str(state.get("request_id") or state.get("message_id") or ""),
+        "client_request_id": str(state.get("client_request_id") or ""),
         "notebook_id": normalize_subject_id(state.get("subject_id") or state.get("notebook_id")),
         "course_id": state.get("course_id"),
         "source_policy": _source_policy_from_chat_state(state),
@@ -258,6 +261,9 @@ def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
     context = {
         "user_id": str(state.get("user_id") or ""),
         "session_id": str(state.get("session_id") or ""),
+        "message_id": str(state.get("message_id") or state.get("request_id") or ""),
+        "request_id": str(state.get("request_id") or state.get("message_id") or ""),
+        "client_request_id": str(state.get("client_request_id") or ""),
         "subject_id": normalize_subject_id(state.get("subject_id")),
         "subject_name": str(state.get("subject_name") or DEFAULT_SUBJECTS[0]["name"]),
         "subject_description": str(state.get("subject_description") or ""),
@@ -339,6 +345,9 @@ def _chat_state_from_orchestrator_result(
     final_answer = str(envelope_sync.get("final_answer") or response.answer)
     return {
         **initial_state,
+        "message_id": str(initial_state.get("message_id") or initial_state.get("request_id") or ""),
+        "request_id": str(initial_state.get("request_id") or initial_state.get("message_id") or ""),
+        "client_request_id": str(initial_state.get("client_request_id") or ""),
         "question_type": str(envelope_sync.get("question_type") or question_type),
         "route": str(envelope_sync.get("route") or route),
         "source_policy": str(graph_result.get("source_policy") or initial_state.get("source_policy") or ""),
@@ -925,6 +934,7 @@ def _trace_tool_decision(
     tool_decision_rounds = [
         item for item in list(runtime_summary.get("tool_decision_rounds") or []) if isinstance(item, dict)
     ]
+    sanitized_rounds = [_sanitize_tool_decision_round(item) for item in tool_decision_rounds]
     capabilities = sorted(
         {
             str(item.get("capability") or item.get("tool") or "")
@@ -932,11 +942,11 @@ def _trace_tool_decision(
             if str(item.get("capability") or item.get("tool") or "").strip()
         }
     )
-    providers = sorted(
+    sources = sorted(
         {
-            str(item.get("provider") or "")
+            _public_tool_source(item)
             for item in [*tool_results, *tool_decision_rounds]
-            if str(item.get("provider") or "").strip()
+            if _public_tool_source(item)
         }
     )
     return {
@@ -944,12 +954,37 @@ def _trace_tool_decision(
         "tool_decision_rounds_count": _trace_int(
             runtime_summary.get("tool_decision_rounds_count") or response_ui.get("tool_decision_rounds_count")
         ),
-        "tool_decision_rounds": tool_decision_rounds[:5],
+        "tool_decision_rounds": sanitized_rounds[:5],
         "tool_results_count": len(tool_results),
         "capabilities": capabilities,
-        "providers": providers,
+        "sources": sources,
         "web_search_attempted": bool(response_ui.get("web_search_attempted")),
     }
+
+
+def _sanitize_tool_decision_round(item: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key in ("round", "decision", "tool", "capability", "status", "reason", "doc_count"):
+        if key in item:
+            sanitized[key] = item[key]
+    source = _public_tool_source(item)
+    if source:
+        sanitized["source"] = source
+    return sanitized
+
+
+def _public_tool_source(item: dict[str, Any]) -> str:
+    capability = str(item.get("capability") or item.get("tool") or item.get("name") or "").strip().lower()
+    provider = str(item.get("provider") or "").strip().lower()
+    if provider in {"tavily", "web"} or "web" in capability or "search" in capability:
+        return "web"
+    if provider == "mcp" and "web" in capability:
+        return "web"
+    if provider == "notebook" or "notebook" in capability:
+        return "notebook"
+    if provider == "internal" or provider == "runtime":
+        return "tool"
+    return "tool" if provider or capability else ""
 
 
 def _trace_int(value: Any) -> int:

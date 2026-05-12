@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.db.database import session_scope
 from app.infrastructure.db.models import (
@@ -31,7 +32,7 @@ from app.persistence.interfaces import (
     QuestionItemRepository,
     ToolRunRepository,
 )
-from app.shared.schemas.agent_graphs import LearningEvent, ToolResult
+from app.shared.schemas.agent_graphs import LearningEvent, ToolResult, learning_event_hash_key
 
 
 SessionFactory = Callable[[], AbstractContextManager[Any]]
@@ -173,31 +174,43 @@ class SqlLearningEventRepository(LearningEventRepository):
     def append(self, event: LearningEvent) -> str:
         payload = event.model_dump(mode="json")
         event_payload = _summary(payload.get("payload") or {})
-        hash_key = _text(event_payload.get("hash_key"), 128)
+        hash_key = _text(
+            event_payload.get("hash_key")
+            or learning_event_hash_key(
+                event_type=event.event_type,
+                user_id=event.user_id,
+                concept_id=event.concept_id,
+                payload=event_payload if isinstance(event_payload, dict) else {},
+            ),
+            128,
+        )
+        if hash_key and isinstance(event_payload, dict):
+            event_payload.setdefault("hash_key", hash_key)
         with self.session_factory() as session:
-            if hash_key:
-                existing_by_hash = session.scalars(
-                    select(LearningEventModel).where(LearningEventModel.hash_key == hash_key)
-                ).first()
-                if existing_by_hash is not None and existing_by_hash.id != event.id:
-                    return existing_by_hash.id
-            existing = session.get(LearningEventModel, event.id)
-            if existing is None:
-                session.add(
-                    LearningEventModel(
-                        id=event.id,
-                        event_type=event.event_type,
-                        user_id=event.user_id,
-                        concept_id=event.concept_id,
-                        graph_run_id=event.graph_run_id,
-                        hash_key=hash_key or None,
-                        payload=event_payload,
-                        created_at=_parse_datetime(event.created_at) or _utcnow(),
-                    )
+            if not _session_can_flush(session):
+                existing_id = _learning_event_existing_id(session, event_id=event.id, hash_key=hash_key)
+                if existing_id:
+                    return existing_id
+            session.add(
+                LearningEventModel(
+                    id=event.id,
+                    event_type=event.event_type,
+                    user_id=event.user_id,
+                    concept_id=event.concept_id,
+                    graph_run_id=event.graph_run_id,
+                    hash_key=hash_key or None,
+                    payload=event_payload,
+                    created_at=_parse_datetime(event.created_at) or _utcnow(),
                 )
-            else:
-                existing.hash_key = hash_key or existing.hash_key
-                existing.payload = event_payload
+            )
+            try:
+                _flush_session(session)
+            except IntegrityError:
+                session.rollback()
+                existing_id = _learning_event_existing_id(session, event_id=event.id, hash_key=hash_key)
+                if existing_id:
+                    return existing_id
+                raise
         return event.id
 
     def list_for_user(self, *, user_id: str, limit: int = 100) -> list[LearningEvent]:
@@ -256,23 +269,33 @@ class SqlAttemptRepository(AttemptRepository):
             logger.warning("Skip graph attempt with non-canonical concept_id: {}", concept_id)
             return ""
         with self.session_factory() as session:
-            existing = session.get(GraphAttemptModel, attempt_id)
-            if existing is None:
-                session.add(
-                    GraphAttemptModel(
-                        id=attempt_id,
-                        user_id=_text(payload.get("user_id"), 100),
-                        subject_id=concept.subject_id,
-                        concept_id=concept.concept_id,
-                        question_id=_text(payload.get("question_id"), 100),
-                        graph_run_id=_text(payload.get("graph_run_id"), 100),
-                        source_event_id=_text(payload.get("source_event_id"), 100),
-                        score=_optional_float(payload.get("score")),
-                        is_correct=_optional_bool(payload.get("is_correct")),
-                        payload=_summary(payload),
-                        created_at=_parse_datetime(payload.get("created_at")) or _utcnow(),
-                    )
+            if not _session_can_flush(session):
+                existing = session.get(GraphAttemptModel, attempt_id)
+                if existing is not None:
+                    return existing.id
+            session.add(
+                GraphAttemptModel(
+                    id=attempt_id,
+                    user_id=_text(payload.get("user_id"), 100),
+                    subject_id=concept.subject_id,
+                    concept_id=concept.concept_id,
+                    question_id=_text(payload.get("question_id"), 100),
+                    graph_run_id=_text(payload.get("graph_run_id"), 100),
+                    source_event_id=_text(payload.get("source_event_id"), 100),
+                    score=_optional_float(payload.get("score")),
+                    is_correct=_optional_bool(payload.get("is_correct")),
+                    payload=_summary(payload),
+                    created_at=_parse_datetime(payload.get("created_at")) or _utcnow(),
                 )
+            )
+            try:
+                _flush_session(session)
+            except IntegrityError:
+                session.rollback()
+                existing = session.get(GraphAttemptModel, attempt_id)
+                if existing is not None:
+                    return existing.id
+                raise
         return attempt_id
 
     def list_recent_attempts(self, *, user_id: str, limit: int = 100) -> list[dict[str, Any]]:
@@ -301,29 +324,62 @@ class SqlMasterySnapshotRepository(MasterySnapshotRepository):
         subject_id = concept.subject_id
         concept_id = concept.concept_id
         snapshot_id = str(payload.get("id") or f"{user_id}:{subject_id}:{concept_id}")
+        incoming_consumed = _string_list(payload.get("consumed_signal_ids") or payload.get("consumed_event_ids") or [])
+        incoming_delta = _optional_float(payload.get("delta"))
         with self.session_factory() as session:
-            row = session.scalars(
-                select(MasterySnapshotModel).where(
-                    MasterySnapshotModel.user_id == user_id,
-                    MasterySnapshotModel.subject_id == subject_id,
-                    MasterySnapshotModel.concept_id == concept_id,
-                )
-            ).first()
+            row = _select_mastery_snapshot(
+                session,
+                user_id=user_id,
+                subject_id=subject_id,
+                concept_id=concept_id,
+                for_update=True,
+            )
             if row is None:
+                p_mastery = _bounded_float(payload.get("p_mastery"), 0.5)
                 row = MasterySnapshotModel(
                     id=snapshot_id,
                     user_id=user_id,
                     subject_id=subject_id,
                     concept_id=concept_id,
+                    p_mastery=p_mastery,
+                    status=_text(payload.get("status") or _status_for_mastery(p_mastery), 30),
+                    evidence_ids=list(payload.get("evidence_ids") or []),
+                    consumed_signal_ids=incoming_consumed,
+                    version=1 if incoming_consumed else 0,
+                    payload=_summary(payload),
                     created_at=_utcnow(),
+                    updated_at=_parse_datetime(payload.get("updated_at")) or _utcnow(),
                 )
                 session.add(row)
-            row.p_mastery = _bounded_float(payload.get("p_mastery"), 0.5)
-            row.status = _text(payload.get("status") or "learning", 30)
-            row.evidence_ids = list(payload.get("evidence_ids") or [])
-            row.payload = _summary(payload)
-            row.updated_at = _parse_datetime(payload.get("updated_at")) or _utcnow()
-        return snapshot_id
+                try:
+                    _flush_session(session)
+                except IntegrityError:
+                    session.rollback()
+                    row = _select_mastery_snapshot(
+                        session,
+                        user_id=user_id,
+                        subject_id=subject_id,
+                        concept_id=concept_id,
+                        for_update=True,
+                    )
+                    if row is None:
+                        raise
+                    return _merge_mastery_snapshot_row(
+                        row,
+                        payload=payload,
+                        incoming_consumed=incoming_consumed,
+                        incoming_delta=incoming_delta,
+                        snapshot_id=snapshot_id,
+                    )
+                return snapshot_id
+
+            return _merge_mastery_snapshot_row(
+                row,
+                payload=payload,
+                incoming_consumed=incoming_consumed,
+                incoming_delta=incoming_delta,
+                snapshot_id=snapshot_id,
+            )
 
     def list_snapshots(self, *, user_id: str, limit: int = 100) -> list[dict[str, Any]]:
         with self.session_factory() as session:
@@ -483,6 +539,76 @@ class CompositeMasterySnapshotRepository(MasterySnapshotRepository):
         return merged
 
 
+def _learning_event_existing_id(session: Any, *, event_id: str, hash_key: str) -> str:
+    if hash_key:
+        existing_by_hash = session.scalars(
+            select(LearningEventModel.id).where(LearningEventModel.hash_key == hash_key)
+        ).first()
+        if existing_by_hash:
+            return str(existing_by_hash)
+    existing_by_id = session.get(LearningEventModel, event_id)
+    return str(existing_by_id.id) if existing_by_id is not None else ""
+
+
+def _session_can_flush(session: Any) -> bool:
+    return callable(getattr(session, "flush", None))
+
+
+def _flush_session(session: Any) -> None:
+    flush = getattr(session, "flush", None)
+    if callable(flush):
+        flush()
+
+
+def _select_mastery_snapshot(
+    session: Any,
+    *,
+    user_id: str,
+    subject_id: str,
+    concept_id: str,
+    for_update: bool,
+) -> MasterySnapshotModel | None:
+    stmt = select(MasterySnapshotModel).where(
+        MasterySnapshotModel.user_id == user_id,
+        MasterySnapshotModel.subject_id == subject_id,
+        MasterySnapshotModel.concept_id == concept_id,
+    )
+    get_bind = getattr(session, "get_bind", None)
+    dialect_name = get_bind().dialect.name if callable(get_bind) else ""
+    if for_update and dialect_name == "postgresql":
+        stmt = stmt.with_for_update()
+    return session.scalars(stmt).first()
+
+
+def _merge_mastery_snapshot_row(
+    row: MasterySnapshotModel,
+    *,
+    payload: dict[str, Any],
+    incoming_consumed: list[str],
+    incoming_delta: float | None,
+    snapshot_id: str,
+) -> str:
+    existing_consumed = _string_list(row.consumed_signal_ids or [])
+    existing_consumed_set = set(existing_consumed)
+    new_consumed = [item for item in incoming_consumed if item not in existing_consumed_set]
+    if incoming_consumed and not new_consumed:
+        return row.id or snapshot_id
+
+    if incoming_consumed and incoming_delta is not None:
+        effective_delta = incoming_delta * (len(new_consumed) / max(1, len(incoming_consumed)))
+        row.p_mastery = _bounded_float(float(row.p_mastery or 0.5) + effective_delta, 0.5)
+        row.status = _text(_status_for_mastery(row.p_mastery), 30)
+    else:
+        row.p_mastery = _bounded_float(payload.get("p_mastery"), float(row.p_mastery or 0.5))
+        row.status = _text(payload.get("status") or _status_for_mastery(row.p_mastery), 30)
+    row.evidence_ids = _merge_string_lists(row.evidence_ids or [], payload.get("evidence_ids") or [])
+    row.consumed_signal_ids = _merge_string_lists(existing_consumed, new_consumed)
+    row.version = int(row.version or 0) + 1
+    row.payload = _summary(payload)
+    row.updated_at = _parse_datetime(payload.get("updated_at")) or _utcnow()
+    return row.id or snapshot_id
+
+
 def _event_from_row(row: LearningEventModel) -> LearningEvent:
     payload = dict(row.payload or {})
     if row.hash_key:
@@ -529,6 +655,8 @@ def _snapshot_from_row(row: MasterySnapshotModel) -> dict[str, Any]:
         "p_mastery": row.p_mastery,
         "status": row.status,
         "evidence_ids": list(row.evidence_ids or []),
+        "consumed_signal_ids": list(row.consumed_signal_ids or []),
+        "version": int(row.version or 0),
         "created_at": _iso(row.created_at),
         "updated_at": _iso(row.updated_at),
     }
@@ -637,6 +765,28 @@ def _bounded_float(value: Any, default: float) -> float:
     if parsed is None:
         parsed = default
     return max(0.0, min(1.0, parsed))
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _merge_string_lists(first: Any, second: Any) -> list[str]:
+    merged: list[str] = []
+    for item in [*_string_list(first), *_string_list(second)]:
+        if item not in merged:
+            merged.append(item)
+    return merged
+
+
+def _status_for_mastery(value: float) -> str:
+    if value >= 0.8:
+        return "mastered"
+    if value >= 0.5:
+        return "learning"
+    return "weak"
 
 
 def _optional_bool(value: Any) -> bool | None:

@@ -6,7 +6,7 @@
 2. 初始化 PostgreSQL `vector` 扩展
 3. 初始化 SQLAlchemy 业务表
 4. 预热 PGVector collection
-5. 初始化 LangGraph PostgresSaver
+5. 编译 `LearningOrchestratorGraph`，Graph 长期事实通过 repository 写入 Alembic 管理表
 
 ## 关键入口
 
@@ -24,6 +24,6 @@
 
 - 业务表：PostgreSQL
 - 向量库：PGVector
-- LangGraph 线程态：PostgresSaver
+- Graph-era 长期事实：`graph_runs / learning_events / attempts / mastery_snapshots / question_items` 等 Alembic 表
 - 不再支持 SQLite 自动回退
 - 历史 MySQL 只通过结构化迁移脚本导入；Chroma 仅作为历史背景，不再维护项目内迁移脚本

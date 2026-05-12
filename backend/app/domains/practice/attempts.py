@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 from typing import Any, Callable
+
+from loguru import logger
 
 from app.domains.memory.session_summary import normalize_session_memory
 from app.domains.mastery.evaluation import evaluate_practice_answer
 from app.domains.practice.common import OPTION_KEYS, MAX_RECENT_TOPICS, normalize_practice_source_type, utc_iso
 from app.infrastructure.db.repositories.practice import (
+    create_practice_attempt_record_with_finalization_job,
     create_practice_attempt_record,
     find_practice_attempt_record_for_question,
 )
@@ -14,9 +18,27 @@ from app.infrastructure.db.repositories.sessions import (
     get_chat_session_record,
     update_chat_session_memory_record,
 )
-from app.infrastructure.db.repositories.users import get_user_memory_record, save_user_memory_record
+from app.infrastructure.db.repositories.users import (
+    apply_practice_attempt_memory_finalization,
+    get_user_memory_record,
+    save_user_memory_record,
+)
 from app.shared.schemas.contracts import PracticeRecommendation, PracticeSubmissionResult, UserMemoryRecord
 from app.knowledge.concept_registry import get_concept_registry
+
+
+BACKGROUND_FEEDBACK_PENDING = "已完成判题，学习画像正在后台更新，稍后可在学习中心查看。"
+
+
+@dataclass(frozen=True)
+class PracticeAttemptFinalization:
+    user_id: str
+    session_id: str
+    subject_id: str
+    quiz_item: PracticeRecommendation
+    selected_option: str
+    legacy_attempt: dict[str, Any]
+    job_id: str = ""
 
 
 def _get_user_memory(user_id: str) -> dict[str, Any]:
@@ -38,8 +60,18 @@ def _update_chat_session_memory(user_id: str, session_id: str, session_memory: d
     return record.model_dump() if record else None
 
 
-def _create_practice_attempt(**kwargs: Any) -> dict[str, Any]:
-    return create_practice_attempt_record(**kwargs).model_dump()
+def _create_practice_attempt(*, durable_finalizer: bool = False, **kwargs: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    idempotency_key = _practice_attempt_idempotency_key(
+        user_id=str(kwargs.get("user_id") or ""),
+        session_id=str(kwargs.get("session_id") or ""),
+        subject_id=str(kwargs.get("subject_id") or "general"),
+        question_id=str(kwargs.get("question_id") or ""),
+    )
+    kwargs["idempotency_key"] = idempotency_key
+    if durable_finalizer:
+        attempt, job = create_practice_attempt_record_with_finalization_job(**kwargs)
+        return attempt.model_dump(), job
+    return create_practice_attempt_record(**kwargs).model_dump(), None
 
 
 def _find_existing_practice_attempt(
@@ -67,6 +99,32 @@ def record_practice_attempt_and_update_memory(
     selected_option: str,
     graph_mastery_update: Callable[..., None] | None = None,
 ) -> PracticeSubmissionResult:
+    result, finalization = record_practice_attempt_immediate(
+        user_id=user_id,
+        session_id=session_id,
+        subject_id=subject_id,
+        quiz_item=quiz_item,
+        selected_option=selected_option,
+        durable_finalizer=False,
+    )
+    if finalization is None:
+        return result
+    finalized = finalize_practice_attempt_analysis(
+        finalization,
+        graph_mastery_update=graph_mastery_update,
+    )
+    return finalized or result
+
+
+def record_practice_attempt_immediate(
+    *,
+    user_id: str,
+    session_id: str,
+    subject_id: str,
+    quiz_item: PracticeRecommendation,
+    selected_option: str,
+    durable_finalizer: bool = False,
+) -> tuple[PracticeSubmissionResult, PracticeAttemptFinalization | None]:
     selected = _normalize_selected_option(selected_option)
     normalized_item = _normalize_submission_quiz_item(PracticeRecommendation.model_validate(quiz_item))
     concept_payload = _concept_payload_for_quiz_item(normalized_item, subject_id=subject_id)
@@ -98,17 +156,13 @@ def record_practice_attempt_and_update_memory(
             mastery_evaluation=None,
             personalized_feedback="这次提交已记录过，页面会继续展示首次判题结果。",
             duplicate_submission=True,
-        )
+            analysis_status="duplicate",
+        ), None
 
-    mastery_evaluation = evaluate_practice_answer(
-        user_id=user_id,
-        subject_id=subject_id or "general",
-        quiz_item=normalized_item,
-        selected_option=selected,
-    )
-    is_correct = mastery_evaluation.is_correct
+    is_correct = selected == correct_option
 
-    legacy_attempt = _create_practice_attempt(
+    create_result = _create_practice_attempt(
+        durable_finalizer=durable_finalizer,
         user_id=user_id,
         session_id=session_id,
         subject_id=subject_id or "general",
@@ -124,17 +178,82 @@ def record_practice_attempt_and_update_memory(
         concept_mapping_status=normalized_item.concept_mapping_status,
         source_type=normalize_practice_source_type(normalized_item.source_type),
     )
+    if isinstance(create_result, tuple) and len(create_result) == 2:
+        legacy_attempt, finalization_job = create_result
+    else:
+        legacy_attempt, finalization_job = create_result, None
+    memory = UserMemoryRecord.model_validate(_get_user_memory(user_id))
+    finalization = PracticeAttemptFinalization(
+        user_id=user_id,
+        session_id=session_id,
+        subject_id=subject_id or "general",
+        quiz_item=normalized_item,
+        selected_option=selected,
+        legacy_attempt=legacy_attempt,
+        job_id=str((finalization_job or {}).get("job_id") or (finalization_job or {}).get("id") or ""),
+    )
+    return PracticeSubmissionResult(
+        is_correct=is_correct,
+        selected_option=selected,
+        correct_option=correct_option,
+        explanation=normalized_item.explanation,
+        option_rationales=normalized_item.option_rationales,
+        memory=memory,
+        session_memory=None,
+        mastery_evaluation=None,
+        personalized_feedback=BACKGROUND_FEEDBACK_PENDING,
+        duplicate_submission=False,
+        analysis_status="queued",
+    ), finalization
+
+
+def finalize_practice_attempt_analysis(
+    finalization: PracticeAttemptFinalization,
+    *,
+    graph_mastery_update: Callable[..., None] | None = None,
+) -> PracticeSubmissionResult | None:
+    try:
+        return _finalize_practice_attempt_analysis(
+            finalization,
+            graph_mastery_update=graph_mastery_update,
+        )
+    except Exception as exc:  # pragma: no cover - 后台更新必须 fail-open
+        logger.exception("后台学习画像更新失败: {}", exc.__class__.__name__)
+        return None
+
+
+def _finalize_practice_attempt_analysis(
+    finalization: PracticeAttemptFinalization,
+    *,
+    graph_mastery_update: Callable[..., None] | None = None,
+) -> PracticeSubmissionResult:
+    user_id = finalization.user_id
+    session_id = finalization.session_id
+    subject_id = finalization.subject_id or "general"
+    normalized_item = finalization.quiz_item
+    selected = finalization.selected_option
+    correct_option = normalized_item.correct_option
+    knowledge_point = normalized_item.concept_name or normalized_item.knowledge_point or "综合"
+    mastery_evaluation = evaluate_practice_answer(
+        user_id=user_id,
+        subject_id=subject_id,
+        quiz_item=normalized_item,
+        selected_option=selected,
+    )
+    is_correct = mastery_evaluation.is_correct
+
     if graph_mastery_update is not None:
         graph_mastery_update(
-            legacy_attempt=legacy_attempt,
+            legacy_attempt=finalization.legacy_attempt,
             user_id=user_id,
-            subject_id=subject_id or "general",
+            subject_id=subject_id,
             quiz_item=normalized_item,
             selected_option=selected,
             is_correct=is_correct,
         )
 
     memory = _get_user_memory(user_id)
+    legacy_attempt_id = str(finalization.legacy_attempt.get("id") or "").strip()
     weak_points = list(memory.get("weak_points", []) or [])
     error_count = dict(memory.get("error_count", {}) or {})
     recent_topics = [knowledge_point, *list(memory.get("recent_topics", []) or [])]
@@ -149,18 +268,18 @@ def record_practice_attempt_and_update_memory(
         if knowledge_point not in weak_points:
             weak_points.append(knowledge_point)
 
-    updated_memory = _save_user_memory(
+    updated_memory_record, memory_applied = apply_practice_attempt_memory_finalization(
         user_id,
-        {
-            "weak_points": weak_points,
-            "error_count": error_count,
-            "recent_topics": deduped_topics,
-            "last_session": f"{session_id}@{utc_iso()}" if session_id else memory.get("last_session", ""),
-        },
+        legacy_attempt_id=legacy_attempt_id,
+        weak_points=weak_points,
+        error_count=error_count,
+        recent_topics=deduped_topics,
+        last_session=f"{session_id}@{utc_iso()}" if session_id else memory.get("last_session", ""),
     )
+    updated_memory = updated_memory_record.model_dump()
 
     next_session_memory = None
-    if session_id:
+    if session_id and memory_applied:
         existing_session = _get_chat_session(user_id, session_id)
         if existing_session:
             session_memory = normalize_session_memory(existing_session.get("session_memory"))
@@ -208,6 +327,7 @@ def record_practice_attempt_and_update_memory(
         session_memory=next_session_memory,
         mastery_evaluation=mastery_evaluation,
         personalized_feedback=mastery_evaluation.feedback,
+        analysis_status="completed",
     )
 
 
@@ -284,6 +404,20 @@ def _fallback_question_id(
     )
     digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:32]
     return f"practice:{digest}"
+
+
+def _practice_attempt_idempotency_key(
+    *,
+    user_id: str,
+    session_id: str,
+    subject_id: str,
+    question_id: str,
+) -> str:
+    if not question_id:
+        return ""
+    identity = "|".join([user_id, session_id, subject_id or "general", question_id])
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()
+    return f"practice_attempt:{digest}"
 
 
 def _quiz_item_from_existing_attempt(

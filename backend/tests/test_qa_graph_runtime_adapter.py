@@ -171,7 +171,8 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         self.assertEqual(response.source_level, SourceLevel.MODEL)
         self.assertEqual(response.evidence_refs, [])
         self.assertEqual(result["evidence"], [])
-        self.assertEqual(tool_result["provider"], "tavily")
+        self.assertEqual(tool_result["provider"], "web")
+        self.assertEqual(tool_result["output"]["source"], "web")
         self.assertEqual(tool_result["capability"], ToolCapability.WEB_SEARCH.value)
         self.assertEqual(tool_result["status"], ToolStatus.SUCCESS.value)
         self.assertEqual(tool_result["evidence"][0]["source_type"], "web")
@@ -210,9 +211,9 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(result["tool_results"][0]["status"], ToolStatus.ERROR.value)
-        self.assertEqual(result["tool_results"][0]["provider"], "tavily")
+        self.assertEqual(result["tool_results"][0]["provider"], "web")
         self.assertEqual(result["errors"][0]["code"], "tool_call_failed")
-        self.assertEqual(result["errors"][0]["metadata"]["provider"], "tavily")
+        self.assertEqual(result["errors"][0]["metadata"]["source"], "web")
 
     def test_maps_tool_timeout_to_timeout_status(self) -> None:
         result = self._invoke_with_runtime_result(

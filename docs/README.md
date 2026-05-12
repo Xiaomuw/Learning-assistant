@@ -3,7 +3,7 @@
 > 目标读者：项目维护者、接手开发同学、协作 AI / Agent  
 > 当前事实源：`backend/app/*`、`frontend/app/*`、`frontend/lib/api.ts`、`backend/langgraph.json`
 
-这套文档的原则是：**先读当前事实源，再读历史背景**。如果文档之间出现冲突，以 `project-current-status.md` 和实际代码为准。
+这套文档的原则是：**先读当前事实源，再读历史背景**。如果文档之间出现冲突，以 `project-current-status.md`、Alembic migration、实际 API route 和代码为准。
 
 ## 先读这 4 份
 
@@ -25,7 +25,6 @@
 - [RAG 知识库内容 AI 工作说明](rag-knowledge-content-ai.md)：PDF 资料治理、notebook 入库、状态检查和抽检报告规范。
 - [数据库设计](database-design.md) 与 [ER 图](database-er.md)：当前 PostgreSQL 结构、PGVector 说明。
 - [LangGraph Platform 部署](langgraph-platform-deployment.md)：Cloud / Studio 部署说明。
-- [测试报告](test-reports/full-functional-2026-04-27.md)：最近一次全功能验收与修复记录。
 
 ## 历史参考，不作为当前事实源
 
@@ -36,6 +35,11 @@
 - [数据库示例 SQL](database-examples.md)
 - [MySQL 旧 DDL 草案](mysql-current-schema.sql)
 - [后端结构审计](backend-architecture-audit.md)
+- [Agent Graph 分阶段实施计划](agent-graphs/implementation-plan.md)
+- [测试报告 2026-04-27](test-reports/full-functional-2026-04-27.md)
+- [测试报告 2026-05-08](test-reports/full-functional-2026-05-08.md)
+- [测试报告 2026-05-10](test-reports/full-functional-2026-05-10.md)
+- [代码审查 2026-05-10](reviews/code-review-2026-05-10.md)
 
 当前正式口径是：
 

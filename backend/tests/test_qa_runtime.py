@@ -375,6 +375,20 @@ class QARuntimeTest(unittest.TestCase):
         self.assertNotIn("tavily_web_search", tool_names)
         self.assertNotIn("search_notebook_context", tool_names)
 
+    def test_qa_runtime_tool_registry_denies_tools_without_explicit_policy(self) -> None:
+        request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="general",
+            subject_name="通用知识",
+            subject_description="",
+            question="什么是 HTTP？",
+            question_type="concept",
+            runtime_context={},
+        )
+
+        self.assertEqual(tool_registry.get_available_tools(agent_request=request), [])
+
     def test_stream_delta_filters_reasoning_content_blocks(self) -> None:
         chunk = type(
             "_Chunk",

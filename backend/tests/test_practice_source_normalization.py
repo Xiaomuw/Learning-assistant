@@ -23,7 +23,7 @@ from app.application.chat.orchestrator_runtime import (
 from app.application.practice.graph_facts import update_graph_mastery_from_practice_attempt
 from app.domains.practice.attempts import record_practice_attempt_and_update_memory
 from app.domains.practice.common import normalize_practice_source_type, normalize_quiz_item
-from app.shared.schemas.contracts import MasteryEvaluationResult, PracticeRecommendation
+from app.shared.schemas.contracts import MasteryEvaluationResult, PracticeRecommendation, UserMemoryRecord
 
 
 class PracticeSourceNormalizationTest(unittest.TestCase):
@@ -158,8 +158,8 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                 return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
             ),
             patch(
-                "app.domains.practice.attempts._save_user_memory",
-                return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP"], "last_session": ""},
+                "app.domains.practice.attempts.apply_practice_attempt_memory_finalization",
+                return_value=(UserMemoryRecord(recent_topics=["HTTP"]), True),
             ),
             patch("app.domains.practice.attempts._find_existing_practice_attempt", return_value=None),
         ):
@@ -215,8 +215,8 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                 return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
             ),
             patch(
-                "app.domains.practice.attempts._save_user_memory",
-                return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP"], "last_session": ""},
+                "app.domains.practice.attempts.apply_practice_attempt_memory_finalization",
+                return_value=(UserMemoryRecord(recent_topics=["HTTP"]), True),
             ),
         ):
             result = record_practice_attempt_and_update_memory(
@@ -272,8 +272,8 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                 return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
             ),
             patch(
-                "app.domains.practice.attempts._save_user_memory",
-                return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP"], "last_session": ""},
+                "app.domains.practice.attempts.apply_practice_attempt_memory_finalization",
+                return_value=(UserMemoryRecord(recent_topics=["HTTP"]), True),
             ),
         ):
             record_practice_attempt_and_update_memory(
@@ -333,7 +333,7 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
             ),
             patch("app.domains.practice.attempts.evaluate_practice_answer") as evaluate_answer,
             patch("app.domains.practice.attempts._create_practice_attempt") as create_attempt,
-            patch("app.domains.practice.attempts._save_user_memory") as save_memory,
+            patch("app.domains.practice.attempts.apply_practice_attempt_memory_finalization") as save_memory,
             patch(
                 "app.domains.practice.attempts._get_user_memory",
                 return_value={"weak_points": ["HTTP"], "error_count": {"HTTP": 1}, "recent_topics": ["HTTP"]},
@@ -417,8 +417,8 @@ class PracticeSourceNormalizationTest(unittest.TestCase):
                 return_value={"weak_points": [], "error_count": {}, "recent_topics": []},
             ),
             patch(
-                "app.domains.practice.attempts._save_user_memory",
-                return_value={"weak_points": [], "error_count": {}, "recent_topics": ["HTTP/HTTPS"], "last_session": ""},
+                "app.domains.practice.attempts.apply_practice_attempt_memory_finalization",
+                return_value=(UserMemoryRecord(recent_topics=["HTTP/HTTPS"]), True),
             ),
             patch("app.domains.practice.attempts._find_existing_practice_attempt", return_value=None),
         ):

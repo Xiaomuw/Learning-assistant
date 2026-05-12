@@ -6,6 +6,7 @@ and future persistence adapters. Keep them serializable and runtime-agnostic.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
@@ -128,6 +129,83 @@ def utc_now_iso() -> str:
 
 def new_event_id() -> str:
     return str(uuid4())
+
+
+def learning_event_hash_key(
+    *,
+    event_type: str,
+    user_id: str,
+    concept_id: str | None = None,
+    source_object_type: str = "",
+    source_object_id: str = "",
+    payload: dict[str, Any] | None = None,
+) -> str:
+    payload = dict(payload or {})
+    source_type = str(
+        source_object_type
+        or payload.get("source_object_type")
+        or payload.get("source_type")
+        or payload.get("object_type")
+        or ""
+    ).strip()
+    source_id = str(
+        source_object_id
+        or payload.get("source_object_id")
+        or payload.get("source_event_id")
+        or payload.get("attempt_id")
+        or payload.get("question_item_id")
+        or payload.get("question_id")
+        or payload.get("message_id")
+        or ""
+    ).strip()
+    if not event_type or not user_id or not source_type or not source_id:
+        return ""
+    parts = [
+        str(event_type).strip(),
+        str(user_id).strip(),
+        str(concept_id or payload.get("concept_id") or "").strip(),
+        source_type,
+        source_id,
+    ]
+    raw = ":".join(parts)
+    if len(raw) <= 128:
+        return raw
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"{parts[0]}:{digest[:32]}"
+
+
+def build_learning_event(
+    *,
+    event_type: str,
+    user_id: str,
+    graph_run_id: str,
+    concept_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    source_object_type: str = "",
+    source_object_id: str = "",
+) -> "LearningEvent":
+    event_payload = dict(payload or {})
+    if source_object_type:
+        event_payload.setdefault("source_object_type", source_object_type)
+    if source_object_id:
+        event_payload.setdefault("source_object_id", source_object_id)
+    hash_key = learning_event_hash_key(
+        event_type=event_type,
+        user_id=user_id,
+        concept_id=concept_id,
+        source_object_type=source_object_type,
+        source_object_id=source_object_id,
+        payload=event_payload,
+    )
+    if hash_key:
+        event_payload.setdefault("hash_key", hash_key)
+    return LearningEvent(
+        event_type=event_type,
+        user_id=user_id,
+        concept_id=concept_id,
+        graph_run_id=graph_run_id,
+        payload=event_payload,
+    )
 
 
 class ConceptRef(BaseModel):

@@ -11,6 +11,7 @@ import {
 import { requireAuthUser } from "@/store/auth";
 import {
   clearLearningCenterTarget,
+  clearStoredQuiz,
   createSessionId,
   getLearningCenterTarget,
   getStoredNotebookId,
@@ -84,6 +85,39 @@ function scoreText(score: number | undefined) {
   return `${Math.round(value > 1 ? value : value * 100)}%`;
 }
 
+function completedOptionRationales(quiz: QuizItem) {
+  const raw = quiz.option_rationales || {};
+  return OPTION_KEYS.reduce<Record<string, string>>((rationales, key) => {
+    const rationale = raw[key];
+    rationales[key] = rationale || (
+      key === quiz.correct_option
+        ? `${key} 是正确答案，依据见标准解析。`
+        : "该选项不是本题正确答案，需要对照题干条件和标准解析排除。"
+    );
+    return rationales;
+  }, {});
+}
+
+function buildImmediateFeedback(quiz: QuizItem, selectedOption: string): PracticeAttemptResult {
+  const selected = selectedOption as OptionKey;
+  return {
+    is_correct: selected === quiz.correct_option,
+    selected_option: selected,
+    correct_option: quiz.correct_option,
+    explanation: quiz.explanation || `正确答案是 ${quiz.correct_option}。请结合题干条件和选项辨析复盘。`,
+    option_rationales: completedOptionRationales(quiz),
+    memory: {
+      weak_points: [],
+      error_count: {},
+      recent_topics: []
+    },
+    session_memory: null,
+    mastery_evaluation: null,
+    personalized_feedback: "已完成判题，学习画像正在后台更新，稍后可在学习中心查看。",
+    analysis_status: "queued"
+  };
+}
+
 export default function PracticePage() {
   const [quizList, setQuizList] = useState<QuizItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -97,6 +131,7 @@ export default function PracticePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [generatingPack, setGeneratingPack] = useState(false);
+  const [quizClearedManually, setQuizClearedManually] = useState(false);
   const [error, setError] = useState("");
 
   const currentQuiz = quizList[currentIndex];
@@ -120,12 +155,17 @@ export default function PracticePage() {
     void bootstrapPractice();
   });
 
-  async function bootstrapPractice() {
+  async function bootstrapPractice(options: { force?: boolean } = {}) {
+    if (quizClearedManually && !options.force) {
+      setLoading(false);
+      return;
+    }
     const ready = await ensureAuthSession();
     if (!ready) return;
     const user = requireAuthUser();
     if (!user) return;
     setLearningStoreUser(user.id);
+    setQuizClearedManually(false);
     await loadQuiz(user.id);
   }
 
@@ -213,6 +253,40 @@ export default function PracticePage() {
     }
   }
 
+  async function handleClearQuizLibrary() {
+    if (generatingPack || submitting) {
+      Taro.showToast({ title: "当前正在处理题目，请稍后再清空", icon: "none" });
+      return;
+    }
+    if (!quizList.length) {
+      Taro.showToast({ title: "当前没有可清空的题库", icon: "none" });
+      return;
+    }
+
+    const result = await Taro.showModal({
+      title: "清空题库",
+      content: "将清空当前小程序里的题包、作答进度和反馈记录，不会删除后端历史或聊天记录。",
+      confirmText: "清空",
+      confirmColor: "#ff5a7a",
+      cancelText: "取消"
+    });
+    if (!result.confirm) return;
+
+    const user = requireAuthUser();
+    clearStoredQuiz(user?.id);
+    setQuizClearedManually(true);
+    setQuizList([]);
+    setCurrentIndex(0);
+    setSelectedOption("");
+    setAnswers({});
+    setFeedback(null);
+    setShowHint(false);
+    setIsCompleted(false);
+    setError("");
+    setLoading(false);
+    Taro.showToast({ title: "题库已清空", icon: "success" });
+  }
+
   async function loadQuiz(userId: string) {
     setLoading(true);
     setError("");
@@ -287,18 +361,34 @@ export default function PracticePage() {
     const nextNotebookId = currentQuiz.subject_id || currentQuiz.notebook_id || notebookId || getStoredQuizState().subjectId || getStoredNotebookId();
     const quizItemPayload: QuizItem = { ...currentQuiz };
     delete quizItemPayload.source_session_id;
+    const previousSessionId = sessionId;
+    const previousNotebookId = notebookId;
+    const previousAnswers = answers;
+    const previousFeedback = feedback;
+    const previousIsCompleted = isCompleted;
+    const previousStoredState = getStoredQuizState();
     const nextAnswers = {
       ...answers,
       [currentQuizKey]: selectedOption
     };
+    const immediateFeedback = buildImmediateFeedback(currentQuiz, selectedOption);
+    const nextIsCompleted = currentIndex >= quizList.length - 1;
+    const nextCompletedAt = nextIsCompleted ? Date.now() : null;
     setSessionId(nextSessionId);
     setNotebookId(nextNotebookId);
-    persistState({
+    setFeedback(immediateFeedback);
+    setAnswers(nextAnswers);
+    setIsCompleted(nextIsCompleted);
+    setStoredQuizState({
       sessionId: nextSessionId,
       subjectId: nextNotebookId,
+      items: quizList,
+      currentIndex,
       answers: nextAnswers,
-      feedback: null,
-      feedbackQuizKey: ""
+      feedback: immediateFeedback,
+      feedbackQuizKey: currentQuizKey,
+      isCompleted: nextIsCompleted,
+      completedAt: nextCompletedAt
     });
 
     setSubmitting(true);
@@ -311,10 +401,15 @@ export default function PracticePage() {
         quizItem: quizItemPayload,
         selectedOption
       });
-      setFeedback(result);
+      const calibratedFeedback: PracticeAttemptResult = {
+        ...result,
+        selected_option: result.selected_option || (selectedOption as OptionKey),
+        explanation: result.explanation || immediateFeedback.explanation,
+        option_rationales: result.option_rationales || immediateFeedback.option_rationales,
+        personalized_feedback: result.personalized_feedback || immediateFeedback.personalized_feedback
+      };
+      setFeedback(calibratedFeedback);
       setAnswers(nextAnswers);
-      const nextIsCompleted = currentIndex >= quizList.length - 1;
-      const nextCompletedAt = nextIsCompleted ? Date.now() : null;
       setIsCompleted(nextIsCompleted);
       setStoredQuizState({
         sessionId: nextSessionId,
@@ -322,13 +417,19 @@ export default function PracticePage() {
         items: quizList,
         currentIndex,
         answers: nextAnswers,
-        feedback: result,
+        feedback: calibratedFeedback,
         feedbackQuizKey: currentQuizKey,
         isCompleted: nextIsCompleted,
         completedAt: nextCompletedAt
       });
     } catch (err: any) {
-      setError(err?.message || "提交失败，请稍后重试");
+      setSessionId(previousSessionId);
+      setNotebookId(previousNotebookId);
+      setAnswers(previousAnswers);
+      setFeedback(previousFeedback);
+      setIsCompleted(previousIsCompleted);
+      setStoredQuizState(previousStoredState);
+      setError(err?.message ? `保存失败：${err.message}，请重试` : "保存失败，请稍后重试");
     } finally {
       setSubmitting(false);
     }
@@ -442,13 +543,22 @@ export default function PracticePage() {
   return (
     <View className="page practice-page">
       <View className="practice-header">
-        <View>
+        <View className="practice-header-main">
           <Text className="page-title">刷题</Text>
           <Text className="page-subtitle">当前进度：{progressText}</Text>
         </View>
-        <Button className="button-secondary header-button" onClick={() => Taro.switchTab({ url: "/pages/chat/index" })}>
-          去问答
-        </Button>
+        <View className="practice-header-actions">
+          <Button className="button-secondary header-button" onClick={() => Taro.switchTab({ url: "/pages/chat/index" })}>
+            去问答
+          </Button>
+          <Button
+            className="button-secondary header-button clear-header-button"
+            disabled={submitting || generatingPack || !quizList.length}
+            onClick={handleClearQuizLibrary}
+          >
+            清空题库
+          </Button>
+        </View>
       </View>
 
       {!currentQuiz ? (
@@ -456,7 +566,7 @@ export default function PracticePage() {
           <Text className="empty-title">还没有可练习的题</Text>
           <Text className="empty-desc">可以回到问答页，让助手围绕某个知识点出题。</Text>
           {error ? <Text className="error-text">{error}</Text> : null}
-          <Button className="button-secondary action-button" onClick={bootstrapPractice}>
+          <Button className="button-secondary action-button" onClick={() => void bootstrapPractice({ force: true })}>
             重新加载
           </Button>
         </View>
@@ -558,10 +668,10 @@ export default function PracticePage() {
             </Button>
           ) : feedback ? (
             <View>
-              <Button className="button-primary action-button" onClick={handleNext}>
-                {currentIndex >= quizList.length - 1 ? "完成复盘" : "下一题"}
+              <Button className="button-primary action-button" loading={submitting} disabled={submitting} onClick={handleNext}>
+                {submitting ? "正在保存" : currentIndex >= quizList.length - 1 ? "完成复盘" : "下一题"}
               </Button>
-              <Button className="button-secondary action-button" loading={generatingPack} disabled={generatingPack} onClick={handleGenerateMore}>
+              <Button className="button-secondary action-button" loading={generatingPack} disabled={generatingPack || submitting} onClick={handleGenerateMore}>
                 {generatingPack ? "正在补题" : "AI 补题"}
               </Button>
             </View>

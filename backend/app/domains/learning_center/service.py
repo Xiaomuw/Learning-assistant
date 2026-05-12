@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections import Counter, defaultdict
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -11,14 +13,18 @@ from sqlalchemy import select
 from app.infrastructure.db.database import session_scope
 from app.infrastructure.db.models import (
     GraphAttemptModel,
+    GraphQuestionItemModel,
     KbChapterModel,
     KbConceptModel,
     KbSubjectModel,
     KbTopicModel,
     MasterySnapshotModel,
+    PracticeAttemptModel,
     PracticeQuestionModel,
+    UserKnowledgeStatModel,
 )
 from app.knowledge.concept_registry import ConceptNode, get_concept_registry
+from app.persistence.repositories.graph_facts import is_graph_facts_enabled
 from app.shared.schemas.subject import CANONICAL_SUBJECT_IDS
 
 
@@ -52,11 +58,18 @@ def get_learning_center(
 ) -> dict[str, Any]:
     requested_subject = str(subject_id or "").strip()
     session_factory = session_factory or session_scope
+    facts_enabled = is_graph_facts_enabled()
     with session_factory() as session:
         concepts = _merged_taxonomy(session, subject_id=requested_subject or None)
-        snapshots = _snapshots_by_concept(session, user_id=user_id, subject_id=requested_subject or None)
-        attempts = _attempt_stats_by_concept(session, user_id=user_id, subject_id=requested_subject or None)
-        question_counts = _question_counts_by_concept(session)
+        if facts_enabled:
+            snapshots = _snapshots_by_concept(session, user_id=user_id, subject_id=requested_subject or None)
+            attempts = _attempt_stats_by_concept(session, user_id=user_id, subject_id=requested_subject or None)
+            facts_source = "graph"
+        else:
+            snapshots = _legacy_snapshots_by_concept(session, user_id=user_id, subject_id=requested_subject or None)
+            attempts = _legacy_attempt_stats_by_concept(session, user_id=user_id, subject_id=requested_subject or None)
+            facts_source = "legacy_fallback"
+        question_counts = _question_counts_by_concept(session, subject_id=requested_subject or None)
 
     subjects = _build_subjects(
         concepts,
@@ -71,6 +84,7 @@ def get_learning_center(
         "subjects": subjects,
         "summary": _aggregate_nodes(subjects),
         "next_move": next_move,
+        "facts_source": facts_source,
     }
 
 
@@ -207,13 +221,130 @@ def _attempt_stats_by_concept(session: Any, *, user_id: str, subject_id: str | N
     return dict(stats)
 
 
-def _question_counts_by_concept(session: Any) -> dict[str, int]:
+def _legacy_snapshots_by_concept(session: Any, *, user_id: str, subject_id: str | None) -> dict[str, dict[str, Any]]:
+    stmt = select(UserKnowledgeStatModel).where(UserKnowledgeStatModel.user_id == user_id)
+    if subject_id:
+        stmt = stmt.where(UserKnowledgeStatModel.subject_id == subject_id)
+    snapshots: dict[str, dict[str, Any]] = {}
+    for row in session.scalars(stmt).all():
+        concept_id = resolve_legacy_concept_id(
+            concept_id=row.concept_id,
+            knowledge_point=row.knowledge_point,
+            concept_name=row.concept_name,
+            subject_id=row.subject_id or subject_id,
+        )
+        if not concept_id:
+            continue
+        score = float(row.mastery_score or 0.0)
+        p_mastery = score / 100.0 if score > 1 else score
+        snapshots[concept_id] = {
+            "p_mastery": _bounded(p_mastery),
+            "status": str(row.mastery_level or "learning"),
+            "updated_at": _iso(row.updated_at),
+            "evidence_ids": [],
+        }
+    return snapshots
+
+
+def _legacy_attempt_stats_by_concept(session: Any, *, user_id: str, subject_id: str | None) -> dict[str, dict[str, Any]]:
+    stmt = select(PracticeAttemptModel).where(PracticeAttemptModel.user_id == user_id)
+    if subject_id:
+        stmt = stmt.where(PracticeAttemptModel.subject_id == subject_id)
+    stats: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "attempt_count": 0,
+            "correct_count": 0,
+            "wrong_count": 0,
+            "last_practiced_at": "",
+        }
+    )
+    for row in session.scalars(stmt).all():
+        concept_id = resolve_legacy_concept_id(
+            concept_id=row.concept_id,
+            knowledge_point=row.knowledge_point,
+            concept_name=row.concept_name,
+            subject_id=row.subject_id or subject_id,
+        )
+        if not concept_id:
+            continue
+        item = stats[concept_id]
+        item["attempt_count"] += 1
+        if bool(row.is_correct):
+            item["correct_count"] += 1
+        else:
+            item["wrong_count"] += 1
+        created_at = _iso(row.created_at)
+        if created_at and created_at > item["last_practiced_at"]:
+            item["last_practiced_at"] = created_at
+    return dict(stats)
+
+
+def _question_counts_by_concept(session: Any, *, subject_id: str | None = None) -> dict[str, int]:
     counts: Counter[str] = Counter()
-    for row in session.scalars(select(PracticeQuestionModel)).all():
-        concept_id = str(row.concept_id or "").strip()
+    practice_stmt = select(PracticeQuestionModel)
+    if subject_id:
+        practice_stmt = practice_stmt.where(PracticeQuestionModel.subject_id == subject_id)
+    for row in session.scalars(practice_stmt).all():
+        concept_id = resolve_legacy_concept_id(
+            concept_id=row.concept_id,
+            knowledge_point=row.concept_name,
+            concept_name=row.concept_name,
+            subject_id=row.subject_id or subject_id,
+        )
+        if concept_id:
+            counts[concept_id] += 1
+    graph_stmt = select(GraphQuestionItemModel)
+    if subject_id:
+        graph_stmt = graph_stmt.where(GraphQuestionItemModel.subject_id == subject_id)
+    for row in session.scalars(graph_stmt).all():
+        concept_id = str(row.primary_concept_id or "").strip()
         if concept_id:
             counts[concept_id] += 1
     return dict(counts)
+
+
+def resolve_legacy_concept_id(
+    *,
+    concept_id: Any = "",
+    knowledge_point: Any = "",
+    concept_name: Any = "",
+    subject_id: Any = "",
+) -> str:
+    """Map legacy Chinese knowledge point rows back onto canonical taxonomy ids."""
+
+    raw_concept_id = str(concept_id or "").strip()
+    registry = get_concept_registry()
+    if raw_concept_id and registry.get_concept(raw_concept_id) is not None:
+        return raw_concept_id
+
+    subject_hint = str(subject_id or "").strip()
+    search_terms = _dedupe_legacy_terms([knowledge_point, concept_name, raw_concept_id])
+    for term in search_terms:
+        match = registry.match_query(term, subject_id=subject_hint)
+        if match.status == "matched" and match.concept_id:
+            return match.concept_id
+
+    if raw_concept_id:
+        return raw_concept_id
+    return search_terms[0] if search_terms else ""
+
+
+def _dedupe_legacy_terms(values: list[Any]) -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for raw_value in values:
+        value = str(raw_value or "").strip()
+        key = _normalize_legacy_term(value)
+        if not value or not key or key in seen:
+            continue
+        seen.add(key)
+        terms.append(value)
+    return terms
+
+
+def _normalize_legacy_term(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value or "")).lower()
+    return re.sub(r"[\s\-_./:：,，。;；、()（）\[\]【】{}<>《》\"'“”‘’!?！？]+", "", normalized)
 
 
 def _build_subjects(
@@ -475,4 +606,4 @@ def _iso(value: Any) -> str:
     return str(value)
 
 
-__all__ = ["get_learning_center"]
+__all__ = ["get_learning_center", "resolve_legacy_concept_id"]

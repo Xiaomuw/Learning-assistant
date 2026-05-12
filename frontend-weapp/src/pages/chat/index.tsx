@@ -1469,13 +1469,12 @@ export default function ChatPage() {
   return (
     <View className="chat-page">
       <View className="chat-header">
-        <View className="header-left">
+        <View className="header-left" data-notebook-name={selectedNotebook?.name || "默认知识库"}>
           <View className="title-row">
             <Text className="page-title">问答</Text>
             <View className={`model-dot ${modelDotClass}`} onClick={checkModelHealth} />
             {modelName ? <Text className="model-name">{modelName}</Text> : null}
           </View>
-          <Text className="page-subtitle">{selectedNotebook?.name || "默认知识库"}</Text>
         </View>
         <View className="header-actions">
           <Button className="button-secondary header-button" onClick={handleOpenHistory}>
@@ -1488,38 +1487,40 @@ export default function ChatPage() {
       </View>
 
       <ScrollView className="message-list" scrollY scrollIntoView="chat-bottom">
-        {messages.map((message, index) => (
-          <View key={`${message.timestamp}-${index}`} className={`message-row ${message.role}`}>
-            <View className={`message-bubble ${message.isError ? "error" : ""}`}>
-              <Text className="message-role">{message.role === "user" ? "你" : "Coach"}</Text>
-              {message.role === "assistant" ? (
-                renderAnswerContent(message.content)
-              ) : (
-                <Text className="message-content">{message.content}</Text>
-              )}
-              {renderClarification(message.quizClarification)}
-              {renderQuizPreview(message.quiz)}
-              {message.role === "assistant"
-                ? renderProcessPanel(message.process, `message-${message.timestamp}-${index}`)
-                : null}
+        <View className="message-list-inner">
+          {messages.map((message, index) => (
+            <View key={`${message.timestamp}-${index}`} className={`message-row ${message.role}`}>
+              <View className={`message-bubble ${message.isError ? "error" : ""}`}>
+                <Text className="message-role">{message.role === "user" ? "你" : "Coach"}</Text>
+                {message.role === "assistant" ? (
+                  renderAnswerContent(message.content)
+                ) : (
+                  <Text className="message-content">{message.content}</Text>
+                )}
+                {renderClarification(message.quizClarification)}
+                {renderQuizPreview(message.quiz)}
+                {message.role === "assistant"
+                  ? renderProcessPanel(message.process, `message-${message.timestamp}-${index}`)
+                  : null}
+              </View>
             </View>
-          </View>
-        ))}
-        {isStreaming ? (
-          <View className="message-row assistant">
-            <View className="message-bubble streaming">
-              <Text className="message-role">{statusText || "正在生成"}</Text>
-              {renderAnswerContent(streamText || "模型正在处理...", {
-                streaming: true,
-                presentation: streamPresentation
-              })}
-              {renderClarification(streamClarification)}
-              {renderQuizPreview(streamQuiz)}
-              {renderProcessPanel(buildProcessSnapshot(streamStages), "streaming-process")}
+          ))}
+          {isStreaming ? (
+            <View className="message-row assistant">
+              <View className="message-bubble streaming">
+                <Text className="message-role">{statusText || "正在生成"}</Text>
+                {renderAnswerContent(streamText || "模型正在处理...", {
+                  streaming: true,
+                  presentation: streamPresentation
+                })}
+                {renderClarification(streamClarification)}
+                {renderQuizPreview(streamQuiz)}
+                {renderProcessPanel(buildProcessSnapshot(streamStages), "streaming-process")}
+              </View>
             </View>
-          </View>
-        ) : null}
-        <View id="chat-bottom" />
+          ) : null}
+          <View id="chat-bottom" />
+        </View>
       </ScrollView>
 
       <View className="composer card">

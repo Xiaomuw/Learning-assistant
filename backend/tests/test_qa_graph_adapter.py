@@ -25,6 +25,7 @@ from app.shared.schemas.model_profile import ModelProfile
 from app.shared.schemas.agent_graphs import (
     EvidenceChunk,
     FinalResponse,
+    LearningEventType,
     SourceLevel,
     SourcePolicy,
     ToolCapability,
@@ -125,6 +126,26 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn("insufficient_evidence", event_types)
         self.assertEqual(requested_capabilities, [ToolCapability.NOTEBOOK_RETRIEVE.value])
         self.assertNotIn(ToolCapability.WEB_SEARCH.value, requested_capabilities)
+
+    def test_repeated_same_question_uses_message_id_for_learning_event_idempotency(self) -> None:
+        base = {
+            "user_id": "u1",
+            "thread_id": "same-session",
+            "user_message": "什么是 HTTP？",
+            "source_policy": SourcePolicy.OPEN_TOOLS.value,
+        }
+        first = build_graph().compile().invoke({**base, "run_id": "run-1", "message_id": "msg-1"})
+        second = build_graph().compile().invoke({**base, "run_id": "run-2", "message_id": "msg-2"})
+        retry = build_graph().compile().invoke({**base, "run_id": "run-3", "message_id": "msg-1"})
+
+        def question_answered_hash(result: dict) -> str:
+            for event in result["learning_events"]:
+                if event["event_type"] == LearningEventType.QUESTION_ANSWERED.value:
+                    return str(event["payload"].get("hash_key") or "")
+            return ""
+
+        self.assertNotEqual(question_answered_hash(first), question_answered_hash(second))
+        self.assertEqual(question_answered_hash(first), question_answered_hash(retry))
 
     def test_open_tools_plans_capability_request_without_provider_name(self) -> None:
         result = build_graph().compile().invoke(
@@ -566,6 +587,11 @@ class QAGraphAdapterTest(unittest.TestCase):
 
                 self.assertFalse(imported & forbidden_imports)
                 self.assertFalse({symbol for symbol in forbidden_write_symbols if symbol in content})
+                self.assertNotIn(
+                    "LearningEvent(",
+                    content,
+                    "QA graph business code must use build_learning_event() for stable idempotency fields.",
+                )
 
     def test_production_runtime_adapter_maps_runtime_result_to_final_response(self) -> None:
         class FakeAgent:
@@ -614,6 +640,140 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertTrue(response.ui_payload["fallback_used"])
         self.assertEqual(response.ui_payload["primary_model_id"], "test-primary")
         self.assertEqual(response.ui_payload["fallback_model_id"], "test-fallback")
+
+    def test_production_runtime_adapter_hides_provider_in_public_tool_results(self) -> None:
+        class FakeAgent:
+            def run(self):
+                return AgentExecutionResult(
+                    execution_mode="tool_calling",
+                    answer=AnswerSchema(
+                        topic="HTTP",
+                        thinking="HTTP 是应用层协议。",
+                        steps=["HTTP 使用请求响应模型"],
+                        similar=["HTTPS 是什么", "HTTP 缓存是什么"],
+                        final_answer="HTTP 是应用层协议。",
+                    ),
+                    source_usage="web",
+                    final_answer="HTTP 是应用层协议。",
+                    tool_calls=[
+                        {
+                            "name": "tavily_web_search",
+                            "provider": "tavily",
+                            "capability": "web_search",
+                            "success": True,
+                            "doc_count": 2,
+                        }
+                    ],
+                )
+
+        profile = ModelProfile(
+            model_id="test-model",
+            provider="test",
+            family="TEST",
+            supports_tool_calling=True,
+            supports_structured_output=True,
+            context_window=8000,
+        )
+        with (
+            patch("app.orchestration.graphs.qa.adapter.get_model_profile", return_value=profile),
+            patch("app.orchestration.graphs.qa.adapter.create_agent", return_value=FakeAgent()),
+        ):
+            result = ProductionQARuntimeAdapter(
+                model_name="test-model",
+                session_id="runtime-session",
+                runtime_context={"message_id": "runtime-msg-1"},
+            ).answer_with_contract(
+                question="什么是 HTTP？",
+                question_type="concept",
+                source_policy=SourcePolicy.OPEN_TOOLS.value,
+                evidence=[],
+                evidence_gate={"sufficient": False},
+            )
+
+        encoded = json.dumps([item.model_dump(mode="json") for item in result.tool_results], ensure_ascii=False)
+        self.assertIn('"source": "web"', encoded)
+        self.assertNotIn("tavily", encoded.lower())
+        self.assertTrue(
+            any(
+                str(event.payload.get("source_object_id") or "").startswith("qa_message:runtime-msg-1")
+                for event in result.learning_events
+            )
+        )
+
+    def test_production_runtime_adapter_forces_legacy_runtime_tools_off(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeAgent:
+            def run(self):
+                return AgentExecutionResult(
+                    execution_mode="structured_output",
+                    answer=AnswerSchema(
+                        topic="HTTP",
+                        thinking="HTTP 是应用层协议。",
+                        steps=["HTTP 使用请求-响应模型"],
+                        similar=["HTTPS 是什么", "HTTP 缓存是什么"],
+                        final_answer="HTTP 是应用层协议。",
+                    ),
+                    source_usage="notebook",
+                    final_answer="HTTP 是应用层协议。",
+                )
+
+        def fake_create_agent(request, state, model_profile):
+            captured["runtime_context"] = dict(request.runtime_context)
+            captured["state"] = dict(state)
+            captured["model_profile"] = model_profile
+            return FakeAgent()
+
+        profile = ModelProfile(
+            model_id="test-model",
+            provider="test",
+            family="TEST",
+            supports_tool_calling=True,
+            supports_structured_output=True,
+            context_window=8000,
+        )
+        evidence = [
+            EvidenceChunk(
+                id="ev-http",
+                source_type="notebook",
+                source_id="chunk-1",
+                text="HTTP 是应用层协议。",
+                score=0.9,
+            )
+        ]
+        with (
+            patch("app.orchestration.graphs.qa.adapter.get_model_profile", return_value=profile),
+            patch("app.orchestration.graphs.qa.adapter.create_agent", side_effect=fake_create_agent),
+        ):
+            ProductionQARuntimeAdapter(
+                model_name="test-model",
+                allow_tools=True,
+                allow_search=True,
+                runtime_context={
+                    "allow_tools": True,
+                    "allow_search": True,
+                    "guard": {"allow_tools": True, "allow_search": True, "reason": "caller_requested"},
+                },
+            ).answer(
+                question="什么是 HTTP？",
+                question_type="concept",
+                source_policy=SourcePolicy.NOTEBOOK_ONLY.value,
+                evidence=evidence,
+                evidence_gate={"sufficient": True, "notebook_required": True},
+            )
+
+        runtime_context = captured["runtime_context"]
+        self.assertEqual(runtime_context["allow_tools"], False)
+        self.assertEqual(runtime_context["allow_search"], False)
+        self.assertEqual(runtime_context["guard"]["allow_tools"], False)
+        self.assertEqual(runtime_context["guard"]["allow_search"], False)
+        self.assertEqual(
+            runtime_context["guard"]["reason"],
+            "qagraph_runtime_adapter_uses_precomputed_evidence_only",
+        )
+        self.assertEqual(runtime_context["qagraph_requested_allow_tools"], True)
+        self.assertEqual(runtime_context["qagraph_requested_allow_search"], True)
+        self.assertEqual(runtime_context["retrieved_docs"][0]["id"], "ev-http")
 
 
 if __name__ == "__main__":

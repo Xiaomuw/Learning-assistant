@@ -98,6 +98,8 @@ class EnvironmentValidationTest(unittest.TestCase):
                 "APP_ENV": "production",
                 "AUTH_COOKIE_SECURE": "true",
                 "CORS_ALLOW_ORIGINS": "https://learn.example.com,https://app.example.com",
+                "WECHAT_MINI_APP_ID": "wxd338be42b166c393",
+                "WECHAT_MINI_APP_SECRET": "wechat-mini-secret-for-production",
             },
             clear=True,
         ):
@@ -138,6 +140,22 @@ class EnvironmentValidationTest(unittest.TestCase):
             with self.assertRaises(EnvironmentValidationError) as ctx:
                 validate_startup_environment()
         self.assertIn("AUTH_COOKIE_SECURE", str(ctx.exception))
+
+    def test_validate_startup_environment_rejects_production_missing_wechat_mini_config(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "DATABASE_URL": "postgresql+psycopg://test:test@127.0.0.1:5432/app",
+                "JWT_SECRET_KEY": "learning-assistant-test-secret-2026",
+                "APP_ENV": "production",
+                "AUTH_COOKIE_SECURE": "true",
+                "CORS_ALLOW_ORIGINS": "https://learn.example.com",
+            },
+            clear=True,
+        ):
+            with self.assertRaises(EnvironmentValidationError) as ctx:
+                validate_startup_environment()
+        self.assertIn("WECHAT_MINI_APP_ID", str(ctx.exception))
 
     def test_validate_startup_environment_rejects_mysql(self) -> None:
         with patch.dict(
@@ -180,8 +198,10 @@ class EnvironmentValidationTest(unittest.TestCase):
 
         self.assertTrue(any("MODEL_ACCESS_KEY" in item for item in warnings))
         self.assertTrue(any("SMTP" in item for item in warnings))
+        self.assertTrue(any("微信小程序登录配置未完成" in item for item in warnings))
         self.assertTrue(any("LANGSMITH_API_KEY" in item for item in warnings))
         self.assertTrue(any("MCP_WEB_SERVER_URL" in item for item in warnings))
+        self.assertTrue(any("ENABLE_PRACTICE_FINALIZER_WORKER" in item for item in warnings))
 
     def test_collect_environment_warnings_reports_shared_do_embedding_endpoint(self) -> None:
         with patch.dict(

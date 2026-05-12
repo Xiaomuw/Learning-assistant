@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import sys
 import unittest
@@ -46,6 +47,10 @@ class AuthApiTest(unittest.TestCase):
         self.bootstrap_repos = importlib.import_module("app.infrastructure.db.repositories.bootstrap")
         self.security = importlib.import_module("app.infrastructure.auth.security")
         self.verification = importlib.import_module("app.application.auth.verification")
+        self.auth_service = importlib.import_module("app.application.auth.service")
+        self.auth_service._refresh_replay_cache.clear()
+        self.auth_service._register_code_ip_attempts.clear()
+        self.auth_service._wechat_login_ip_attempts.clear()
         importlib.import_module("app.infrastructure.db.database").ensure_postgres_extensions()
         self.bootstrap_repos.init_database()
 
@@ -56,6 +61,11 @@ class AuthApiTest(unittest.TestCase):
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
+        auth_service = getattr(self, "auth_service", None)
+        if auth_service is not None:
+            auth_service._refresh_replay_cache.clear()
+            auth_service._register_code_ip_attempts.clear()
+            auth_service._wechat_login_ip_attempts.clear()
         self.db_schema.__exit__(None, None, None)
 
     def _send_code(self, email: str) -> tuple[object, str]:
@@ -339,6 +349,50 @@ class AuthApiTest(unittest.TestCase):
             json={"refresh_token": refreshed_payload["refresh_token"]},
         )
         self.assertEqual(refresh_after_logout.status_code, 401)
+
+    def test_wechat_mini_login_does_not_expose_session_key(self) -> None:
+        with patch(
+            "app.application.auth.service._exchange_wechat_mini_code",
+            return_value={
+                "openid": "openid-session-key",
+                "unionid": "unionid-session-key",
+                "session_key": "sensitive-session-key",
+            },
+        ):
+            response = self.client.post(
+                "/api/auth/wechat-mini/login",
+                json={"code": "wx-code-session-key", "display_name": "微信学习者"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload_text = json.dumps(response.json(), ensure_ascii=False)
+        self.assertNotIn("session_key", payload_text)
+        self.assertNotIn("sensitive-session-key", payload_text)
+
+    def test_wechat_mini_login_rate_limited_by_client_host(self) -> None:
+        service_module = importlib.import_module("app.application.auth.service")
+        service_module._wechat_login_ip_attempts.clear()
+        with (
+            patch.object(service_module, "_WECHAT_LOGIN_IP_WINDOW_SECONDS", 60),
+            patch.object(service_module, "_WECHAT_LOGIN_IP_MAX_REQUESTS", 1),
+            patch(
+                "app.application.auth.service._exchange_wechat_mini_code",
+                return_value={"openid": "openid-rate-limit"},
+            ) as mocked_exchange,
+        ):
+            first_response = self.client.post(
+                "/api/auth/wechat-mini/login",
+                json={"code": "wx-code-rate-first"},
+            )
+            second_response = self.client.post(
+                "/api/auth/wechat-mini/login",
+                json={"code": "wx-code-rate-second"},
+            )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 429)
+        self.assertEqual(second_response.json()["detail"]["reason"], "rate_limited")
+        mocked_exchange.assert_called_once()
 
     def test_wechat_mini_login_reuses_existing_openid_identity(self) -> None:
         with patch(

@@ -95,11 +95,20 @@ $shadow-md: 4px 6px 0px 0px $neo-ink;
   flex: 1;
   min-height: 0;
   height: 0;
-  margin: 0 28px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.message-list-inner {
+  box-sizing: border-box;
+  padding: 0 34px 8px 28px;
 }
 
 .message-row {
   display: flex;
+  width: 100%;
+  box-sizing: border-box;
   margin-bottom: 18px;
 }
 
@@ -122,9 +131,21 @@ $shadow-md: 4px 6px 0px 0px $neo-ink;
 }
 
 .message-row.user .message-bubble {
-  background: $neo-accent;
+  background: $neo-white;
   color: $neo-ink;
   border-bottom-right-radius: 6px;
+  box-shadow: $shadow-md;
+}
+
+.message-row.user .message-role {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 2px solid rgba(30, 41, 59, 0.35);
+  border-radius: $radius-pill;
+  background: rgba(255, 179, 198, 0.5);
+  font-size: 18px;
+  letter-spacing: 0;
+  opacity: 1;
 }
 
 .message-row.assistant .message-bubble {
@@ -157,6 +178,8 @@ $shadow-md: 4px 6px 0px 0px $neo-ink;
   font-size: 28px;
   font-weight: 500;
   line-height: 1.65;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .answer-content {

@@ -1,0 +1,164 @@
+[
+  {
+    "name": "valid_http_unique_answer",
+    "expected_pass": true,
+    "blueprint": {
+      "primary_concept_id": "http-port",
+      "concept_name": "HTTP 默认端口",
+      "difficulty": "基础",
+      "count": 1,
+      "source_policy": "open_tools",
+      "constraints": {
+        "subject_id": "computer-network",
+        "requested_topic": "HTTP 默认端口"
+      }
+    },
+    "candidate": {
+      "stem": "HTTP 协议的默认端口号是哪个？",
+      "options": [
+        {"key": "A", "text": "21"},
+        {"key": "B", "text": "53"},
+        {"key": "C", "text": "80"},
+        {"key": "D", "text": "443"}
+      ],
+      "primary_concept_id": "http-port",
+      "difficulty": "基础",
+      "source_refs": [{"source_type": "notebook", "source_id": "chunk-http", "evidence_id": "ev-http"}],
+      "answer_key": {
+        "correct_option": "C",
+        "correct_option_text": "80",
+        "explanation": "HTTP 的默认端口是 80，HTTPS 的默认端口才是 443。",
+        "option_rationales": {
+          "A": "21 通常用于 FTP。",
+          "B": "53 通常用于 DNS。",
+          "C": "80 是 HTTP 默认端口。",
+          "D": "443 是 HTTPS 默认端口。"
+        }
+      },
+      "rubric": {
+        "criteria": ["唯一正确答案", "能区分 HTTP 与 HTTPS"],
+        "full_credit": "选择 C，并说明 HTTP 默认端口是 80。"
+      }
+    }
+  },
+  {
+    "name": "answer_text_mismatch",
+    "expected_pass": false,
+    "expected_issue": "answer_key.correct_option_text 与选项不一致",
+    "blueprint": {
+      "primary_concept_id": "http-port",
+      "concept_name": "HTTP 默认端口",
+      "difficulty": "基础",
+      "count": 1,
+      "source_policy": "open_tools",
+      "constraints": {"subject_id": "computer-network"}
+    },
+    "candidate": {
+      "stem": "HTTP 协议的默认端口号是哪个？",
+      "options": [
+        {"key": "A", "text": "21"},
+        {"key": "B", "text": "53"},
+        {"key": "C", "text": "80"},
+        {"key": "D", "text": "443"}
+      ],
+      "primary_concept_id": "http-port",
+      "difficulty": "基础",
+      "source_refs": [{"source_type": "notebook", "source_id": "chunk-http", "evidence_id": "ev-http"}],
+      "answer_key": {
+        "correct_option": "C",
+        "correct_option_text": "443",
+        "explanation": "HTTP 的默认端口是 80。",
+        "option_rationales": {
+          "A": "21 通常用于 FTP。",
+          "B": "53 通常用于 DNS。",
+          "C": "80 是 HTTP 默认端口。",
+          "D": "443 是 HTTPS 默认端口。"
+        }
+      },
+      "rubric": {
+        "criteria": ["唯一正确答案"],
+        "full_credit": "选择 C。"
+      }
+    }
+  },
+  {
+    "name": "topic_mismatch",
+    "expected_pass": false,
+    "expected_issue": "主题不一致",
+    "blueprint": {
+      "primary_concept_id": "stack",
+      "concept_name": "栈",
+      "difficulty": "基础",
+      "count": 1,
+      "source_policy": "open_tools",
+      "constraints": {"subject_id": "data-structure", "requested_topic": "栈"}
+    },
+    "candidate": {
+      "stem": "HTTP 协议的默认端口号是哪个？",
+      "options": [
+        {"key": "A", "text": "21"},
+        {"key": "B", "text": "53"},
+        {"key": "C", "text": "80"},
+        {"key": "D", "text": "443"}
+      ],
+      "primary_concept_id": "stack",
+      "difficulty": "基础",
+      "source_refs": [{"source_type": "notebook", "source_id": "chunk-http", "evidence_id": "ev-http"}],
+      "answer_key": {
+        "correct_option": "C",
+        "correct_option_text": "80",
+        "explanation": "HTTP 的默认端口是 80。",
+        "option_rationales": {
+          "A": "21 通常用于 FTP。",
+          "B": "53 通常用于 DNS。",
+          "C": "80 是 HTTP 默认端口。",
+          "D": "443 是 HTTPS 默认端口。"
+        }
+      },
+      "rubric": {
+        "criteria": ["唯一正确答案"],
+        "full_credit": "选择 C。"
+      }
+    }
+  },
+  {
+    "name": "controversial_no_unique_answer",
+    "expected_pass": false,
+    "expected_issue": "缺少无争议的唯一答案",
+    "blueprint": {
+      "primary_concept_id": "ai-eval",
+      "concept_name": "AI 评测",
+      "difficulty": "基础",
+      "count": 1,
+      "source_policy": "open_tools",
+      "constraints": {"requested_topic": "AI 评测"}
+    },
+    "candidate": {
+      "stem": "以下哪个大模型绝对最好？这是没有唯一答案的争议题。",
+      "options": [
+        {"key": "A", "text": "模型 A"},
+        {"key": "B", "text": "模型 B"},
+        {"key": "C", "text": "模型 C"},
+        {"key": "D", "text": "模型 D"}
+      ],
+      "primary_concept_id": "ai-eval",
+      "difficulty": "基础",
+      "source_refs": [{"source_type": "web", "source_id": "fixture", "evidence_id": "ev-ai"}],
+      "answer_key": {
+        "correct_option": "A",
+        "correct_option_text": "模型 A",
+        "explanation": "该题存在争议，缺少稳定评判标准。",
+        "option_rationales": {
+          "A": "缺少客观标准。",
+          "B": "缺少客观标准。",
+          "C": "缺少客观标准。",
+          "D": "缺少客观标准。"
+        }
+      },
+      "rubric": {
+        "criteria": ["唯一正确答案"],
+        "full_credit": "存在争议，不能给出唯一答案。"
+      }
+    }
+  }
+]

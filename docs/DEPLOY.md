@@ -113,6 +113,7 @@ GOOGLE_API_KEYS=replace-with-google-api-key
 如果需要邮箱验证码注册，还要配置 `SMTP_*`。如果需要 LangSmith tracing、外部 MCP 或 Tavily 搜索，再配置对应可选变量。
 
 生产建议通过 Nginx、Caddy 或云负载均衡把 HTTPS 流量代理到 `127.0.0.1:${FRONTEND_PORT}`。Compose 默认只把端口绑定到 `127.0.0.1`，避免数据库和后端 API 直接暴露到公网。
+如果反向代理会把请求转发到后端 API，请把可信代理的 IP 或 CIDR 写入 `AUTH_TRUSTED_PROXY_IPS`，否则登录/验证码限流会按代理 IP 统计，并忽略 `X-Forwarded-For` / `X-Real-IP`。
 
 ## 启动
 

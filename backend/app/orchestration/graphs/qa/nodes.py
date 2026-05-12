@@ -20,6 +20,8 @@ from app.orchestration.graphs.shared.schemas import (
     ToolCapability,
     ToolResult,
     ToolStatus,
+    build_learning_event,
+    learning_event_hash_key,
 )
 from app.knowledge.concept_registry import get_concept_registry
 from app.services.tooling.executor import ToolExecutor
@@ -1187,6 +1189,9 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
     response = FinalResponse.model_validate(state.get("final_response") or {})
     qa_request = dict(state.get("qa_request") or {})
     source_policy = _source_policy(state)
+    user_id = str(state.get("user_id") or "")
+    graph_run_id = str(state.get("run_id") or "")
+    message_source_id = _qa_message_source_id(state)
     tool_result_refs = [item.tool_id for item in _collect_tool_results(state)]
     base_payload = {
         "question_type": str(qa_request.get("question_type") or _infer_question_type(_question(state))),
@@ -1199,35 +1204,39 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
     }
     events = _adapter_events_from_state(state)
     events.append(
-        LearningEvent(
+        build_learning_event(
             event_type=LearningEventType.QUESTION_ANSWERED.value,
-            user_id=str(state.get("user_id") or ""),
-            graph_run_id=str(state.get("run_id") or ""),
+            user_id=user_id,
+            graph_run_id=graph_run_id,
             payload=base_payload,
+            source_object_type="chat_message",
+            source_object_id=message_source_id,
         )
     )
 
     if (state.get("evidence_gate") or {}).get("insufficient"):
         events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.INSUFFICIENT_EVIDENCE.value,
-                user_id=str(state.get("user_id") or ""),
-                graph_run_id=str(state.get("run_id") or ""),
+                user_id=user_id,
+                graph_run_id=graph_run_id,
                 payload={
                     "missing_topic": _question(state),
                     "source_policy": source_policy,
                     "reason": (state.get("evidence_gate") or {}).get("reason"),
                 },
+                source_object_type="qa_evidence_gate",
+                source_object_id=message_source_id,
             )
         )
 
     answer_mode = str(response.ui_payload.get("answer_mode") or "")
     if answer_mode in {"answer_repaired", "clarification_required"}:
         events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.ANSWER_REPAIRED.value,
-                user_id=str(state.get("user_id") or ""),
-                graph_run_id=str(state.get("run_id") or ""),
+                user_id=user_id,
+                graph_run_id=graph_run_id,
                 payload={
                     "answer_mode": answer_mode,
                     "repair_count": int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0),
@@ -1235,16 +1244,18 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
                     "repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
                     "quality_check": dict(state.get("quality_check") or {}),
                 },
+                source_object_type="qa_answer",
+                source_object_id=f"{message_source_id}:repair",
             )
         )
 
     for concept in response.concepts:
         events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.CONCEPT_EXPLAINED.value,
-                user_id=str(state.get("user_id") or ""),
+                user_id=user_id,
                 concept_id=concept.concept_id,
-                graph_run_id=str(state.get("run_id") or ""),
+                graph_run_id=graph_run_id,
                 payload={
                     "concept_id": concept.concept_id,
                     "name": concept.name,
@@ -1252,6 +1263,8 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
                     "source_level": response.source_level.value,
                     "evidence_refs": list(response.evidence_refs),
                 },
+                source_object_type="chat_message",
+                source_object_id=message_source_id,
             )
         )
 
@@ -1261,17 +1274,19 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
         if evidence is None:
             continue
         events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.EVIDENCE_USED.value,
-                user_id=str(state.get("user_id") or ""),
+                user_id=user_id,
                 concept_id=evidence.concepts[0].concept_id if evidence.concepts else None,
-                graph_run_id=str(state.get("run_id") or ""),
+                graph_run_id=graph_run_id,
                 payload={
                     "evidence_id": evidence.id,
                     "source_type": evidence.source_type,
                     "score": evidence.score,
                     "grounding_status": "used",
                 },
+                source_object_type="evidence",
+                source_object_id=f"{message_source_id}:{evidence.id}",
             )
         )
 
@@ -1281,16 +1296,18 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
         if tool_result.capability not in {ToolCapability.NOTEBOOK_RETRIEVE, ToolCapability.WEB_SEARCH, ToolCapability.WEB_EXTRACT}:
             continue
         events.append(
-            LearningEvent(
+            build_learning_event(
                 event_type=LearningEventType.TOOL_FALLBACK_USED.value,
-                user_id=str(state.get("user_id") or ""),
-                graph_run_id=str(state.get("run_id") or ""),
+                user_id=user_id,
+                graph_run_id=graph_run_id,
                 payload={
                     "capability": tool_result.capability.value,
-                    "provider": tool_result.provider,
+                    "source": _public_source_from_capability(tool_result.capability),
                     "tool_result_id": tool_result.tool_id,
                     "evidence_count": len(tool_result.evidence),
                 },
+                source_object_type="tool_result",
+                source_object_id=f"{message_source_id}:{tool_result.tool_id}",
             )
         )
 
@@ -1307,6 +1324,23 @@ def _resolved_question(state: QAGraphState) -> str:
 
 def _question(state: QAGraphState) -> str:
     return str(state.get("user_message") or state.get("question") or "").strip()
+
+
+def _qa_message_source_id(state: QAGraphState) -> str:
+    explicit = str(state.get("message_id") or state.get("request_id") or "").strip()
+    if explicit:
+        return f"qa_message:{explicit}"
+    session_id = str(state.get("thread_id") or state.get("session_id") or state.get("user_id") or "").strip()
+    question_digest = hashlib.sha256(_normalized_question(state).encode("utf-8")).hexdigest()[:16]
+    return f"qa_message:{session_id or 'unknown'}:{question_digest}"
+
+
+def _public_source_from_capability(capability: ToolCapability) -> str:
+    if capability in {ToolCapability.WEB_SEARCH, ToolCapability.WEB_EXTRACT}:
+        return "web"
+    if capability == ToolCapability.NOTEBOOK_RETRIEVE:
+        return "notebook"
+    return "tool"
 
 
 def _source_policy(state: QAGraphState) -> str:
@@ -1893,47 +1927,41 @@ def _adapter_events_from_state(state: QAGraphState) -> list[LearningEvent]:
 
 def _events_with_idempotency(events: list[LearningEvent], state: QAGraphState) -> list[LearningEvent]:
     session_id = str(state.get("thread_id") or state.get("session_id") or "")
-    message_id = str(state.get("message_id") or state.get("run_id") or "")
+    message_source_id = _qa_message_source_id(state)
     enriched: list[LearningEvent] = []
     for event in events:
         payload = dict(event.payload)
         payload.setdefault("session_id", session_id)
-        payload.setdefault("message_id", message_id)
+        payload.setdefault("message_id", message_source_id)
         payload.setdefault("event_type", event.event_type)
         payload.setdefault("concept_id", event.concept_id or "")
         payload.setdefault("created_at", event.created_at)
+        source_object_type = str(payload.get("source_object_type") or "").strip()
+        source_object_id = str(payload.get("source_object_id") or "").strip()
+        if not source_object_type:
+            if payload.get("evidence_id"):
+                source_object_type = "evidence"
+            elif payload.get("tool_result_id"):
+                source_object_type = "tool_result"
+            else:
+                source_object_type = "chat_message"
+            payload["source_object_type"] = source_object_type
+        if not source_object_id:
+            source_object_id = str(payload.get("evidence_id") or payload.get("tool_result_id") or message_source_id)
+            payload["source_object_id"] = source_object_id
         payload.setdefault(
             "hash_key",
-            _event_hash_key(
-                session_id=session_id,
-                message_id=message_id,
+            learning_event_hash_key(
                 event_type=event.event_type,
+                user_id=event.user_id,
                 concept_id=event.concept_id or "",
+                source_object_type=source_object_type,
+                source_object_id=source_object_id,
                 payload=payload,
             ),
         )
         enriched.append(event.model_copy(update={"payload": payload}))
     return enriched
-
-
-def _event_hash_key(
-    *,
-    session_id: str,
-    message_id: str,
-    event_type: str,
-    concept_id: str,
-    payload: dict[str, Any],
-) -> str:
-    payload_marker = str(
-        payload.get("evidence_id")
-        or payload.get("tool_result_id")
-        or payload.get("answer_mode")
-        or payload.get("reason")
-        or payload.get("question_type")
-        or ""
-    )
-    source = "|".join([session_id, message_id, event_type, concept_id, payload_marker])
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
 def _emit_status(

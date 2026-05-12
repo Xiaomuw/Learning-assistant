@@ -59,6 +59,7 @@ class SolverVerification(BaseModel):
     passed: bool = False
     selected_option: OptionKey | None = None
     issues: list[str] = Field(default_factory=list)
+    verifier_source: str = "rule_based"
 
 
 class DedupeReport(BaseModel):

@@ -43,6 +43,7 @@ backend/
 │   │   └── memory/   # 短期 / 中期 / 长期记忆装配与更新
 │   ├── services/
 │   │   ├── rag/          # RAG loader/splitter/embedding/vector/retriever/service
+│   │   ├── tooling/      # ToolCapability schema / executor / policy / provider adapters
 │   │   └── runtime_models.py # 当前活动模型选择
 │   ├── infrastructure/
 │   │   ├── llm/      # model provider、profile、LangSmith
@@ -73,7 +74,7 @@ flowchart LR
     C2 --> E["app/orchestration/graphs/orchestrator"]
     E --> F["QAGraph / QuestionGenerationGraph / MasteryEvaluationGraph"]
     F --> K["app/domains/qa/runtime.py<br/>或 practice/mastery domain"]
-    K --> L["app/services/tools/runtime.py"]
+    K --> L["app/services/tooling/{executor,policy,registry}.py"]
     K --> M["app/services/rag/rag_service.py"]
     K --> N["app/infrastructure/llm/provider.py"]
     C3 --> O["app/infrastructure/db/repositories/sessions.py"]
@@ -98,7 +99,8 @@ flowchart LR
 - `app/domains/qa/runtime.py` 是主问答 façade；mode selection、tool loop、answer generation、fallback 已拆到 `app/domains/qa/*`
 - `app/domains/practice/service.py` 是兼容 façade；出题、判题、attempt、导入分别在 `app/domains/practice/*`
 - `app/services/rag/*` 是 RAG 正式入口：loader、splitter、embeddings、vector_store、retriever、rag_service
-- `app/services/tools/*` 是 QA 工具 registry / executor / internal tools / MCP tools 的正式入口
+- `app/services/tooling/*` 是 ToolCapability registry / executor / policy / provider adapter 的正式入口
+- `app/services/tools/*` 只保留旧 provider / internal tool 兼容实现，不作为业务 Graph 直接依赖入口
 - `app/infrastructure/ingest/*` 负责 PDF / URL 内容提取
 - `app/infrastructure/llm/provider.py` 是 LLM façade；环境配置、模型目录和客户端工厂已拆到 `config.py`、`catalog.py`、`clients.py`
 - `app/services/notebook_knowledge_base.py` 是 notebook 知识库的正式 gateway，use case 不再直接调用底层向量库函数

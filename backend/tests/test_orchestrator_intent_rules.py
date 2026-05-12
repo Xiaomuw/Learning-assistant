@@ -72,11 +72,33 @@ class OrchestratorIntentRulesTest(unittest.TestCase):
         self.assertEqual(result["quiz_request"]["action"], "clarify_quiz_request")
         self.assertTrue(result["quiz_clarification"]["recommended_options"])
 
+    def test_unsupported_quiz_type_routes_to_clarification(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "围绕 HTTP 出 3 道多选题"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.FALLBACK.value)
+        self.assertEqual(result["quiz_request"]["action"], "clarify_quiz_request")
+        self.assertEqual(result["quiz_request"]["clarification_reason"], "unsupported_question_type")
+
+    def test_chinese_intent_regression_terms_route_correctly(self) -> None:
+        quiz = resolve_intent_decision({"user_id": "u1", "user_message": "来一组 HTTP"})
+        correction = resolve_intent_decision({"user_id": "u1", "user_message": "帮我批改这道题，哪里不对"})
+        weakness = resolve_intent_decision({"user_id": "u1", "user_message": "我的短板和弱项是什么"})
+
+        self.assertEqual(quiz["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
+        self.assertEqual(correction["intent_decision"]["intent"], OrchestratorIntent.QA.value)
+        self.assertEqual(weakness["intent_decision"]["intent"], OrchestratorIntent.EVALUATE_MASTERY.value)
+
     def test_mastery_rule_routes_mastery_requests(self) -> None:
         result = resolve_intent_decision({"user_id": "u1", "user_message": "评估我的掌握度"})
 
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.EVALUATE_MASTERY.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.MASTERY.value)
+
+    def test_answer_check_question_routes_to_qa_not_mastery(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "评估一下这个答案对不对"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)
 
     def test_help_rule_routes_incomplete_requests_to_fallback(self) -> None:
         result = resolve_intent_decision({"user_id": "u1", "user_message": "help"})
@@ -84,8 +106,26 @@ class OrchestratorIntentRulesTest(unittest.TestCase):
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.FALLBACK.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.ORCHESTRATOR.value)
 
+    def test_single_question_mark_routes_to_fallback(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "?"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.FALLBACK.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.ORCHESTRATOR.value)
+
     def test_default_rule_routes_learning_questions_to_qa(self) -> None:
         result = resolve_intent_decision({"user_id": "u1", "user_message": "什么是 HTTP？"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)
+
+    def test_question_construction_explanation_routes_to_qa_not_question_generation(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "帮我讲讲怎么出这道题"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)
+
+    def test_regular_question_with_question_mark_still_routes_to_qa(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "TCP 为什么要三次握手？"})
 
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)

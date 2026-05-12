@@ -165,6 +165,11 @@ class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
     subject_id: str = Field(default=DEFAULT_SUBJECT_ID, description="知识库 ID，默认用于辅助参考")
     thinking_mode: bool = Field(default=False, description="是否为本轮 DeepSeek V4 请求启用思考模式")
+    client_request_id: str | None = Field(
+        default=None,
+        max_length=160,
+        description="可选客户端请求幂等 ID；同一值会复用本轮 message_id。",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -235,6 +240,7 @@ async def chat(
                 question=request.question,
                 subject_id=request.subject_id,
                 thinking_mode=request.thinking_mode,
+                client_request_id=request.client_request_id,
                 stream_writer=runtime_stream_writer,
             )
             pending_chunk_task = asyncio.create_task(anext(chat_stream))
@@ -381,6 +387,7 @@ async def chat_sync(
             question=request.question,
             subject_id=request.subject_id,
             thinking_mode=request.thinking_mode,
+            client_request_id=request.client_request_id,
         )
 
         return ChatResponse(

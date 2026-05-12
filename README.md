@@ -8,9 +8,9 @@
 
 - 本地账号：邮箱验证码注册、登录、refresh、logout、修改密码。
 - Notebook 知识库：PDF、URL、自动章节、题库内容进入 PGVector。
-- 主问答：LangGraph 路由 + QA runtime + RAG + 内部工具 + 可选 MCP。
+- 主问答：`LearningOrchestratorGraph` 路由 + `QAGraph` + RAG + capability 工具层 + 可选 MCP。
 - 练习：4 选 1 单选题、AI 补题、本地题库优先、提交后显示答案和解析。
-- 学习分析：三层记忆 + `user_knowledge_stats` 知识点掌握度。
+- 学习分析：三层记忆 + graph-era `LearningEvent / attempts / mastery_snapshots`，旧统计表只作兼容读取。
 - 观测：LangSmith 可选开启，主要覆盖 `concept / problem / review` 主问答链路。
 
 ## 最短启动
@@ -47,7 +47,12 @@ cd backend
 ./.venv313/bin/python scripts/check_environment.py
 ./.venv313/bin/python -m compileall app tests scripts
 ./.venv313/bin/python -m unittest discover -s tests
-./.venv313/bin/python scripts/check_do_model_access.py
+```
+
+Graph 相关改动至少补跑：
+
+```bash
+make test-graphs
 ```
 
 ```bash
@@ -73,6 +78,7 @@ npm run build
 - `interfaces/*` 是唯一 HTTP 翻译层；`application/*` 不直接抛 `HTTPException`。
 - Notebook 知识库操作统一走 `backend/app/services/notebook_knowledge_base.py`。
 - RAG 正式入口是 `backend/app/services/rag/`；旧 `services/retrieval` 仅保留迁移期薄兼容壳。
+- 工具执行正式入口是 `backend/app/services/tooling/` capability 层；旧 `backend/app/services/tools/` 仅保留 provider / legacy adapter 支撑。
 - 当前活动模型选择统一走 `backend/app/services/runtime_models.py`。
 - 前端页面和组件使用 `Notebook / notebookId`；`subject_id` 只留在 API wire 兼容边界。
 

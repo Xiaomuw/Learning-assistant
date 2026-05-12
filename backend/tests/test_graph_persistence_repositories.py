@@ -6,6 +6,7 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -107,6 +108,8 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         self.assertIn("hash_key", LearningEventModel.__table__.columns)
         self.assertIn("capability", ToolRunModel.__table__.columns)
         self.assertIn("p_mastery", MasterySnapshotModel.__table__.columns)
+        self.assertIn("consumed_signal_ids", MasterySnapshotModel.__table__.columns)
+        self.assertIn("version", MasterySnapshotModel.__table__.columns)
         self.assertIn("langsmith_run_id", GraphRunModel.__table__.columns)
         self.assertIn("sampled", GraphRunModel.__table__.columns)
         self.assertIn("stem", GraphQuestionItemModel.__table__.columns)
@@ -149,6 +152,49 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
             rows = session.scalars(select(LearningEventModel)).all()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].hash_key, "same-message-same-event")
+
+    def test_learning_event_repository_returns_existing_id_on_primary_key_conflict(self) -> None:
+        repo = SqlLearningEventRepository(session_factory=self.session_scope)
+        first = LearningEvent(
+            id="event-same-id",
+            event_type="question_answered",
+            user_id="u1",
+            graph_run_id="run-1",
+            payload={"hash_key": "hash-1", "score": 0.6},
+        )
+        second = first.model_copy(update={"graph_run_id": "run-2", "payload": {"hash_key": "hash-2", "score": 0.9}})
+
+        self.assertEqual(repo.append(first), "event-same-id")
+        self.assertEqual(repo.append(second), "event-same-id")
+
+        with self.session_scope() as session:
+            rows = session.scalars(select(LearningEventModel)).all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].hash_key, "hash-1")
+
+    def test_learning_event_repository_computes_hash_key_from_stable_source_fields(self) -> None:
+        repo = SqlLearningEventRepository(session_factory=self.session_scope)
+        first = LearningEvent(
+            id="event-source-1",
+            event_type="attempt_scored",
+            user_id="u1",
+            concept_id="data-structure.binary-tree.traversal",
+            graph_run_id="run-1",
+            payload={
+                "source_object_type": "practice_attempt",
+                "source_object_id": "attempt-1",
+                "score": 1.0,
+            },
+        )
+        second = first.model_copy(update={"id": "event-source-2", "graph_run_id": "run-retry"})
+
+        self.assertEqual(repo.append(first), "event-source-1")
+        self.assertEqual(repo.append(second), "event-source-1")
+
+        with self.session_scope() as session:
+            rows = session.scalars(select(LearningEventModel)).all()
+        self.assertEqual(len(rows), 1)
+        self.assertIn("attempt_scored:u1:data-structure.binary-tree.traversal:practice_attempt:attempt-1", rows[0].hash_key)
 
     def test_graph_run_repository_records_run_and_audit_event(self) -> None:
         repo = SqlGraphRunRepository(session_factory=self.session_scope)
@@ -264,6 +310,24 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         attempts = composite.list_recent_attempts(user_id="u1", limit=10)
         self.assertEqual([item["attempt_id"] for item in attempts], ["attempt-1", "legacy-2"])
 
+    def test_attempt_repository_returns_existing_id_on_duplicate_create(self) -> None:
+        repo = SqlAttemptRepository(session_factory=self.session_scope)
+        payload = {
+            "attempt_id": "attempt-idempotent",
+            "user_id": "u1",
+            "subject_id": "data-structure",
+            "concept_id": "data-structure.binary-tree.traversal",
+            "is_correct": True,
+        }
+
+        self.assertEqual(repo.create_attempt(payload), "attempt-idempotent")
+        self.assertEqual(repo.create_attempt({**payload, "is_correct": False}), "attempt-idempotent")
+
+        with self.session_scope() as session:
+            rows = session.scalars(select(GraphAttemptModel)).all()
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].is_correct)
+
     def test_mastery_snapshot_repository_upsert_keeps_unique_user_subject_concept(self) -> None:
         repo = SqlMasterySnapshotRepository(session_factory=self.session_scope)
         first_id = repo.upsert_snapshot(
@@ -290,6 +354,71 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0]["p_mastery"], 0.7)
         self.assertEqual(snapshots[0]["status"], "learning")
+
+    def test_mastery_snapshot_repository_ignores_repeated_consumed_signal(self) -> None:
+        repo = SqlMasterySnapshotRepository(session_factory=self.session_scope)
+        payload = {
+            "user_id": "u1",
+            "subject_id": "data-structure",
+            "concept_id": "data-structure.binary-tree.traversal",
+            "p_mastery": 0.6,
+            "delta": 0.1,
+            "status": "learning",
+            "consumed_signal_ids": ["attempt-1"],
+        }
+
+        repo.upsert_snapshot(payload)
+        repo.upsert_snapshot(payload)
+        snapshots = repo.list_snapshots(user_id="u1", limit=10)
+
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0]["p_mastery"], 0.6)
+        self.assertEqual(snapshots[0]["consumed_signal_ids"], ["attempt-1"])
+        self.assertEqual(snapshots[0]["version"], 1)
+
+    def test_mastery_snapshot_repository_merges_after_first_insert_conflict(self) -> None:
+        repo = SqlMasterySnapshotRepository(session_factory=self.session_scope)
+        existing_id = repo.upsert_snapshot(
+            {
+                "user_id": "u1",
+                "subject_id": "data-structure",
+                "concept_id": "data-structure.binary-tree.traversal",
+                "p_mastery": 0.5,
+                "status": "learning",
+                "consumed_signal_ids": ["attempt-1"],
+            }
+        )
+        original_select = __import__(
+            "app.persistence.repositories.graph_facts",
+            fromlist=["_select_mastery_snapshot"],
+        )._select_mastery_snapshot
+        calls = {"count": 0}
+
+        def hide_existing_once(*args, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return None
+            return original_select(*args, **kwargs)
+
+        with patch("app.persistence.repositories.graph_facts._select_mastery_snapshot", side_effect=hide_existing_once):
+            conflict_id = repo.upsert_snapshot(
+                {
+                    "user_id": "u1",
+                    "subject_id": "data-structure",
+                    "concept_id": "data-structure.binary-tree.traversal",
+                    "p_mastery": 0.5,
+                    "delta": 0.2,
+                    "status": "learning",
+                    "consumed_signal_ids": ["attempt-1", "attempt-2"],
+                }
+            )
+
+        snapshots = repo.list_snapshots(user_id="u1", limit=10)
+        self.assertEqual(conflict_id, existing_id)
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0]["consumed_signal_ids"], ["attempt-1", "attempt-2"])
+        self.assertAlmostEqual(snapshots[0]["p_mastery"], 0.6)
+        self.assertEqual(snapshots[0]["version"], 2)
 
     def test_attempt_and_mastery_repositories_skip_non_canonical_concepts(self) -> None:
         attempt_repo = SqlAttemptRepository(session_factory=self.session_scope)

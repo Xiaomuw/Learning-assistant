@@ -160,9 +160,10 @@ class UserMemoryModel(Base):
     __tablename__ = "user_memories"
 
     user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    weak_points: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    error_count: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    recent_topics: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    weak_points: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    error_count: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
+    recent_topics: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    finalized_practice_attempt_ids: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
     last_session: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     updated_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
@@ -348,9 +349,9 @@ class ChatSessionModel(Base):
     user_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False, default="general")
     title: Mapped[str] = mapped_column(String(120), nullable=False, default="新对话")
-    messages: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    latest_quiz: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    session_memory: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict)
+    messages: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    latest_quiz: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    session_memory: Mapped[dict | None] = mapped_column(GraphJSON, nullable=True, default=dict)
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -376,14 +377,14 @@ class QuestionBankItemModel(Base):
     concept_name: Mapped[str] = mapped_column(String(240), nullable=True, default="")
     concept_mapping_status: Mapped[str] = mapped_column(String(30), nullable=True, default="")
     stem: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    options_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    options_json: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
     correct_option: Mapped[str] = mapped_column(String(1), nullable=False, default="A")
     explanation: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    option_rationales_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    option_rationales_json: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
     source_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     source_year: Mapped[int | None] = mapped_column(nullable=True, default=None)
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="基础")
-    tags_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    tags_json: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -437,7 +438,7 @@ class PracticeAttemptModel(Base):
     session_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False, default="")
     subject_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False, default="general")
     question_id: Mapped[str] = mapped_column(String(100), nullable=False, default="")
-    question_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    question_snapshot: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
     selected_option: Mapped[str] = mapped_column(String(1), nullable=False, default="")
     is_correct: Mapped[bool] = mapped_column(nullable=False, default=False)
     knowledge_point: Mapped[str] = mapped_column(String(120), index=True, nullable=False, default="")
@@ -447,10 +448,44 @@ class PracticeAttemptModel(Base):
     concept_name: Mapped[str] = mapped_column(String(240), nullable=True, default="")
     concept_mapping_status: Mapped[str] = mapped_column(String(30), nullable=True, default="")
     source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="ai_generated")
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False, default="")
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_practice_attempts_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL AND idempotency_key <> ''"),
+            sqlite_where=text("idempotency_key IS NOT NULL AND idempotency_key <> ''"),
+        ),
+    )
+
+
+class PracticeAttemptFinalizationJobModel(Base):
+    __tablename__ = "practice_attempt_finalization_jobs"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    legacy_attempt_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), index=True, nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_at: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
+    next_run_at: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
+    last_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
 
@@ -609,6 +644,8 @@ class MasterySnapshotModel(Base):
     p_mastery: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="learning")
     evidence_ids: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    consumed_signal_ids: Mapped[list] = mapped_column(GraphJSON, nullable=False, default=list)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     payload: Mapped[dict] = mapped_column(GraphJSON, nullable=False, default=dict)
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),

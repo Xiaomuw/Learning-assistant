@@ -121,6 +121,10 @@ class ChildGraphInvokerFactoryTest(unittest.TestCase):
         self.assertEqual(outputs["retrieval_diagnosis"]["diagnosis"], "notebook_evidence_found")
         self.assertEqual(outputs["tool_decision"]["tool_decision_rounds_count"], 1)
         self.assertEqual(outputs["tool_decision"]["capabilities"], ["notebook_retrieve"])
+        self.assertEqual(outputs["tool_decision"]["sources"], ["notebook"])
+        self.assertEqual(outputs["tool_decision"]["tool_decision_rounds"][0]["source"], "notebook")
+        self.assertNotIn("provider", outputs["tool_decision"])
+        self.assertNotIn("provider", outputs["tool_decision"]["tool_decision_rounds"][0])
         self.assertEqual(outputs["safe_reasoning_summary"], "安全推理摘要")
 
     def test_qa_invoker_fails_open_with_repair_event(self) -> None:
@@ -132,7 +136,9 @@ class ChildGraphInvokerFactoryTest(unittest.TestCase):
                 "app.orchestration.graphs.orchestrator.child_invokers._persist_fallback_learning_events_safely"
             ) as persist_events,
         ):
-            update = invoker.invoke({"run_id": "run-qa-fail", "user_id": "u1", "user_message": "什么是 HTTP？"})
+            update = invoker.invoke(
+                {"run_id": "run-qa-fail", "user_id": "u1", "thread_id": "session-1", "user_message": "什么是 HTTP？"}
+            )
 
         payload = update["child_graph_output"]["payload"]
         result = update["child_graph_result"]
@@ -143,6 +149,15 @@ class ChildGraphInvokerFactoryTest(unittest.TestCase):
         self.assertEqual(payload["adapter"], "qagraph")
         self.assertTrue(payload["final_response"]["answer"])
         self.assertEqual(payload["learning_events"][0]["event_type"], "answer_repaired")
+        self.assertEqual(
+            payload["learning_events"][0]["payload"]["source_object_id"],
+            "qa_child_graph_failed:session-1:run-qa-fail",
+        )
+        self.assertEqual(payload["learning_events"][0]["payload"]["source_object_type"], "orchestrator_child_failure")
+        self.assertIn(
+            "answer_repaired:u1::orchestrator_child_failure:qa_child_graph_failed:session-1:run-qa-fail",
+            payload["learning_events"][0]["payload"]["hash_key"],
+        )
         self.assertEqual(payload["errors"][0]["code"], "qa_child_graph_failed")
         persist_events.assert_not_called()
 

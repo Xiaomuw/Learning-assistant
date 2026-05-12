@@ -278,6 +278,8 @@ def extract_event_data(node: str, state_update: dict[str, Any]) -> dict[str, Any
         elif field == "quiz_rag_docs" and isinstance(value, list):
             data["doc_count"] = len(value)
             data["top_scores"] = [round(d.get("score", 0), 2) for d in value[:3]]
+        elif field in {"tool_calls", "external_tool_calls"} and isinstance(value, list):
+            data[field] = [_sanitize_tool_call(item) for item in value if isinstance(item, dict)]
         else:
             data[field] = value
     return data
@@ -286,6 +288,25 @@ def extract_event_data(node: str, state_update: dict[str, Any]) -> dict[str, Any
 def event_name_for_node(node: str) -> str:
     mapping = NODE_EVENT_MAP.get(node, {})
     return str(mapping.get("event", node))
+
+
+def _sanitize_tool_call(item: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(item)
+    provider = str(payload.pop("provider", "") or "").strip().lower()
+    if provider:
+        payload.setdefault("source", _public_tool_source(provider, payload))
+    return payload
+
+
+def _public_tool_source(provider: str, payload: dict[str, Any]) -> str:
+    capability = str(payload.get("capability") or payload.get("name") or "").lower()
+    if provider == "tavily" or "web" in capability or "search" in capability:
+        return "web"
+    if provider == "mcp" and "web" in capability:
+        return "web"
+    if "notebook" in capability:
+        return "notebook"
+    return "tool"
 
 
 __all__ = ["build_message_process", "event_name_for_node", "extract_event_data"]

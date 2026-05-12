@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import timezone, timedelta
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_, select
 
 from app.infrastructure.db.database import session_scope
-from app.infrastructure.db.models import PracticeAttemptModel, PracticeQuestionModel, QuestionBankItemModel
+from app.infrastructure.db.models import (
+    PracticeAttemptFinalizationJobModel,
+    PracticeAttemptModel,
+    PracticeQuestionModel,
+    QuestionBankItemModel,
+)
 from app.infrastructure.db.repositories._shared import (
     QUIZ_DIFFICULTY_ORDER,
     normalize_option_rationales,
@@ -18,6 +25,10 @@ from app.infrastructure.db.repositories._shared import (
 from app.shared.schemas.contracts import PracticeAttemptRecord, QuestionBankItemRecord, UserMemoryRecord
 from app.knowledge.concept_registry import ConceptMatch, get_concept_registry
 from app.infrastructure.db.repositories.practice_questions import normalize_difficulty
+
+FINALIZATION_JOB_MAX_ATTEMPTS = 5
+FINALIZATION_JOB_STALE_TIMEOUT = timedelta(minutes=15)
+FINALIZATION_JOB_MAX_BACKOFF = timedelta(hours=1)
 
 
 def upsert_question_bank_item_records(items: list[dict[str, Any]]) -> int:
@@ -232,28 +243,138 @@ def create_practice_attempt_record(
     concept_name: str = "",
     concept_mapping_status: str = "",
     source_type: str = "ai_generated",
+    idempotency_key: str = "",
 ) -> PracticeAttemptRecord:
     with session_scope() as session:
-        attempt = PracticeAttemptModel(
-            id=str(uuid.uuid4()),
+        normalized_key = str(idempotency_key or "").strip()
+        if normalized_key:
+            existing = session.scalars(
+                select(PracticeAttemptModel)
+                .where(PracticeAttemptModel.idempotency_key == normalized_key)
+                .limit(1)
+            ).first()
+            if existing is not None:
+                return serialize_practice_attempt_record(existing)
+        attempt = _new_practice_attempt_model(
             user_id=user_id,
             session_id=session_id,
             subject_id=subject_id,
             question_id=question_id,
-            question_snapshot=dict(question_snapshot or {}),
-            selected_option=selected_option.strip().upper()[:1],
-            is_correct=bool(is_correct),
+            question_snapshot=question_snapshot,
+            selected_option=selected_option,
+            is_correct=is_correct,
             knowledge_point=knowledge_point,
             chapter_id=chapter_id,
             topic_id=topic_id,
             concept_id=concept_id,
             concept_name=concept_name,
             concept_mapping_status=concept_mapping_status,
-            source_type=source_type or "ai_generated",
+            source_type=source_type,
+            idempotency_key=normalized_key,
         )
         session.add(attempt)
-        session.flush()
+        try:
+            session.flush()
+        except IntegrityError:
+            session.rollback()
+            if not normalized_key:
+                raise
+            existing = session.scalars(
+                select(PracticeAttemptModel)
+                .where(PracticeAttemptModel.idempotency_key == normalized_key)
+                .limit(1)
+            ).first()
+            if existing is None:
+                raise
+            return serialize_practice_attempt_record(existing)
         return serialize_practice_attempt_record(attempt)
+
+
+def create_practice_attempt_record_with_finalization_job(
+    *,
+    user_id: str,
+    session_id: str = "",
+    subject_id: str = "general",
+    question_id: str = "",
+    question_snapshot: dict[str, Any] | None = None,
+    selected_option: str,
+    is_correct: bool,
+    knowledge_point: str,
+    chapter_id: str = "",
+    topic_id: str = "",
+    concept_id: str = "",
+    concept_name: str = "",
+    concept_mapping_status: str = "",
+    source_type: str = "ai_generated",
+    idempotency_key: str = "",
+) -> tuple[PracticeAttemptRecord, dict[str, Any]]:
+    with session_scope() as session:
+        normalized_key = str(idempotency_key or "").strip()
+        attempt = None
+        if normalized_key:
+            attempt = session.scalars(
+                select(PracticeAttemptModel)
+                .where(PracticeAttemptModel.idempotency_key == normalized_key)
+                .limit(1)
+            ).first()
+        if attempt is None:
+            attempt = _new_practice_attempt_model(
+                user_id=user_id,
+                session_id=session_id,
+                subject_id=subject_id,
+                question_id=question_id,
+                question_snapshot=question_snapshot,
+                selected_option=selected_option,
+                is_correct=is_correct,
+                knowledge_point=knowledge_point,
+                chapter_id=chapter_id,
+                topic_id=topic_id,
+                concept_id=concept_id,
+                concept_name=concept_name,
+                concept_mapping_status=concept_mapping_status,
+                source_type=source_type,
+                idempotency_key=normalized_key,
+            )
+            session.add(attempt)
+            try:
+                session.flush()
+            except IntegrityError:
+                session.rollback()
+                if not normalized_key:
+                    raise
+                attempt = session.scalars(
+                    select(PracticeAttemptModel)
+                    .where(PracticeAttemptModel.idempotency_key == normalized_key)
+                    .limit(1)
+                ).first()
+                if attempt is None:
+                    raise
+
+        job = session.scalars(
+            select(PracticeAttemptFinalizationJobModel)
+            .where(PracticeAttemptFinalizationJobModel.legacy_attempt_id == attempt.id)
+            .limit(1)
+        ).first()
+        if job is None:
+            job = PracticeAttemptFinalizationJobModel(
+                id=str(uuid.uuid4()),
+                legacy_attempt_id=attempt.id,
+                status="pending",
+                next_run_at=utcnow(),
+            )
+            session.add(job)
+            try:
+                session.flush()
+            except IntegrityError:
+                session.rollback()
+                job = session.scalars(
+                    select(PracticeAttemptFinalizationJobModel)
+                    .where(PracticeAttemptFinalizationJobModel.legacy_attempt_id == attempt.id)
+                    .limit(1)
+                ).first()
+                if job is None:
+                    raise
+        return serialize_practice_attempt_record(attempt), _serialize_finalization_job(job)
 
 
 def find_practice_attempt_record_for_question(
@@ -280,6 +401,196 @@ def find_practice_attempt_record_for_question(
             .limit(1)
         ).first()
         return serialize_practice_attempt_record(row) if row is not None else None
+
+
+def get_practice_attempt_record_by_id(attempt_id: str) -> PracticeAttemptRecord | None:
+    with session_scope() as session:
+        row = session.get(PracticeAttemptModel, str(attempt_id or "").strip())
+        return serialize_practice_attempt_record(row) if row is not None else None
+
+
+def get_practice_attempt_finalization_job(job_id: str) -> dict[str, Any] | None:
+    with session_scope() as session:
+        row = session.get(PracticeAttemptFinalizationJobModel, str(job_id or "").strip())
+        return _serialize_finalization_job(row) if row is not None else None
+
+
+def claim_practice_attempt_finalization_job(job_id: str) -> dict[str, Any] | None:
+    normalized_id = str(job_id or "").strip()
+    if not normalized_id:
+        return None
+    with session_scope() as session:
+        stmt = select(PracticeAttemptFinalizationJobModel).where(
+            PracticeAttemptFinalizationJobModel.id == normalized_id
+        )
+        if session.get_bind().dialect.name == "postgresql":
+            stmt = stmt.with_for_update()
+        row = session.scalars(stmt).first()
+        if row is None:
+            return None
+        now = utcnow()
+        status = str(row.status or "")
+        if status in {"completed", "dead"}:
+            return None
+        if status in {"pending", "failed"} and not _job_is_due(row, now=now):
+            return None
+        if status == "running":
+            locked_at = _as_aware_utc(row.locked_at)
+            if locked_at is None or locked_at > now - FINALIZATION_JOB_STALE_TIMEOUT:
+                return None
+        elif status not in {"pending", "failed"}:
+            return None
+        row.status = "running"
+        row.attempt_count = int(row.attempt_count or 0) + 1
+        row.locked_at = now
+        row.updated_at = now
+        session.flush()
+        return _serialize_finalization_job(row)
+
+
+def complete_practice_attempt_finalization_job(job_id: str) -> None:
+    _update_practice_attempt_finalization_job(
+        job_id,
+        status="completed",
+        last_error="",
+        clear_lock=True,
+    )
+
+
+def fail_practice_attempt_finalization_job(job_id: str, error: str) -> str:
+    with session_scope() as session:
+        row = session.get(PracticeAttemptFinalizationJobModel, str(job_id or "").strip())
+        if row is None or row.status in {"completed", "dead"}:
+            return "skipped"
+        now = utcnow()
+        attempt_count = int(row.attempt_count or 0)
+        row.status = "dead" if attempt_count >= FINALIZATION_JOB_MAX_ATTEMPTS else "failed"
+        row.last_error = str(error or "")[:1000]
+        row.locked_at = None
+        row.next_run_at = None if row.status == "dead" else now + _finalization_job_backoff(attempt_count)
+        row.updated_at = now
+        session.flush()
+        return str(row.status or "failed")
+
+
+def list_due_practice_attempt_finalization_jobs(*, limit: int = 20) -> list[dict[str, Any]]:
+    now = utcnow()
+    stale_before = now - FINALIZATION_JOB_STALE_TIMEOUT
+    with session_scope() as session:
+        rows = session.scalars(
+            select(PracticeAttemptFinalizationJobModel)
+            .where(
+                or_(
+                    (
+                        PracticeAttemptFinalizationJobModel.status.in_(["pending", "failed"])
+                        & or_(
+                            PracticeAttemptFinalizationJobModel.next_run_at.is_(None),
+                            PracticeAttemptFinalizationJobModel.next_run_at <= now,
+                        )
+                    ),
+                    (
+                        (PracticeAttemptFinalizationJobModel.status == "running")
+                        & PracticeAttemptFinalizationJobModel.locked_at.is_not(None)
+                        & (PracticeAttemptFinalizationJobModel.locked_at <= stale_before)
+                    ),
+                ),
+            )
+            .order_by(PracticeAttemptFinalizationJobModel.created_at.asc())
+            .limit(max(1, min(int(limit or 20), 100)))
+        ).all()
+        return [_serialize_finalization_job(row) for row in rows]
+
+
+def _new_practice_attempt_model(
+    *,
+    user_id: str,
+    session_id: str,
+    subject_id: str,
+    question_id: str,
+    question_snapshot: dict[str, Any] | None,
+    selected_option: str,
+    is_correct: bool,
+    knowledge_point: str,
+    chapter_id: str,
+    topic_id: str,
+    concept_id: str,
+    concept_name: str,
+    concept_mapping_status: str,
+    source_type: str,
+    idempotency_key: str = "",
+) -> PracticeAttemptModel:
+    return PracticeAttemptModel(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        session_id=session_id,
+        subject_id=subject_id,
+        question_id=question_id,
+        question_snapshot=dict(question_snapshot or {}),
+        selected_option=selected_option.strip().upper()[:1],
+        is_correct=bool(is_correct),
+        knowledge_point=knowledge_point,
+        chapter_id=chapter_id,
+        topic_id=topic_id,
+        concept_id=concept_id,
+        concept_name=concept_name,
+        concept_mapping_status=concept_mapping_status,
+        source_type=source_type or "ai_generated",
+        idempotency_key=idempotency_key,
+    )
+
+
+def _serialize_finalization_job(row: PracticeAttemptFinalizationJobModel) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "job_id": row.id,
+        "legacy_attempt_id": row.legacy_attempt_id,
+        "status": row.status,
+        "attempt_count": int(row.attempt_count or 0),
+        "locked_at": row.locked_at.isoformat() if row.locked_at else "",
+        "next_run_at": row.next_run_at.isoformat() if row.next_run_at else "",
+        "last_error": row.last_error or "",
+        "created_at": row.created_at.isoformat() if row.created_at else "",
+        "updated_at": row.updated_at.isoformat() if row.updated_at else "",
+    }
+
+
+def _update_practice_attempt_finalization_job(
+    job_id: str,
+    *,
+    status: str,
+    last_error: str,
+    clear_lock: bool,
+) -> None:
+    with session_scope() as session:
+        row = session.get(PracticeAttemptFinalizationJobModel, str(job_id or "").strip())
+        if row is None:
+            return
+        row.status = status
+        row.last_error = last_error
+        row.updated_at = utcnow()
+        if clear_lock:
+            row.locked_at = None
+        if status == "completed":
+            row.next_run_at = None
+
+
+def _job_is_due(row: PracticeAttemptFinalizationJobModel, *, now) -> bool:
+    next_run_at = _as_aware_utc(row.next_run_at)
+    return next_run_at is None or next_run_at <= now
+
+
+def _finalization_job_backoff(attempt_count: int) -> timedelta:
+    exponent = max(0, int(attempt_count or 1) - 1)
+    seconds = min(int(FINALIZATION_JOB_MAX_BACKOFF.total_seconds()), 60 * (2 ** exponent))
+    return timedelta(seconds=seconds)
+
+
+def _as_aware_utc(value):
+    if value is None:
+        return None
+    if getattr(value, "tzinfo", None) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def _concept_payload_for_item(item: dict[str, Any]) -> dict[str, str]:

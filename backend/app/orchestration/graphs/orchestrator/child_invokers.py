@@ -17,6 +17,7 @@ from app.orchestration.graphs.shared.schemas import (
     LearningEventType,
     SourceLevel,
     SourcePolicy,
+    build_learning_event,
 )
 from app.shared.schemas.subject import DEFAULT_SUBJECTS, normalize_subject_id
 
@@ -78,6 +79,9 @@ class QAGraphInvoker:
         injected_stream_writer = runtime_context.get("stream_writer")
         qa_runtime_context = {
             "graph_run_id": f"{state.get('run_id', '')}:{self.graph_type.value}",
+            "message_id": str(state.get("message_id") or state.get("request_id") or ""),
+            "request_id": str(state.get("request_id") or state.get("message_id") or ""),
+            "client_request_id": str(state.get("client_request_id") or ""),
             "stream_answer_tokens": requested_token_stream,
             "streaming_degraded_reason": "",
             "thinking_mode": bool(runtime_context.get("thinking_mode", False)),
@@ -386,6 +390,7 @@ def _trace_tool_decision(
     tool_decision_rounds = [
         item for item in list(runtime_summary.get("tool_decision_rounds") or []) if isinstance(item, dict)
     ]
+    sanitized_rounds = [_sanitize_tool_decision_round(item) for item in tool_decision_rounds]
     capabilities = sorted(
         {
             str(item.get("capability") or item.get("tool") or "")
@@ -393,11 +398,11 @@ def _trace_tool_decision(
             if str(item.get("capability") or item.get("tool") or "").strip()
         }
     )
-    providers = sorted(
+    sources = sorted(
         {
-            str(item.get("provider") or "")
+            _public_tool_source(item)
             for item in [*tool_results, *tool_decision_rounds]
-            if str(item.get("provider") or "").strip()
+            if _public_tool_source(item)
         }
     )
     return {
@@ -405,12 +410,37 @@ def _trace_tool_decision(
         "tool_decision_rounds_count": _trace_int(
             runtime_summary.get("tool_decision_rounds_count") or response_ui.get("tool_decision_rounds_count")
         ),
-        "tool_decision_rounds": tool_decision_rounds[:5],
+        "tool_decision_rounds": sanitized_rounds[:5],
         "tool_results_count": len(tool_results),
         "capabilities": capabilities,
-        "providers": providers,
+        "sources": sources,
         "web_search_attempted": bool(response_ui.get("web_search_attempted")),
     }
+
+
+def _sanitize_tool_decision_round(item: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key in ("round", "decision", "tool", "capability", "status", "reason", "doc_count"):
+        if key in item:
+            sanitized[key] = item[key]
+    source = _public_tool_source(item)
+    if source:
+        sanitized["source"] = source
+    return sanitized
+
+
+def _public_tool_source(item: dict[str, Any]) -> str:
+    capability = str(item.get("capability") or item.get("tool") or item.get("name") or "").strip().lower()
+    provider = str(item.get("provider") or "").strip().lower()
+    if provider in {"tavily", "web"} or "web" in capability or "search" in capability:
+        return "web"
+    if provider == "mcp" and "web" in capability:
+        return "web"
+    if provider == "notebook" or "notebook" in capability:
+        return "notebook"
+    if provider == "internal" or provider == "runtime":
+        return "tool"
+    return "tool" if provider or capability else ""
 
 
 def _trace_int(value: Any) -> int:
@@ -425,7 +455,7 @@ def _qa_child_failure_result(state: OrchestratorState, exc: Exception) -> dict[s
     error_type = exc.__class__.__name__
     session_id = str(state.get("thread_id") or "")
     message_id = str(state.get("run_id") or "")
-    hash_key = f"{session_id}:{message_id}:{LearningEventType.ANSWER_REPAIRED.value}:qa_child_graph_failed"
+    source_object_id = f"qa_child_graph_failed:{session_id}:{message_id}"
     response = FinalResponse(
         answer="这一轮问答链路暂时不可用，我先安全停止，避免给出不可靠回答。",
         source_level=SourceLevel.NONE,
@@ -437,10 +467,12 @@ def _qa_child_failure_result(state: OrchestratorState, exc: Exception) -> dict[s
             "error_type": error_type,
         },
     )
-    event = LearningEvent(
+    event = build_learning_event(
         event_type=LearningEventType.ANSWER_REPAIRED.value,
         user_id=str(state.get("user_id") or ""),
         graph_run_id=graph_run_id,
+        source_object_type="orchestrator_child_failure",
+        source_object_id=source_object_id,
         payload={
             "reason": "qa_child_graph_failed",
             "error_type": error_type,
@@ -448,7 +480,6 @@ def _qa_child_failure_result(state: OrchestratorState, exc: Exception) -> dict[s
             "message_id": message_id,
             "event_type": LearningEventType.ANSWER_REPAIRED.value,
             "concept_id": "",
-            "hash_key": hash_key,
         },
     )
     error = GraphError(
@@ -490,6 +521,9 @@ def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, A
         "notebook_id": state.get("notebook_id"),
         "course_id": state.get("course_id"),
         "thread_id": state.get("thread_id"),
+        "message_id": str(state.get("message_id") or state.get("request_id") or ""),
+        "request_id": str(state.get("request_id") or state.get("message_id") or ""),
+        "client_request_id": str(state.get("client_request_id") or ""),
         "graph_type": graph_type.value,
         "graph_version": state.get("graph_version") or "0.1.0",
         "source_policy": str(state.get("source_policy") or SourcePolicy.OPEN_TOOLS.value),
