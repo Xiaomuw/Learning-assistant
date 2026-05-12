@@ -5,6 +5,7 @@ from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from loguru import logger
 from sqlalchemy import inspect, text
 
 from app.infrastructure.db import models as _models  # noqa: F401 - populate Base metadata
@@ -47,14 +48,35 @@ class DatabaseReadinessReport:
 def assert_database_readiness() -> DatabaseReadinessReport:
     """Run startup-blocking, read-only database readiness checks."""
 
+    logger.info("数据库 readiness: 检查数据库后端")
     backend = current_database_backend()
     if backend != "postgresql":
         raise RuntimeError(f"数据库 readiness 失败：当前后端不是 PostgreSQL，backend={backend}")
+    logger.info("数据库 readiness: 数据库后端通过 | backend={}", backend)
 
+    logger.info("数据库 readiness: 检查连接")
     check_database_connection()
+    logger.info("数据库 readiness: 连接通过")
+
+    logger.info("数据库 readiness: 检查 Alembic head")
     alembic_heads, current_revisions = check_alembic_head()
+    logger.info(
+        "数据库 readiness: Alembic head 通过 | current={} | head={}",
+        ",".join(current_revisions) or "<empty>",
+        ",".join(alembic_heads) or "<empty>",
+    )
+
+    logger.info("数据库 readiness: 检查 schema/indexes")
     schema_status = inspect_schema_readiness()
+    logger.info(
+        "数据库 readiness: schema/indexes 检查完成 | missing_tables={} | missing_indexes={}",
+        len(schema_status["missing_tables"]),
+        len(schema_status["missing_indexes"]),
+    )
+
+    logger.info("数据库 readiness: 检查 vector 扩展")
     vector_extension_ready = is_vector_extension_installed()
+    logger.info("数据库 readiness: vector 扩展检查完成 | ready={}", vector_extension_ready)
 
     report = DatabaseReadinessReport(
         database_backend=backend,

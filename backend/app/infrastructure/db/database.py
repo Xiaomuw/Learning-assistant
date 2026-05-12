@@ -16,6 +16,19 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
+def _env_int(name: str, default: int, *, minimum: int = 0) -> int:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} 必须是整数，当前值为 {raw_value!r}") from exc
+    if value < minimum:
+        raise RuntimeError(f"{name} 必须大于等于 {minimum}，当前值为 {value}")
+    return value
+
+
 def _normalize_database_url(raw_url: str | None) -> str:
     if not raw_url:
         raise RuntimeError(
@@ -37,10 +50,27 @@ def _normalize_database_url(raw_url: str | None) -> str:
 
 
 DATABASE_URL = _normalize_database_url(os.getenv("DATABASE_URL"))
+DATABASE_CONNECT_TIMEOUT_SECONDS = _env_int(
+    "DATABASE_CONNECT_TIMEOUT_SECONDS",
+    5,
+    minimum=1,
+)
+DATABASE_LOCK_TIMEOUT_MS = _env_int("DATABASE_LOCK_TIMEOUT_MS", 10_000)
+DATABASE_STATEMENT_TIMEOUT_MS = _env_int("DATABASE_STATEMENT_TIMEOUT_MS", 30_000)
 
 
 class Base(DeclarativeBase):
     """SQLAlchemy declarative base."""
+
+
+def _postgres_connect_args() -> dict[str, int | str]:
+    return {
+        "connect_timeout": DATABASE_CONNECT_TIMEOUT_SECONDS,
+        "options": (
+            f"-c lock_timeout={DATABASE_LOCK_TIMEOUT_MS}ms "
+            f"-c statement_timeout={DATABASE_STATEMENT_TIMEOUT_MS}ms"
+        ),
+    }
 
 
 def _build_engine() -> Engine:
@@ -48,6 +78,7 @@ def _build_engine() -> Engine:
         DATABASE_URL,
         future=True,
         pool_pre_ping=True,
+        connect_args=_postgres_connect_args(),
     )
 
 
