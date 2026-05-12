@@ -12,7 +12,9 @@ python scripts/check_environment.py
 
 if [ "${RUN_ALEMBIC_UPGRADE:-true}" = "true" ]; then
     echo "🧱 执行数据库迁移..."
-    python -m alembic upgrade head
+    python scripts/run_migrations_with_diagnostics.py
+else
+    echo "⏭️  跳过数据库迁移：RUN_ALEMBIC_UPGRADE=${RUN_ALEMBIC_UPGRADE}"
 fi
 
 LOG_LEVEL_LOWER=$(echo "${LOG_LEVEL:-info}" | tr '[:upper:]' '[:lower:]')
