@@ -1,0 +1,51 @@
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci --legacy-peer-deps
+
+
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+ARG INTERNAL_API_BASE=http://backend:8000/api
+ARG NEXT_PUBLIC_API_BASE=/api
+
+ENV INTERNAL_API_BASE=${INTERNAL_API_BASE}
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    INTERNAL_API_BASE=http://backend:8000/api \
+    NEXT_PUBLIC_API_BASE=/api
+
+RUN addgroup -S nextjs \
+    && adduser -S nextjs -G nextjs
+
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --legacy-peer-deps \
+    && npm cache clean --force
+
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/next.config.mjs ./next.config.mjs
+
+RUN chown -R nextjs:nextjs /app
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]

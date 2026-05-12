@@ -1,0 +1,43 @@
+.git
+.gitignore
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Node / frontend
+node_modules/
+.next/
+dist/
+build/
+out/
+coverage/
+npm-debug.log*
+
+# Runtime data and local artifacts
+backend/storage/
+backend/chroma_data/
+backend/data/*.db
+data/*.db
+backups/
+tmp/
+target/
+docs/pdf/
+.codex-pet-runs/
+
+# Secrets and local keys
+*.pem
+*.key

@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  migrate:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE}
+    restart: "no"
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      LANGGRAPH_POSTGRES_URL: ${LANGGRAPH_POSTGRES_URL:?set LANGGRAPH_POSTGRES_URL}
+    command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      LANGGRAPH_POSTGRES_URL: ${LANGGRAPH_POSTGRES_URL:?set LANGGRAPH_POSTGRES_URL}
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      APP_ENV: ${APP_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+      ENABLE_PRACTICE_FINALIZER_WORKER: ${ENABLE_PRACTICE_FINALIZER_WORKER:-true}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?set FRONTEND_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      INTERNAL_API_BASE: ${INTERNAL_API_BASE:-http://backend:8000/api}
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api}
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  postgres_data:
