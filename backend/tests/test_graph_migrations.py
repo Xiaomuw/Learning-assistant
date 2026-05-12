@@ -134,6 +134,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                 "0009_pgvector_core_tables.py",
                 "0010_readiness_required_indexes.py",
                 "0011_practice_finalizer_idempotency.py",
+                "0012_core_app_tables.py",
             }.issubset(revision_files)
         )
 
@@ -202,6 +203,31 @@ class GraphMigrationContractTest(unittest.TestCase):
         self.assertIn("version", content)
         self.assertIn("uq_practice_attempts_idempotency_key", content)
 
+    def test_alembic_core_app_tables_migration_exists(self) -> None:
+        revision = BACKEND_ROOT / "alembic" / "versions" / "0012_core_app_tables.py"
+        self.assertTrue(revision.exists())
+        content = revision.read_text(encoding="utf-8")
+        self.assertIn('revision: str = "0012_core_app_tables"', content)
+        self.assertIn('down_revision: str | None = "0011_practice_finalizer"', content)
+        for table_name in (
+            "subjects",
+            "chat_sessions",
+            "question_bank_items",
+            "practice_attempts",
+            "user_knowledge_stats",
+            "app_settings",
+        ):
+            self.assertIn(table_name, content)
+        for index_name in (
+            "ix_subjects_name",
+            "ix_chat_sessions_user_id",
+            "ix_question_bank_items_subject_id",
+            "ix_practice_attempts_user_id",
+            "ix_user_knowledge_stats_concept_id",
+            "uq_practice_attempts_idempotency_key",
+        ):
+            self.assertIn(index_name, content)
+
     def test_alembic_upgrade_head_on_empty_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "graph_facts.db"
@@ -244,9 +270,15 @@ class GraphMigrationContractTest(unittest.TestCase):
                 ).fetchone()[0]
             finally:
                 connection.close()
-            self.assertEqual(applied_revision, "0011_practice_finalizer")
+            self.assertEqual(applied_revision, "0012_core_app_tables")
             self.assertTrue(
                 {
+                    "subjects",
+                    "chat_sessions",
+                    "question_bank_items",
+                    "practice_attempts",
+                    "user_knowledge_stats",
+                    "app_settings",
                     "users",
                     "user_profiles",
                     "user_memories",
@@ -438,6 +470,88 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "created_at",
                     "updated_at",
                 },
+                "subjects": {
+                    "id",
+                    "name",
+                    "icon",
+                    "description",
+                    "created_at",
+                },
+                "chat_sessions": {
+                    "id",
+                    "user_id",
+                    "subject_id",
+                    "title",
+                    "messages",
+                    "latest_quiz",
+                    "session_memory",
+                    "created_at",
+                    "updated_at",
+                },
+                "question_bank_items": {
+                    "id",
+                    "subject_id",
+                    "knowledge_point",
+                    "chapter_id",
+                    "topic_id",
+                    "concept_id",
+                    "concept_name",
+                    "concept_mapping_status",
+                    "stem",
+                    "options_json",
+                    "correct_option",
+                    "explanation",
+                    "option_rationales_json",
+                    "source_name",
+                    "source_year",
+                    "difficulty",
+                    "tags_json",
+                    "created_at",
+                    "updated_at",
+                },
+                "practice_attempts": {
+                    "id",
+                    "user_id",
+                    "session_id",
+                    "subject_id",
+                    "question_id",
+                    "question_snapshot",
+                    "selected_option",
+                    "is_correct",
+                    "knowledge_point",
+                    "chapter_id",
+                    "topic_id",
+                    "concept_id",
+                    "concept_name",
+                    "concept_mapping_status",
+                    "source_type",
+                    "idempotency_key",
+                    "created_at",
+                },
+                "user_knowledge_stats": {
+                    "user_id",
+                    "subject_id",
+                    "knowledge_point",
+                    "chapter_id",
+                    "topic_id",
+                    "concept_id",
+                    "concept_name",
+                    "concept_mapping_status",
+                    "exposure_count",
+                    "attempt_count",
+                    "correct_count",
+                    "wrong_count",
+                    "mastery_score",
+                    "mastery_level",
+                    "last_seen_at",
+                    "last_practiced_at",
+                    "updated_at",
+                },
+                "app_settings": {
+                    "key",
+                    "value",
+                    "updated_at",
+                },
             }
             for table_name, columns in expected_columns.items():
                 self.assertTrue(columns.issubset(table_columns[table_name]), table_name)
@@ -504,6 +618,32 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "ix_practice_attempt_finalization_jobs_legacy_attempt_id",
                     "ix_practice_attempt_finalization_jobs_status",
                     "idx_practice_attempt_finalization_jobs_due",
+                },
+                "subjects": {
+                    "ix_subjects_name",
+                },
+                "chat_sessions": {
+                    "ix_chat_sessions_user_id",
+                    "ix_chat_sessions_subject_id",
+                    "idx_chat_sessions_user_updated",
+                },
+                "question_bank_items": {
+                    "ix_question_bank_items_subject_id",
+                    "ix_question_bank_items_knowledge_point",
+                    "ix_question_bank_items_concept_id",
+                },
+                "practice_attempts": {
+                    "ix_practice_attempts_user_id",
+                    "ix_practice_attempts_session_id",
+                    "ix_practice_attempts_subject_id",
+                    "ix_practice_attempts_knowledge_point",
+                    "ix_practice_attempts_concept_id",
+                    "idx_practice_attempts_user_created",
+                    "uq_practice_attempts_idempotency_key",
+                },
+                "user_knowledge_stats": {
+                    "ix_user_knowledge_stats_concept_id",
+                    "idx_user_knowledge_stats_user_concept",
                 },
             }
             for table_name, indexes in expected_indexes.items():
