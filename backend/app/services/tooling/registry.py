@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.services.tooling.adapters.base import ToolAdapter
+from app.services.tooling.adapters.mcp import MCPWebSearchAdapter
 from app.services.tooling.adapters.notebook import NotebookRetrieveAdapter
 from app.services.tooling.adapters.tavily import TavilyWebSearchAdapter
 from app.shared.schemas.agent_graphs import ToolCapability
@@ -59,5 +60,6 @@ class ToolRegistry:
 def build_default_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(NotebookRetrieveAdapter())
+    registry.register(MCPWebSearchAdapter())
     registry.register(TavilyWebSearchAdapter())
     return registry

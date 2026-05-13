@@ -36,6 +36,7 @@ from app.application.chat.service import (
     run_chat_once,
     stream_chat,
 )
+from app.infrastructure.llm.config import get_chat_sync_timeout_seconds
 from app.infrastructure.observability.request_context import get_request_id
 from app.interfaces.auth.dependencies import AuthenticatedUser, require_current_user
 from app.interfaces.api.chat_presenter import event_name_for_node, extract_event_data
@@ -138,6 +139,37 @@ def _question_log_metadata(question: str) -> dict[str, str | int]:
         "question_preview": normalized[:30],
         "question_hash": hashlib.sha256((question or "").encode("utf-8")).hexdigest()[:16],
     }
+
+
+def _chat_sync_timeout_response(*, session_id: str) -> ChatResponse:
+    final_answer = (
+        "云端模型响应超过本轮同步预算，我先安全返回，避免手机端连接超时。"
+        "请稍后重试，或把问题拆成更具体的小问题继续问。"
+    )
+    return ChatResponse(
+        session_id=session_id,
+        question_type="concept",
+        route="explain",
+        final_answer=final_answer,
+        explanation={
+            "topic": "云端响应较慢",
+            "thinking": "本轮同步聊天超过预算，已触发快速降级保护。",
+            "steps": [
+                "后端服务仍在线，但模型或外部工具响应较慢。",
+                "系统已停止等待本轮长响应，避免小程序 callContainer 先超时。",
+                "稍后重试时会继续优先使用知识库与联网搜索补充回答。",
+            ],
+            "mistakes": "",
+            "similar": [],
+        },
+        quiz_items=[],
+        memory={
+            "weak_points": [],
+            "error_count": {},
+            "recent_topics": [],
+            "last_session": "",
+        },
+    )
 
 
 async def _close_chat_stream_safely(
@@ -408,14 +440,18 @@ async def chat_sync(
     )
 
     try:
-        result = await asyncio.to_thread(
-            run_chat_once,
-            user_id=body.user_id,
-            session_id=body.session_id,
-            question=body.question,
-            subject_id=body.subject_id,
-            thinking_mode=body.thinking_mode,
-            client_request_id=body.client_request_id,
+        sync_timeout_seconds = get_chat_sync_timeout_seconds()
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                run_chat_once,
+                user_id=body.user_id,
+                session_id=body.session_id,
+                question=body.question,
+                subject_id=body.subject_id,
+                thinking_mode=body.thinking_mode,
+                client_request_id=body.client_request_id,
+            ),
+            timeout=sync_timeout_seconds,
         )
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.info(
@@ -437,6 +473,16 @@ async def chat_sync(
             quiz_clarification=result.quiz_clarification.model_dump() if result.quiz_clarification else None,
             memory=result.memory.model_dump(),
         )
+
+    except asyncio.TimeoutError:
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.warning(
+            "⏱️ [同步] 问答超过同步预算，返回降级响应: request_id={} timeout_seconds={} elapsed_ms={}",
+            request_id,
+            get_chat_sync_timeout_seconds(),
+            elapsed_ms,
+        )
+        return _chat_sync_timeout_response(session_id=body.session_id)
 
     except Exception as e:
         error_message = _safe_chat_error_message(e)

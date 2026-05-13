@@ -56,9 +56,9 @@ class LLMProviderTest(unittest.TestCase):
 
         self.assertEqual(
             [item["id"] for item in models],
-            ["deepseek-v4-pro", "anthropic-claude-3-haiku-20240306"],
+            ["deepseek-v4-flash", "anthropic-claude-3-haiku-20240306"],
         )
-        self.assertEqual(models[0]["label"], "DeepSeek-V4-Pro")
+        self.assertEqual(models[0]["label"], "DeepSeek-V4-Flash")
         self.assertEqual(models[0]["provider"], "DeepSeek")
         self.assertEqual(models[1]["label"], "Claude 3 Haiku")
         self.assertEqual(models[1]["provider"], "Anthropic")

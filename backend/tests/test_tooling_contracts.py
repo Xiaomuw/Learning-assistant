@@ -24,10 +24,12 @@ from app.shared.schemas.contracts import RetrievalDiagnostics, RetrievedDocument
 
 
 class ToolingContractsTest(unittest.TestCase):
-    def test_registry_returns_tavily_as_web_search_provider(self) -> None:
+    def test_registry_returns_mcp_before_tavily_as_web_search_provider(self) -> None:
         registry = build_default_tool_registry()
         tools = registry.find_by_capability(ToolCapability.WEB_SEARCH)
 
+        self.assertEqual([item.provider for item in tools[:2]], ["mcp", "tavily"])
+        self.assertTrue(any(item.provider == "mcp" for item in tools))
         self.assertTrue(any(item.provider == "tavily" for item in tools))
         self.assertTrue(all(item.capability == ToolCapability.WEB_SEARCH for item in tools))
 
@@ -209,6 +211,71 @@ class ToolingContractsTest(unittest.TestCase):
         self.assertEqual(result.output["verified_count"], 1)
         self.assertEqual(result.evidence[0].source_type, "notebook")
         self.assertEqual(result.evidence[0].text, "HTTP 默认端口是 80。")
+
+    def test_executor_prefers_mcp_web_search_when_available(self) -> None:
+        executor = ToolExecutor(
+            registry=build_default_tool_registry(),
+            policy_resolver=ToolPolicyResolver(),
+        )
+        payload = {
+            "documents": [
+                {
+                    "content": "HTTP 是应用层协议。",
+                    "metadata": {"url": "https://example.com/http"},
+                    "score": 0.9,
+                }
+            ]
+        }
+
+        with (
+            patch("app.services.tools.mcp_tools.mcp_search_available", return_value=True),
+            patch("app.services.tools.mcp_tools.mcp_web_search", return_value=payload),
+            patch("app.services.tools.tavily_tool.tavily_web_search", side_effect=AssertionError("should not call tavily")),
+        ):
+            result = executor.execute(
+                ToolExecutionRequest(
+                    capability=ToolCapability.WEB_SEARCH,
+                    input={"query": "HTTP", "max_results": 3},
+                    input_summary="HTTP",
+                    source_policy=SourcePolicy.OPEN_TOOLS.value,
+                )
+            )
+
+        self.assertEqual(result.status, ToolStatus.SUCCESS)
+        self.assertEqual(result.provider, "mcp")
+        self.assertEqual(result.evidence[0].source_type, "web")
+
+    def test_executor_falls_back_to_tavily_when_mcp_unavailable(self) -> None:
+        executor = ToolExecutor(
+            registry=build_default_tool_registry(),
+            policy_resolver=ToolPolicyResolver(),
+        )
+        payload = {
+            "documents": [
+                {
+                    "content": "HTTP 是请求响应协议。",
+                    "metadata": {"url": "https://example.com/http"},
+                    "score": 0.7,
+                }
+            ]
+        }
+
+        with (
+            patch("app.services.tools.mcp_tools.mcp_search_available", return_value=False),
+            patch("app.services.tools.tavily_tool.tavily_web_search", return_value=payload),
+        ):
+            result = executor.execute(
+                ToolExecutionRequest(
+                    capability=ToolCapability.WEB_SEARCH,
+                    input={"query": "HTTP", "max_results": 3},
+                    input_summary="HTTP",
+                    source_policy=SourcePolicy.OPEN_TOOLS.value,
+                )
+            )
+
+        self.assertEqual(result.status, ToolStatus.SUCCESS)
+        self.assertEqual(result.provider, "tavily")
+        self.assertEqual(result.evidence[0].source_type, "web")
 
 
 if __name__ == "__main__":

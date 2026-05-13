@@ -1681,15 +1681,24 @@ def _should_run_web_retrieval(
     question: str,
     source_policy: str,
 ) -> bool:
-    _ = state
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
         return False
-    if not _has_external_search_signal(question):
-        return False
-    return source_policy in {
+    if source_policy not in {
         SourcePolicy.OPEN_TOOLS.value,
         SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
-    }
+    }:
+        return False
+    if _has_external_search_signal(question):
+        return True
+
+    gate = dict(state.get("evidence_gate") or {})
+    question_type = str(state.get("question_type") or _infer_question_type(question))
+    intent = str((state.get("intent_result") or {}).get("intent") or "")
+    return (
+        not gate.get("sufficient")
+        and str(gate.get("status") or "") == "insufficient"
+        and (question_type == "concept" or intent == "concept_explain")
+    )
 
 
 def _query_terms(question: str) -> list[str]:

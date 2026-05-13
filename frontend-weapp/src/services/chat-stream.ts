@@ -291,8 +291,12 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         diagnostics.clientRequestId = error.diagnostics.clientRequestId;
         diagnostics.callId = error.diagnostics.callId;
         diagnostics.degradedReason = "cloud_container_error";
-        emitDiagnostics("云托管调用异常，准备进行一次重试。", { force: true });
-        if (!hasRetried && error.diagnostics.retryable) {
+        const isCloudContainerSync = diagnostics.transport === "cloud_container_sync";
+        emitDiagnostics(
+          isCloudContainerSync ? "云托管同步调用异常，已停止本轮处理。" : "云托管调用异常，准备进行一次重试。",
+          { force: true }
+        );
+        if (!isCloudContainerSync && !hasRetried && error.diagnostics.retryable) {
           await delay(800);
           if (!completed) {
             return sendSyncFallback(true, "cloud_container_transport_retry");

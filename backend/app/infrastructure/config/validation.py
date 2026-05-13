@@ -193,12 +193,16 @@ def collect_environment_warnings() -> list[str]:
             "LANGSMITH_TRACING=true 但未配置 LANGSMITH_API_KEY，LangSmith tracing 会自动降级为关闭。"
         )
 
-    if (os.getenv("MCP_ENABLED") or "").strip().lower() == "true" and _is_blank(
-        os.getenv("MCP_WEB_SERVER_URL")
-    ):
-        warnings.append(
-            "MCP_ENABLED=true 但未配置 MCP_WEB_SERVER_URL，外部 MCP 增强会自动降级为关闭。"
-        )
+    if (os.getenv("MCP_ENABLED") or "").strip().lower() == "true":
+        mcp_server_url = (os.getenv("MCP_WEB_SERVER_URL") or "").strip()
+        if _is_blank(mcp_server_url):
+            warnings.append(
+                "MCP_ENABLED=true 但未配置 MCP_WEB_SERVER_URL，外部 MCP 增强会自动降级为关闭。"
+            )
+        elif "dashscope.aliyuncs.com" in mcp_server_url and _is_blank(os.getenv("DASHSCOPE_API_KEY")):
+            warnings.append(
+                "MCP WebSearch 指向阿里云百炼，但未配置 DASHSCOPE_API_KEY，联网搜索会自动降级。"
+            )
 
     if (
         (_env_truthy("ENABLE_GRAPH_FACTS", default=True) or _env_truthy("ENABLE_GRAPH_DUAL_WRITE"))

@@ -357,6 +357,38 @@ class ChatApiTest(unittest.TestCase):
         self.assertNotIn("APITimeoutError", payload["error"])
         self.assertNotIn("Request timed out", payload["error"])
 
+    def test_chat_sync_returns_degraded_payload_when_budget_exceeded(self) -> None:
+        def _slow_chat_once(**_kwargs):
+            time.sleep(0.05)
+            return ChatExecutionResult(
+                session_id="session-1",
+                question_type="concept",
+                explanation=ExplanationPayload(topic="HTTP"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            )
+
+        with (
+            patch("app.interfaces.api.chat.run_chat_once", side_effect=_slow_chat_once),
+            patch("app.interfaces.api.chat.get_chat_sync_timeout_seconds", return_value=0.01),
+        ):
+            response = self.client.post(
+                "/api/chat/sync",
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-1",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["session_id"], "session-1")
+        self.assertEqual(payload["route"], "explain")
+        self.assertIn("超过预算", payload["explanation"]["thinking"])
+        self.assertIn("避免手机端连接超时", payload["final_answer"])
+
     def test_run_chat_once_uses_orchestrator_runtime_by_default(self) -> None:
         orchestrator_state = {
             "question_type": "concept",

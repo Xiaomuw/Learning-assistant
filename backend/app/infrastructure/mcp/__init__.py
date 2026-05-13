@@ -9,7 +9,7 @@ from app.infrastructure.mcp.client import (  # noqa: F401
     load_tool_definitions,
     normalize_read_payload,
     normalize_search_payload,
+    resolve_tool_name,
     reset_mcp_client_cache,
 )
 from app.infrastructure.mcp.query import build_external_query, extract_urls  # noqa: F401
-

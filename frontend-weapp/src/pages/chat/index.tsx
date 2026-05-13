@@ -530,6 +530,7 @@ function statusStage(data: any): ChatProcessStage {
 function streamTransportLabel(transport?: string) {
   const normalized = safeText(transport);
   if (normalized === "chunked") return "chunked 流式";
+  if (normalized === "cloud_container_sync") return "云托管同步";
   if (normalized === "sync_fallback") return "同步请求";
   return normalized || "传输状态";
 }
@@ -1252,7 +1253,7 @@ export default function ChatPage() {
     const degraded = streamingDegradedText(diagnostics.degradedReason);
     return (
       <View className="process-section">
-        <Text className="process-section-title">流式诊断</Text>
+        <Text className="process-section-title">传输诊断</Text>
         <View className="process-tags">
           {tags.map((tag) => (
             <Text key={`${tag}`} className="process-tag">{tag}</Text>

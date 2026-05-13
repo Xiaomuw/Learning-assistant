@@ -352,7 +352,7 @@ class ModelConfigApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["current_model"], "deepseek-v4-flash")
-        self.assertEqual([item["id"] for item in payload["available_models"]], ["deepseek-v4-pro", "deepseek-v4-flash"])
+        self.assertEqual([item["id"] for item in payload["available_models"]], ["deepseek-v4-flash"])
 
 
 if __name__ == "__main__":

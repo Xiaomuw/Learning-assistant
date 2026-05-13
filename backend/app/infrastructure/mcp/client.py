@@ -21,6 +21,7 @@ DEFAULT_MCP_TIMEOUT_SECONDS = 15
 DEFAULT_MCP_MAX_RESULTS = 5
 TOOLS_CACHE_TTL_SECONDS = 300
 SUPPORTED_TRANSPORT = "http"
+SUPPORTED_TRANSPORTS = {"http", "streamablehttp"}
 
 _CLIENT_LOCK = Lock()
 _CLIENT_INSTANCE: "HTTPMCPClient | None" = None
@@ -29,6 +30,7 @@ _RUNTIME_DISABLED = False
 _TOOLS_CACHE: dict[str, Any] = {
     "expires_at": 0.0,
     "definitions": {},
+    "auto_selected": {},
 }
 
 
@@ -50,8 +52,12 @@ def _get_bool_env(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _normalize_transport(value: str) -> str:
+    return value.strip().replace("_", "").replace("-", "").lower()
+
+
 def get_mcp_settings() -> MCPSettings:
-    transport = (os.getenv("MCP_TRANSPORT") or SUPPORTED_TRANSPORT).strip().lower()
+    transport = _normalize_transport(os.getenv("MCP_TRANSPORT") or SUPPORTED_TRANSPORT)
     server_url = (os.getenv("MCP_WEB_SERVER_URL") or "").strip() or None
     timeout_raw = os.getenv("MCP_REQUEST_TIMEOUT_SECONDS")
     max_results_raw = os.getenv("MCP_MAX_RESULTS")
@@ -68,7 +74,7 @@ def get_mcp_settings() -> MCPSettings:
 
     enabled = (
         _get_bool_env("MCP_ENABLED", default=False)
-        and transport == SUPPORTED_TRANSPORT
+        and transport in SUPPORTED_TRANSPORTS
         and bool(server_url)
     )
     return MCPSettings(
@@ -90,6 +96,7 @@ def reset_mcp_client_cache() -> None:
         _RUNTIME_DISABLED = False
         _TOOLS_CACHE["expires_at"] = 0.0
         _TOOLS_CACHE["definitions"] = {}
+        _TOOLS_CACHE["auto_selected"] = {}
 
 
 class HTTPMCPClient:
@@ -97,6 +104,19 @@ class HTTPMCPClient:
         self.settings = settings
         self.session = requests.Session()
         self._handshake_done = False
+        self._session_id: str | None = None
+
+    def _headers(self) -> dict[str, str]:
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+        }
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+        dashscope_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
+        if dashscope_key:
+            headers["Authorization"] = f"Bearer {dashscope_key}"
+        return headers
 
     def _post(self, payload: dict[str, Any]) -> requests.Response:
         if not self.settings.server_url:
@@ -105,10 +125,61 @@ class HTTPMCPClient:
             self.settings.server_url,
             json=payload,
             timeout=self.settings.request_timeout_seconds,
-            headers={"Accept": "application/json, text/event-stream"},
+            headers=self._headers(),
         )
+        session_id = response.headers.get("Mcp-Session-Id")
+        if session_id:
+            self._session_id = session_id
         response.raise_for_status()
         return response
+
+    @staticmethod
+    def _parse_sse_response(text: str) -> Any:
+        events: list[Any] = []
+        data_lines: list[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                if data_lines:
+                    event_data = "\n".join(data_lines).strip()
+                    if event_data and event_data != "[DONE]":
+                        parsed = _parse_json_text_blob(event_data)
+                        events.append(parsed if parsed is not None else event_data)
+                    data_lines = []
+                continue
+            if line.startswith(":"):
+                continue
+            if line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+        if data_lines:
+            event_data = "\n".join(data_lines).strip()
+            if event_data and event_data != "[DONE]":
+                parsed = _parse_json_text_blob(event_data)
+                events.append(parsed if parsed is not None else event_data)
+        for item in events:
+            if isinstance(item, dict) and ("result" in item or "error" in item):
+                return item
+        if len(events) == 1:
+            return events[0]
+        return events
+
+    @classmethod
+    def _decode_rpc_response(cls, response: requests.Response) -> Any:
+        content_type = response.headers.get("content-type", "").lower()
+        text = response.text.strip()
+        if not text:
+            return {}
+        if "text/event-stream" in content_type:
+            return cls._parse_sse_response(text)
+        try:
+            return response.json()
+        except ValueError:
+            parsed = _parse_json_text_blob(text)
+            if parsed is not None:
+                return parsed
+            if text.startswith("data:") or "\ndata:" in text:
+                return cls._parse_sse_response(text)
+            return {"content": text}
 
     def _rpc(self, method: str, params: dict[str, Any] | None = None) -> Any:
         payload: dict[str, Any] = {
@@ -120,7 +191,7 @@ class HTTPMCPClient:
             payload["params"] = params
 
         response = self._post(payload)
-        data = response.json()
+        data = self._decode_rpc_response(response)
         if isinstance(data, dict) and data.get("error"):
             error = data["error"]
             message = error.get("message") if isinstance(error, dict) else str(error)
@@ -212,8 +283,8 @@ def initialize_mcp() -> bool:
     if not settings.server_url:
         logger.warning("⚠️ MCP 已开启，但未配置 MCP_WEB_SERVER_URL，已跳过")
         return False
-    if settings.transport != SUPPORTED_TRANSPORT:
-        logger.warning(f"⚠️ 当前仅支持 HTTP MCP，已忽略 transport={settings.transport}")
+    if settings.transport not in SUPPORTED_TRANSPORTS:
+        logger.warning(f"⚠️ 不支持的 MCP transport={settings.transport}，已跳过")
         return False
 
     try:
@@ -225,6 +296,7 @@ def initialize_mcp() -> bool:
     logger.info(
         "✅ MCP 外部工具已启用 | "
         f"server={settings.server_url} | "
+        f"transport={settings.transport} | "
         f"tools={', '.join(sorted(definitions.keys())) or 'none'}"
     )
     return True
@@ -260,20 +332,47 @@ def load_tool_definitions(force_refresh: bool = False) -> dict[str, dict[str, An
     }
     _TOOLS_CACHE["definitions"] = dict(definitions)
     _TOOLS_CACHE["expires_at"] = now + TOOLS_CACHE_TTL_SECONDS
+    _TOOLS_CACHE["auto_selected"] = {}
     return dict(definitions)
+
+
+def resolve_tool_name(tool_name: str) -> str:
+    requested = str(tool_name or "").strip()
+    if not requested:
+        return ""
+    definitions = load_tool_definitions()
+    if requested in definitions:
+        return requested
+    if len(definitions) == 1:
+        selected = next(iter(definitions))
+        auto_selected = dict(_TOOLS_CACHE.get("auto_selected") or {})
+        if auto_selected.get(requested) != selected:
+            logger.info(
+                "ℹ️ MCP 工具 {} 未在 tools/list 中找到，已自动使用唯一远端工具 {}",
+                requested,
+                selected,
+            )
+            auto_selected[requested] = selected
+            _TOOLS_CACHE["auto_selected"] = auto_selected
+        return selected
+    return requested
 
 
 def is_tool_available(tool_name: str) -> bool:
     if not tool_name:
         return False
-    return tool_name in load_tool_definitions()
+    definitions = load_tool_definitions()
+    return resolve_tool_name(tool_name) in definitions
 
 
 def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     client = get_client()
     if client is None:
         raise RuntimeError("MCP 当前不可用")
-    return client.call_tool(name, arguments)
+    resolved_name = resolve_tool_name(name)
+    if not resolved_name:
+        raise RuntimeError("MCP 工具名称为空")
+    return client.call_tool(resolved_name, arguments)
 
 
 def _parse_json_text_blob(value: str) -> Any:
@@ -333,11 +432,7 @@ def normalize_search_payload(
     candidates: list[Any] = []
 
     if isinstance(structured, dict):
-        for key in ("results", "items", "documents", "links", "pages"):
-            value = structured.get(key)
-            if isinstance(value, list):
-                candidates = value
-                break
+        candidates = _extract_search_candidates(structured)
     elif isinstance(structured, list):
         candidates = structured
 
@@ -345,13 +440,17 @@ def normalize_search_payload(
         text_content = _extract_text_content(payload)
         parsed = _parse_json_text_blob(text_content)
         if isinstance(parsed, dict):
-            for key in ("results", "items", "documents", "links", "pages"):
-                value = parsed.get(key)
-                if isinstance(value, list):
-                    candidates = value
-                    break
+            candidates = _extract_search_candidates(parsed)
         elif isinstance(parsed, list):
             candidates = parsed
+        elif text_content:
+            candidates = [
+                {
+                    "title": "MCP WebSearch",
+                    "snippet": text_content,
+                    "source": "mcp:web_search",
+                }
+            ]
 
     normalized: list[dict[str, Any]] = []
     for raw_item in candidates[:max_results]:
@@ -379,6 +478,31 @@ def normalize_search_payload(
             }
         )
     return normalized
+
+
+def _extract_search_candidates(value: dict[str, Any]) -> list[Any]:
+    for key in (
+        "results",
+        "items",
+        "documents",
+        "links",
+        "pages",
+        "search_results",
+        "web_search_results",
+    ):
+        items = value.get(key)
+        if isinstance(items, list):
+            return items
+
+    for key in ("data", "result", "output"):
+        nested = value.get(key)
+        if isinstance(nested, list):
+            return nested
+        if isinstance(nested, dict):
+            items = _extract_search_candidates(nested)
+            if items:
+                return items
+    return []
 
 
 def normalize_read_payload(

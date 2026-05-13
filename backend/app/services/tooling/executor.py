@@ -35,23 +35,40 @@ class ToolExecutor:
                 error="tool_not_registered",
             )
 
-        tool = candidates[0]
-        decision = self.policy_resolver.resolve(
-            source_policy=request.source_policy,
-            capability=request.capability,
-            risk_level=_max_risk(request.risk_level, tool.adapter.registration.risk_level),
-            tenant_scope=tool.adapter.registration.tenant_scope,
-            tenant_id=request.tenant_id,
-            test_mode=request.test_mode,
-        )
-        if not decision.allowed:
-            return ToolResult(
-                tool_id=tool.tool_id,
-                provider=tool.provider,
-                capability=tool.capability,
-                status=ToolStatus.BLOCKED,
-                input_summary=request.input_summary,
-                error=decision.reason,
+        last_error: ToolResult | None = None
+        for tool in candidates:
+            decision = self.policy_resolver.resolve(
+                source_policy=request.source_policy,
+                capability=request.capability,
+                risk_level=_max_risk(request.risk_level, tool.adapter.registration.risk_level),
+                tenant_scope=tool.adapter.registration.tenant_scope,
+                tenant_id=request.tenant_id,
+                test_mode=request.test_mode,
             )
+            if not decision.allowed:
+                return ToolResult(
+                    tool_id=tool.tool_id,
+                    provider=tool.provider,
+                    capability=tool.capability,
+                    status=ToolStatus.BLOCKED,
+                    input_summary=request.input_summary,
+                    error=decision.reason,
+                )
 
-        return tool.adapter.invoke(request)
+            result = tool.adapter.invoke(request)
+            if result.status != ToolStatus.ERROR:
+                return result
+            last_error = result
+            if provider:
+                break
+
+        if last_error is not None:
+            return last_error
+        return ToolResult(
+            tool_id=f"{request.capability.value}:unavailable",
+            provider=provider or "",
+            capability=request.capability,
+            status=ToolStatus.ERROR,
+            input_summary=request.input_summary,
+            error="tool_execution_failed",
+        )

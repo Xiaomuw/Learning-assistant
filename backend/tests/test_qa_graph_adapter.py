@@ -177,13 +177,13 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         self.assertEqual(
             [item["capability"] for item in result["tool_requests"]],
-            [ToolCapability.NOTEBOOK_RETRIEVE.value],
+            [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value],
         )
         request_input = result["tool_requests"][0]["input"]
         self.assertEqual(request_input["subject_id"], "computer-network")
         self.assertEqual(request_input["concept_id"], "computer-network.application.http-https")
         self.assertFalse(result["web_search_attempted"])
-        self.assertEqual(result["web_search_reason"], "not_requested_before_evidence_judge")
+        self.assertEqual(result["web_search_reason"], "planned_without_executor")
 
     def test_notebook_signal_plans_internal_then_web_if_evidence_insufficient(self) -> None:
         result = build_graph().compile().invoke(
@@ -197,7 +197,10 @@ class QAGraphAdapterTest(unittest.TestCase):
         )
 
         requested_capabilities = [item["capability"] for item in result["tool_requests"]]
-        self.assertEqual(requested_capabilities, [ToolCapability.NOTEBOOK_RETRIEVE.value])
+        self.assertEqual(
+            requested_capabilities,
+            [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value],
+        )
         self.assertEqual(result["source_policy"], SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value)
         self.assertFalse(result["web_search_attempted"])
 

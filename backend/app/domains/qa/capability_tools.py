@@ -228,19 +228,19 @@ class CapabilityToolExecutor:
 
 
 def _web_search_available(agent_request: AgentRequest) -> bool:
-    return tavily_available(agent_request) or mcp_search_available(agent_request)
+    return mcp_search_available(agent_request) or tavily_available(agent_request)
 
 
 def _execute_web_search(agent_request: AgentRequest, args: dict[str, Any]) -> dict[str, Any]:
-    if tavily_available(agent_request):
-        payload = tavily_web_search(agent_request, args)
-        payload["_tool_provider"] = "tavily"
-        _mark_web_documents(payload, provider="tavily")
-        return payload
     if mcp_search_available(agent_request):
         payload = mcp_web_search(agent_request, args)
         payload["_tool_provider"] = "mcp"
         _mark_web_documents(payload, provider="mcp")
+        return payload
+    if tavily_available(agent_request):
+        payload = tavily_web_search(agent_request, args)
+        payload["_tool_provider"] = "tavily"
+        _mark_web_documents(payload, provider="tavily")
         return payload
     raise RuntimeError("web_search provider unavailable")
 
