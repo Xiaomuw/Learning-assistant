@@ -13,6 +13,8 @@ DEFAULT_NVIDIA_GLM_MODEL = "z-ai/glm4.7"
 DEFAULT_LLM_TIMEOUT_SECONDS = 20.0
 DEFAULT_LLM_MAX_RETRIES = 0
 DEFAULT_CHAT_SYNC_TIMEOUT_SECONDS = 15.0
+DEFAULT_CHAT_SYNC_INLINE_BUDGET_SECONDS = 5.0
+DEFAULT_CHAT_SYNC_POLL_RETRY_AFTER_MS = 2000
 DEFAULT_CHAT_SYNC_FAST_CONCEPT_FALLBACK = True
 DEFAULT_PRACTICE_GENERATION_TIMEOUT_SECONDS = 6.0
 DEFAULT_PRACTICE_REPAIR_TIMEOUT_SECONDS = 4.0
@@ -67,6 +69,28 @@ def get_chat_sync_timeout_seconds() -> float:
         return max(3.0, float(raw))
     except ValueError:
         return DEFAULT_CHAT_SYNC_TIMEOUT_SECONDS
+
+
+def get_chat_sync_inline_budget_seconds() -> float:
+    raw = os.getenv("CHAT_SYNC_INLINE_BUDGET_SECONDS")
+    if not raw:
+        return DEFAULT_CHAT_SYNC_INLINE_BUDGET_SECONDS
+
+    try:
+        return min(10.0, max(1.0, float(raw)))
+    except ValueError:
+        return DEFAULT_CHAT_SYNC_INLINE_BUDGET_SECONDS
+
+
+def get_chat_sync_poll_retry_after_ms() -> int:
+    raw = os.getenv("CHAT_SYNC_POLL_RETRY_AFTER_MS")
+    if not raw:
+        return DEFAULT_CHAT_SYNC_POLL_RETRY_AFTER_MS
+
+    try:
+        return min(10000, max(1000, int(raw)))
+    except ValueError:
+        return DEFAULT_CHAT_SYNC_POLL_RETRY_AFTER_MS
 
 
 def is_chat_sync_fast_concept_fallback_enabled() -> bool:

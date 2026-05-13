@@ -36,8 +36,17 @@ from app.application.chat.service import (
     run_chat_once,
     stream_chat,
 )
-from app.infrastructure.llm.config import get_chat_sync_timeout_seconds
-from app.infrastructure.observability.request_context import get_request_id
+from app.infrastructure.db.repositories.chat_jobs import (
+    create_chat_async_job,
+    get_chat_async_job,
+    mark_chat_async_job_completed,
+    mark_chat_async_job_failed,
+)
+from app.infrastructure.llm.config import (
+    get_chat_sync_inline_budget_seconds,
+    get_chat_sync_poll_retry_after_ms,
+)
+from app.infrastructure.observability.request_context import get_request_id, reset_request_id, set_request_id
 from app.interfaces.auth.dependencies import AuthenticatedUser, require_current_user
 from app.interfaces.api.chat_presenter import event_name_for_node, extract_event_data
 from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
@@ -45,6 +54,7 @@ from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
 router = APIRouter()
 
 CHAT_HEARTBEAT_SECONDS = 12.0
+_RUNNING_CHAT_JOBS: dict[str, asyncio.Task] = {}
 
 
 def _runtime_stream_sse_event(raw_event: Any, *, session_id: str) -> dict[str, str] | None:
@@ -172,6 +182,116 @@ def _chat_sync_timeout_response(*, session_id: str) -> ChatResponse:
     )
 
 
+def _chat_response_from_result(
+    *,
+    body: ChatRequest,
+    result,
+    request_id: str,
+    job_id: str | None = None,
+) -> ChatResponse:
+    return ChatResponse(
+        session_id=body.session_id,
+        question_type=result.question_type,
+        route=result.route,
+        final_answer=result.final_answer,
+        explanation=result.explanation.model_dump(),
+        quiz_items=[item.model_dump() for item in result.quiz_items],
+        quiz_request=result.quiz_request.model_dump() if result.quiz_request else None,
+        quiz_clarification=result.quiz_clarification.model_dump() if result.quiz_clarification else None,
+        memory=result.memory.model_dump(),
+        status="completed",
+        job_id=job_id,
+        request_id=request_id,
+    )
+
+
+def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str) -> ChatResponse:
+    retry_after_ms = get_chat_sync_poll_retry_after_ms()
+    return ChatResponse(
+        session_id=session_id,
+        question_type="concept",
+        route="explain",
+        final_answer="我正在联网搜索并整理答案，稍等一下就好。",
+        explanation={
+            "topic": "正在整理答案",
+            "thinking": "本轮需要联网搜索或较长模型生成，已转入后台继续处理。",
+            "steps": [
+                "先返回 pending，避免手机端 callContainer 超时。",
+                "后台会继续完成知识库检索、联网搜索和答案整理。",
+                "小程序会自动轮询，完成后替换为最终回答。",
+            ],
+            "mistakes": "",
+            "similar": [],
+        },
+        quiz_items=[],
+        memory={
+            "weak_points": [],
+            "error_count": {},
+            "recent_topics": [],
+            "last_session": "",
+        },
+        status="pending",
+        job_id=job_id,
+        request_id=request_id,
+        retry_after_ms=retry_after_ms,
+    )
+
+
+def _chat_response_to_job_result(response: ChatResponse) -> dict[str, Any]:
+    return response.model_dump(mode="json")
+
+
+def _job_error_payload(exc: Exception, *, request_id: str) -> dict[str, Any]:
+    reason = _chat_error_reason(exc)
+    return {
+        "error": _safe_chat_error_message(exc),
+        "reason": reason,
+        "retryable": reason in {"timeout", "model_unavailable", "workflow_error"},
+        "request_id": request_id,
+    }
+
+
+async def _run_chat_async_job(*, job_id: str, body: ChatRequest, request_id: str) -> ChatResponse | None:
+    token = set_request_id(request_id)
+    try:
+        result = await asyncio.to_thread(
+            run_chat_once,
+            user_id=body.user_id,
+            session_id=body.session_id,
+            question=body.question,
+            subject_id=body.subject_id,
+            thinking_mode=body.thinking_mode,
+            client_request_id=body.client_request_id,
+            request_id=request_id,
+        )
+        response = _chat_response_from_result(body=body, result=result, request_id=request_id, job_id=job_id)
+        mark_chat_async_job_completed(job_id=job_id, result=_chat_response_to_job_result(response))
+        return response
+    except Exception as exc:  # noqa: BLE001 - background job should persist structured failure
+        error_payload = _job_error_payload(exc, request_id=request_id)
+        mark_chat_async_job_failed(job_id=job_id, error=error_payload)
+        logger.error(
+            "❌ [同步后台] 问答任务失败: request_id={} job_id={} reason={} error={}",
+            request_id,
+            job_id,
+            error_payload.get("reason"),
+            error_payload.get("error"),
+        )
+        return None
+    finally:
+        reset_request_id(token)
+
+
+def _ensure_chat_job_task(*, job_id: str, body: ChatRequest, request_id: str) -> asyncio.Task:
+    task = _RUNNING_CHAT_JOBS.get(job_id)
+    if task and not task.done():
+        return task
+    task = asyncio.create_task(_run_chat_async_job(job_id=job_id, body=body, request_id=request_id))
+    _RUNNING_CHAT_JOBS[job_id] = task
+    task.add_done_callback(lambda _task: _RUNNING_CHAT_JOBS.pop(job_id, None))
+    return task
+
+
 async def _close_chat_stream_safely(
     *,
     chat_stream,
@@ -228,6 +348,21 @@ class ChatResponse(BaseModel):
     quiz_request: dict | None = None
     quiz_clarification: dict | None = None
     memory: dict | None = None
+    status: str = "completed"
+    job_id: str | None = None
+    request_id: str | None = None
+    retry_after_ms: int | None = None
+
+
+class ChatJobResponse(BaseModel):
+    """异步聊天任务查询响应"""
+    status: str
+    job_id: str
+    request_id: str
+    response: ChatResponse | None = None
+    error: dict | None = None
+    retryable: bool = True
+    retry_after_ms: int = 2000
 
 
 # ---------- 路由：SSE 流式 ----------
@@ -439,50 +574,49 @@ async def chat_sync(
         question_meta["question_hash"],
     )
 
+    job_id = request_id
+    existing_job = get_chat_async_job(user_id=body.user_id, job_id=job_id)
+    if existing_job and existing_job.get("status") == "completed" and existing_job.get("result_json"):
+        return ChatResponse.model_validate(existing_job["result_json"])
+    if existing_job and existing_job.get("status") == "failed" and existing_job.get("error_json"):
+        error_payload = dict(existing_job["error_json"] or {})
+        return JSONResponse(status_code=500, content=error_payload)
+
+    create_chat_async_job(
+        job_id=job_id,
+        user_id=body.user_id,
+        session_id=body.session_id,
+        request_id=request_id,
+    )
+    task = _ensure_chat_job_task(job_id=job_id, body=body, request_id=request_id)
+
     try:
-        sync_timeout_seconds = get_chat_sync_timeout_seconds()
-        result = await asyncio.wait_for(
-            asyncio.to_thread(
-                run_chat_once,
-                user_id=body.user_id,
-                session_id=body.session_id,
-                question=body.question,
-                subject_id=body.subject_id,
-                thinking_mode=body.thinking_mode,
-                client_request_id=body.client_request_id,
-            ),
-            timeout=sync_timeout_seconds,
-        )
+        inline_budget_seconds = get_chat_sync_inline_budget_seconds()
+        response = await asyncio.wait_for(asyncio.shield(task), timeout=inline_budget_seconds)
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        if response is None:
+            job = get_chat_async_job(user_id=body.user_id, job_id=job_id)
+            error_payload = dict((job or {}).get("error_json") or _job_error_payload(RuntimeError("workflow_error"), request_id=request_id))
+            return JSONResponse(status_code=500, content=error_payload)
         logger.info(
             "✅ [同步] 问答完成: request_id={} route={} question_type={} elapsed_ms={}",
             request_id,
-            result.route,
-            result.question_type,
+            response.route,
+            response.question_type,
             elapsed_ms,
         )
-
-        return ChatResponse(
-            session_id=body.session_id,
-            question_type=result.question_type,
-            route=result.route,
-            final_answer=result.final_answer,
-            explanation=result.explanation.model_dump(),
-            quiz_items=[item.model_dump() for item in result.quiz_items],
-            quiz_request=result.quiz_request.model_dump() if result.quiz_request else None,
-            quiz_clarification=result.quiz_clarification.model_dump() if result.quiz_clarification else None,
-            memory=result.memory.model_dump(),
-        )
+        return response
 
     except asyncio.TimeoutError:
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.warning(
-            "⏱️ [同步] 问答超过同步预算，返回降级响应: request_id={} timeout_seconds={} elapsed_ms={}",
+            "⏳ [同步] 问答超过内联预算，返回 pending: request_id={} job_id={} inline_budget_seconds={} elapsed_ms={}",
             request_id,
-            get_chat_sync_timeout_seconds(),
+            job_id,
+            get_chat_sync_inline_budget_seconds(),
             elapsed_ms,
         )
-        return _chat_sync_timeout_response(session_id=body.session_id)
+        return _chat_sync_pending_response(session_id=body.session_id, job_id=job_id, request_id=request_id)
 
     except Exception as e:
         error_message = _safe_chat_error_message(e)
@@ -504,3 +638,48 @@ async def chat_sync(
                 "request_id": request_id,
             },
         )
+
+
+@router.get("/chat/jobs/{job_id}", response_model=ChatJobResponse)
+async def get_chat_job(
+    job_id: str,
+    current_user: AuthenticatedUser = Depends(require_current_user),
+):
+    """
+    GET /api/chat/jobs/{job_id} — 查询同步聊天后台任务结果
+    """
+    job = get_chat_async_job(user_id=current_user.id, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="聊天任务不存在")
+
+    status = str(job.get("status") or "pending")
+    request_id = str(job.get("request_id") or job_id)
+    if status == "completed" and job.get("result_json"):
+        response = ChatResponse.model_validate(job["result_json"])
+        return ChatJobResponse(
+            status="completed",
+            job_id=job_id,
+            request_id=request_id,
+            response=response,
+            retryable=False,
+            retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+        )
+
+    if status == "failed":
+        error_payload = dict(job.get("error_json") or {})
+        return ChatJobResponse(
+            status="failed",
+            job_id=job_id,
+            request_id=request_id,
+            error=error_payload,
+            retryable=bool(error_payload.get("retryable", True)),
+            retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+        )
+
+    return ChatJobResponse(
+        status="pending",
+        job_id=job_id,
+        request_id=request_id,
+        retryable=True,
+        retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+    )

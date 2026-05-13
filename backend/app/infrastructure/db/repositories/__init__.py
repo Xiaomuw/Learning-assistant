@@ -23,6 +23,12 @@ from app.infrastructure.db.repositories.auth import (  # noqa: F401
     update_user_password_hash,
 )
 from app.infrastructure.db.repositories.bootstrap import init_database  # noqa: F401
+from app.infrastructure.db.repositories.chat_jobs import (  # noqa: F401
+    create_chat_async_job,
+    get_chat_async_job,
+    mark_chat_async_job_completed,
+    mark_chat_async_job_failed,
+)
 from app.infrastructure.db.repositories.practice import (  # noqa: F401
     create_practice_attempt_record,
     list_practice_recommendation_records,

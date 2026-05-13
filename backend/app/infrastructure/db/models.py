@@ -365,6 +365,29 @@ class ChatSessionModel(Base):
     )
 
 
+class ChatAsyncJobModel(Base):
+    __tablename__ = "chat_async_jobs"
+
+    job_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    session_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    request_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), index=True, nullable=False, default="pending")
+    result_json: Mapped[dict | None] = mapped_column(GraphJSON, nullable=True, default=None)
+    error_json: Mapped[dict | None] = mapped_column(GraphJSON, nullable=True, default=None)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class QuestionBankItemModel(Base):
     __tablename__ = "question_bank_items"
 

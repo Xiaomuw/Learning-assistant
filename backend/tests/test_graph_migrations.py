@@ -270,7 +270,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                 ).fetchone()[0]
             finally:
                 connection.close()
-            self.assertEqual(applied_revision, "0012_core_app_tables")
+            self.assertEqual(applied_revision, "0013_chat_async_jobs")
             self.assertTrue(
                 {
                     "subjects",
@@ -301,6 +301,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "practice_question",
                     "alembic_version",
                     "practice_attempt_finalization_jobs",
+                    "chat_async_jobs",
                 }.issubset(table_names)
             )
             expected_columns = {
@@ -403,6 +404,17 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "locked_at",
                     "next_run_at",
                     "last_error",
+                    "created_at",
+                    "updated_at",
+                },
+                "chat_async_jobs": {
+                    "job_id",
+                    "user_id",
+                    "session_id",
+                    "request_id",
+                    "status",
+                    "result_json",
+                    "error_json",
                     "created_at",
                     "updated_at",
                 },
@@ -626,6 +638,13 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "ix_chat_sessions_user_id",
                     "ix_chat_sessions_subject_id",
                     "idx_chat_sessions_user_updated",
+                },
+                "chat_async_jobs": {
+                    "ix_chat_async_jobs_user_id",
+                    "ix_chat_async_jobs_session_id",
+                    "ix_chat_async_jobs_request_id",
+                    "ix_chat_async_jobs_status",
+                    "idx_chat_async_jobs_user_created",
                 },
                 "question_bank_items": {
                     "ix_question_bank_items_subject_id",

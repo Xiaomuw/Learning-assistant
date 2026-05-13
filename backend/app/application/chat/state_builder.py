@@ -20,6 +20,7 @@ def build_initial_state(
     request_mode: str,
     thinking_mode: bool = False,
     client_request_id: str | None = None,
+    request_id: str | None = None,
 ) -> AgentState:
     """Build the LangGraph state for a chat turn."""
     context = build_request_context(user_id, session_id)
@@ -29,13 +30,15 @@ def build_initial_state(
     subject_name = subject.name if subject else str(fallback_subject["name"])
     subject_description = subject.description if subject else str(fallback_subject["description"])
     normalized_client_request_id = str(client_request_id or "").strip()
-    message_id = normalized_client_request_id or str(uuid4())
+    normalized_request_id = str(request_id or "").strip()
+    message_id = normalized_client_request_id or normalized_request_id or str(uuid4())
+    normalized_request_id = normalized_request_id or message_id
 
     initial_state: AgentState = {
         "user_id": user_id,
         "session_id": session_id,
         "message_id": message_id,
-        "request_id": message_id,
+        "request_id": normalized_request_id,
         "client_request_id": normalized_client_request_id,
         "subject_id": normalized_subject_id,
         "subject_name": subject_name,

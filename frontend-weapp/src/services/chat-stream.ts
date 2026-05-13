@@ -30,6 +30,8 @@ export interface ChatStreamHandlers {
 const MIN_CHAT_REQUEST_TIMEOUT_MS = 120000;
 const CHAT_REQUEST_TIMEOUT_BUFFER_MS = 15000;
 const STREAM_DIAGNOSTICS_THROTTLE_MS = 750;
+const CHAT_JOB_DEFAULT_RETRY_AFTER_MS = 2000;
+const CHAT_JOB_MAX_POLL_MS = 90000;
 
 function chatRequestTimeoutMs(idleTimeoutMs: number) {
   return Math.max(idleTimeoutMs + CHAT_REQUEST_TIMEOUT_BUFFER_MS, MIN_CHAT_REQUEST_TIMEOUT_MS);
@@ -202,6 +204,135 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     fail("登录已过期，请重新登录");
   };
 
+  const emitAsyncJobStatus = (detail: string) => {
+    handlers.onEvent({
+      event: "status",
+      data: {
+        stream_stage: "chat_async_job",
+        stage_label: "云托管后台处理",
+        detail,
+        status: "running",
+        streaming_mode: "sync",
+        session_id: payload.session_id
+      }
+    });
+    emitDiagnostics(detail, { force: true });
+  };
+
+  const dispatchCompletedSyncResponse = (result: any, detail = "同步请求已返回完整回答。") => {
+    if (completed) return;
+    const explanation = result.explanation as Explanation | undefined;
+    diagnostics.parsedEventCount = (diagnostics.parsedEventCount || 0) + 1;
+    emitDiagnostics(detail, { force: true });
+    handlers.onEvent({
+      event: "explanation",
+      data: {
+        final_answer: buildAnswerContent(result.final_answer || "", explanation),
+        explanation,
+        question_type: result.question_type,
+        route: result.route,
+        session_id: result.session_id
+      }
+    });
+    if (
+      (Array.isArray(result.quiz_items) && result.quiz_items.length > 0) ||
+      result.quiz_clarification ||
+      result.quiz_generation_status
+    ) {
+      handlers.onEvent({
+        event: "quiz",
+        data: {
+          quiz_items: Array.isArray(result.quiz_items) ? result.quiz_items : [],
+          quiz_request: result.quiz_request,
+          quiz_clarification: result.quiz_clarification,
+          quiz_generation_status: result.quiz_generation_status,
+          final_answer: result.final_answer,
+          session_id: result.session_id,
+          subject_id: payload.subject_id
+        }
+      });
+    }
+    if (result.memory) {
+      handlers.onEvent({
+        event: "memory",
+        data: {
+          memory: result.memory,
+          session_id: result.session_id
+        }
+      });
+    }
+    handlers.onEvent({ event: "done", data: { message: "处理完成" } });
+    finish();
+  };
+
+  const pollChatJob = async (jobId: string, retryAfterMs?: number, hasRetriedAuth = false) => {
+    const deadlineAt = Date.now() + CHAT_JOB_MAX_POLL_MS;
+    let nextDelayMs = Math.max(
+      1000,
+      Math.min(10000, retryAfterMs || CHAT_JOB_DEFAULT_RETRY_AFTER_MS)
+    );
+    emitAsyncJobStatus("正在联网搜索并整理答案。");
+    while (!completed && Date.now() < deadlineAt) {
+      await delay(nextDelayMs);
+      if (completed) return;
+      let response;
+      try {
+        response = await callApiTransport<any>(`/chat/jobs/${encodeURIComponent(jobId)}`, {
+          method: "GET",
+          header: {
+            ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {})
+          },
+          timeout: requestTimeoutMs
+        });
+      } catch (error: any) {
+        if (error instanceof ApiTransportError) {
+          diagnostics.requestId = error.diagnostics.requestId;
+          diagnostics.clientRequestId = error.diagnostics.clientRequestId;
+          diagnostics.callId = error.diagnostics.callId;
+          diagnostics.degradedReason = "cloud_container_job_poll_error";
+          emitDiagnostics("获取后台答案状态暂时失败，继续等待。", { force: true });
+          continue;
+        }
+        fail(normalizeRequestError(error));
+        return;
+      }
+
+      if (response.statusCode === 401 && !hasRetriedAuth && (await refreshAuthSession())) {
+        await pollChatJob(jobId, nextDelayMs, true);
+        return;
+      }
+      if (response.statusCode === 401) {
+        expireAuthSession();
+        return;
+      }
+      diagnostics.requestId = response.data?.request_id || response.requestId || diagnostics.requestId;
+      diagnostics.clientRequestId = response.clientRequestId || diagnostics.clientRequestId;
+      diagnostics.callId = response.callId || diagnostics.callId;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        diagnostics.degradedReason = String(response.data?.reason || "chat_job_http_error");
+        fail(friendlyChatErrorFromData(response.data, response.statusCode));
+        return;
+      }
+
+      const job = response.data || {};
+      nextDelayMs = Math.max(
+        1000,
+        Math.min(10000, Number(job.retry_after_ms || nextDelayMs || CHAT_JOB_DEFAULT_RETRY_AFTER_MS))
+      );
+      if (job.status === "completed" && job.response) {
+        dispatchCompletedSyncResponse(job.response, "后台答案已完成。");
+        return;
+      }
+      if (job.status === "failed") {
+        diagnostics.degradedReason = String(job.error?.reason || "chat_job_failed");
+        fail(friendlyChatErrorFromData(job.error || job, 500));
+        return;
+      }
+      emitAsyncJobStatus("仍在联网搜索并整理答案。");
+    }
+    fail("答案仍在生成中，请稍后重试获取结果。");
+  };
+
   const sendSyncFallback = async (
     hasRetried = false,
     degradedReason = "chunk_receiver_unavailable"
@@ -243,48 +374,13 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         return;
       }
       const result = response.data || {};
-      const explanation = result.explanation as Explanation | undefined;
-      diagnostics.parsedEventCount = (diagnostics.parsedEventCount || 0) + 1;
-      emitDiagnostics("同步请求已返回完整回答。", { force: true });
-      handlers.onEvent({
-        event: "explanation",
-        data: {
-          final_answer: buildAnswerContent(result.final_answer || "", explanation),
-          explanation,
-          question_type: result.question_type,
-          route: result.route,
-          session_id: result.session_id
-        }
-      });
-      if (
-        (Array.isArray(result.quiz_items) && result.quiz_items.length > 0) ||
-        result.quiz_clarification ||
-        result.quiz_generation_status
-      ) {
-        handlers.onEvent({
-          event: "quiz",
-          data: {
-            quiz_items: Array.isArray(result.quiz_items) ? result.quiz_items : [],
-            quiz_request: result.quiz_request,
-            quiz_clarification: result.quiz_clarification,
-            quiz_generation_status: result.quiz_generation_status,
-            final_answer: result.final_answer,
-            session_id: result.session_id,
-            subject_id: payload.subject_id
-          }
-        });
+      if (result.status === "pending" && result.job_id) {
+        diagnostics.degradedReason = "chat_async_job_pending";
+        diagnostics.requestId = result.request_id || diagnostics.requestId;
+        await pollChatJob(result.job_id, result.retry_after_ms);
+        return;
       }
-      if (result.memory) {
-        handlers.onEvent({
-          event: "memory",
-          data: {
-            memory: result.memory,
-            session_id: result.session_id
-          }
-        });
-      }
-      handlers.onEvent({ event: "done", data: { message: "处理完成" } });
-      finish();
+      dispatchCompletedSyncResponse(result);
     } catch (error: any) {
       if (error instanceof ApiTransportError) {
         diagnostics.requestId = error.diagnostics.requestId;

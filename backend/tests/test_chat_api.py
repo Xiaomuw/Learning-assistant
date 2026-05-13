@@ -166,6 +166,39 @@ class _RuntimeWriterTokenIterator:
 class ChatApiTest(unittest.TestCase):
     def setUp(self) -> None:
         AppStatus.should_exit_event = None
+        chat_module._RUNNING_CHAT_JOBS.clear()
+        self.chat_jobs: dict[str, dict] = {}
+
+        def _create_chat_job(*, job_id: str, user_id: str, session_id: str, request_id: str):
+            self.chat_jobs.setdefault(
+                job_id,
+                {
+                    "job_id": job_id,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "request_id": request_id,
+                    "status": "pending",
+                    "result_json": None,
+                    "error_json": None,
+                },
+            )
+            return dict(self.chat_jobs[job_id])
+
+        def _get_chat_job(*, user_id: str, job_id: str):
+            row = self.chat_jobs.get(job_id)
+            if not row or row["user_id"] != user_id:
+                return None
+            return dict(row)
+
+        def _mark_chat_job_completed(*, job_id: str, result: dict):
+            self.chat_jobs[job_id]["status"] = "completed"
+            self.chat_jobs[job_id]["result_json"] = dict(result)
+            self.chat_jobs[job_id]["error_json"] = None
+
+        def _mark_chat_job_failed(*, job_id: str, error: dict):
+            self.chat_jobs[job_id]["status"] = "failed"
+            self.chat_jobs[job_id]["error_json"] = dict(error)
+
         app = FastAPI()
         app.include_router(chat_router, prefix="/api")
         app.add_middleware(RequestLoggingMiddleware)
@@ -270,6 +303,10 @@ class ChatApiTest(unittest.TestCase):
                 "app.application.chat.state_builder.resolve_active_chat_model",
                 return_value="openai-gpt-oss-20b",
             ),
+            patch("app.interfaces.api.chat.create_chat_async_job", side_effect=_create_chat_job),
+            patch("app.interfaces.api.chat.get_chat_async_job", side_effect=_get_chat_job),
+            patch("app.interfaces.api.chat.mark_chat_async_job_completed", side_effect=_mark_chat_job_completed),
+            patch("app.interfaces.api.chat.mark_chat_async_job_failed", side_effect=_mark_chat_job_failed),
         ]
         for item in self.common_patches:
             item.start()
@@ -328,7 +365,7 @@ class ChatApiTest(unittest.TestCase):
                 last_session="abc",
             ),
         )
-        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state):
+        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state) as run_once:
             response = self.client.post(
                 "/api/chat/sync",
                 headers={"X-Request-ID": "weapp-test-request-1"},
@@ -337,6 +374,8 @@ class ChatApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("x-request-id"), "weapp-test-request-1")
+        _, kwargs = run_once.call_args
+        self.assertEqual(kwargs["request_id"], "weapp-test-request-1")
 
     def test_chat_sync_sanitizes_provider_error_detail(self) -> None:
         with patch(
@@ -357,12 +396,14 @@ class ChatApiTest(unittest.TestCase):
         self.assertNotIn("APITimeoutError", payload["error"])
         self.assertNotIn("Request timed out", payload["error"])
 
-    def test_chat_sync_returns_degraded_payload_when_budget_exceeded(self) -> None:
+    def test_chat_sync_returns_pending_when_inline_budget_exceeded(self) -> None:
         def _slow_chat_once(**_kwargs):
             time.sleep(0.05)
             return ChatExecutionResult(
                 session_id="session-1",
                 question_type="concept",
+                route="explain",
+                final_answer="HTTP 是应用层协议。",
                 explanation=ExplanationPayload(topic="HTTP"),
                 quiz_items=[],
                 memory=UserMemoryRecord(),
@@ -370,10 +411,12 @@ class ChatApiTest(unittest.TestCase):
 
         with (
             patch("app.interfaces.api.chat.run_chat_once", side_effect=_slow_chat_once),
-            patch("app.interfaces.api.chat.get_chat_sync_timeout_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat.get_chat_sync_poll_retry_after_ms", return_value=1000),
         ):
             response = self.client.post(
                 "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-pending-1"},
                 json={
                     "user_id": "default_user",
                     "session_id": "session-1",
@@ -385,9 +428,69 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["session_id"], "session-1")
-        self.assertEqual(payload["route"], "explain")
-        self.assertIn("超过预算", payload["explanation"]["thinking"])
-        self.assertIn("避免手机端连接超时", payload["final_answer"])
+        self.assertEqual(payload["status"], "pending")
+        self.assertEqual(payload["job_id"], "weapp-pending-1")
+        self.assertIn("后台继续处理", payload["explanation"]["thinking"])
+
+        self.chat_jobs["weapp-pending-1"]["status"] = "completed"
+        self.chat_jobs["weapp-pending-1"]["result_json"] = {
+            "session_id": "session-1",
+            "question_type": "concept",
+            "route": "explain",
+            "final_answer": "HTTP 是应用层协议。",
+            "explanation": {"topic": "HTTP"},
+            "quiz_items": [],
+            "memory": {},
+            "status": "completed",
+            "job_id": "weapp-pending-1",
+            "request_id": "weapp-pending-1",
+        }
+        job_response = self.client.get("/api/chat/jobs/weapp-pending-1")
+        self.assertEqual(job_response.status_code, 200)
+        job_payload = job_response.json()
+        self.assertEqual(job_payload["status"], "completed")
+        self.assertEqual(job_payload["response"]["final_answer"], "HTTP 是应用层协议。")
+
+    def test_run_chat_async_job_marks_completed(self) -> None:
+        body = ChatRequest(
+            user_id="default_user",
+            session_id="session-async",
+            question="什么是 HTTP？",
+            subject_id="general",
+        )
+        self.chat_jobs["async-job-1"] = {
+            "job_id": "async-job-1",
+            "user_id": "default_user",
+            "session_id": "session-async",
+            "request_id": "async-request-1",
+            "status": "pending",
+            "result_json": None,
+            "error_json": None,
+        }
+        final_state = ChatExecutionResult(
+            session_id="session-async",
+            question_type="concept",
+            route="explain",
+            final_answer="HTTP 是应用层协议。",
+            explanation=ExplanationPayload(topic="HTTP"),
+            quiz_items=[],
+            memory=UserMemoryRecord(),
+        )
+
+        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state) as run_once:
+            response = asyncio.run(
+                chat_module._run_chat_async_job(
+                    job_id="async-job-1",
+                    body=body,
+                    request_id="async-request-1",
+                )
+            )
+
+        self.assertIsNotNone(response)
+        self.assertEqual(self.chat_jobs["async-job-1"]["status"], "completed")
+        self.assertEqual(self.chat_jobs["async-job-1"]["result_json"]["request_id"], "async-request-1")
+        _, kwargs = run_once.call_args
+        self.assertEqual(kwargs["request_id"], "async-request-1")
 
     def test_run_chat_once_uses_orchestrator_runtime_by_default(self) -> None:
         orchestrator_state = {
@@ -1099,6 +1202,20 @@ class ChatApiTest(unittest.TestCase):
         self.assertTrue(first["message_id"])
         self.assertTrue(second["message_id"])
         self.assertNotEqual(first["message_id"], second["message_id"])
+
+    def test_initial_state_uses_backend_request_id_without_client_request_id(self) -> None:
+        state = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-1",
+            question="什么是 HTTP？",
+            subject_id="general",
+            request_mode="sync",
+            request_id="server-request-1",
+        )
+
+        self.assertEqual(state["message_id"], "server-request-1")
+        self.assertEqual(state["request_id"], "server-request-1")
+        self.assertEqual(state["client_request_id"], "")
 
     def test_build_assistant_message_includes_process_with_tool_calls(self) -> None:
         final_state = {

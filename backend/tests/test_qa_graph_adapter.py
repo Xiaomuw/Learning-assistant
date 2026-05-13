@@ -436,6 +436,45 @@ class QAGraphAdapterTest(unittest.TestCase):
             {"not_requested_before_evidence_judge", "no_external_search_signal"},
         )
 
+    def test_empty_concept_can_auto_web_search_when_enabled(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id="fake:web_search",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-http",
+                            source_type="web",
+                            source_id="https://example.test/http",
+                            text="HTTP 是应用层协议。",
+                            score=0.9,
+                        )
+                    ],
+                )
+
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": "true"}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-auto-web",
+                    "user_id": "u1",
+                    "user_message": "什么是 HTTP？",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                }
+            )
+
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result.get("web_search_reason"), "no_sufficient_notebook_evidence")
+
     def test_unjudged_or_low_score_web_evidence_does_not_enter_final_refs(self) -> None:
         class FakeToolExecutor:
             def execute(self, request):

@@ -24,6 +24,7 @@ def run_chat_once(
     subject_id: str,
     thinking_mode: bool = False,
     client_request_id: str | None = None,
+    request_id: str | None = None,
 ) -> ChatExecutionResult:
     initial_state = build_initial_state(
         user_id=user_id,
@@ -33,6 +34,7 @@ def run_chat_once(
         request_mode="sync",
         thinking_mode=thinking_mode,
         client_request_id=client_request_id,
+        request_id=request_id,
     )
     initial_state["sync_fast_concept_fallback"] = is_chat_sync_fast_concept_fallback_enabled()
     final_state = run_orchestrator_chat(initial_state, request_mode="sync")
@@ -64,6 +66,7 @@ async def stream_chat(
     subject_id: str,
     thinking_mode: bool = False,
     client_request_id: str | None = None,
+    request_id: str | None = None,
     stream_writer: Callable[[dict[str, Any]], None] | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     initial_state = build_initial_state(
@@ -74,6 +77,7 @@ async def stream_chat(
         request_mode="sse",
         thinking_mode=thinking_mode,
         client_request_id=client_request_id,
+        request_id=request_id,
     )
     if callable(stream_writer):
         initial_state["stream_writer"] = stream_writer
