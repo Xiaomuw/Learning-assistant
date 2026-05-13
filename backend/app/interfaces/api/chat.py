@@ -54,7 +54,13 @@ from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
 router = APIRouter()
 
 CHAT_HEARTBEAT_SECONDS = 12.0
+CHAT_SYNC_COMPLETION_GRACE_SECONDS = 1.0
 _RUNNING_CHAT_JOBS: dict[str, asyncio.Task] = {}
+
+
+def _get_chat_sync_completion_grace_seconds() -> float:
+    """Small grace window for results that finish right after the inline budget."""
+    return CHAT_SYNC_COMPLETION_GRACE_SECONDS
 
 
 def _runtime_stream_sse_event(raw_event: Any, *, session_id: str) -> dict[str, str] | None:
@@ -241,6 +247,39 @@ def _chat_response_to_job_result(response: ChatResponse) -> dict[str, Any]:
     return response.model_dump(mode="json")
 
 
+def _chat_sync_terminal_response_from_job(
+    *,
+    user_id: str,
+    job_id: str,
+    request_id: str,
+    log_context: str,
+) -> ChatResponse | JSONResponse | None:
+    job = get_chat_async_job(user_id=user_id, job_id=job_id)
+    if not job:
+        return None
+    status = str(job.get("status") or "pending")
+    if status == "completed" and job.get("result_json"):
+        response = ChatResponse.model_validate(job["result_json"])
+        logger.info(
+            "✅ [同步] {}: request_id={} job_id={} status=completed",
+            log_context,
+            request_id,
+            job_id,
+        )
+        return response
+    if status == "failed" and job.get("error_json"):
+        error_payload = dict(job.get("error_json") or {})
+        logger.warning(
+            "⚠️ [同步] {}: request_id={} job_id={} status=failed reason={}",
+            log_context,
+            request_id,
+            job_id,
+            error_payload.get("reason"),
+        )
+        return JSONResponse(status_code=500, content=error_payload)
+    return None
+
+
 def _job_error_payload(exc: Exception, *, request_id: str) -> dict[str, Any]:
     reason = _chat_error_reason(exc)
     return {
@@ -292,13 +331,72 @@ async def _run_chat_async_job(*, job_id: str, body: ChatRequest, request_id: str
         reset_request_id(token)
 
 
+def _on_chat_job_task_done(
+    task: asyncio.Task,
+    *,
+    job_id: str,
+    request_id: str,
+    user_id: str,
+) -> None:
+    _RUNNING_CHAT_JOBS.pop(job_id, None)
+    if task.cancelled():
+        logger.warning(
+            "⚠️ [同步后台] 任务结束回调: request_id={} job_id={} cancelled=True status=cancelled",
+            request_id,
+            job_id,
+        )
+        return
+
+    try:
+        response = task.result()
+    except Exception as exc:  # noqa: BLE001 - callback must never raise into the event loop
+        logger.error(
+            "❌ [同步后台] 任务结束回调异常: request_id={} job_id={} cancelled=False exception={} status=exception",
+            request_id,
+            job_id,
+            exc.__class__.__name__,
+        )
+        return
+
+    if response is not None:
+        logger.info(
+            "✅ [同步后台] 任务结束回调: request_id={} job_id={} cancelled=False status=completed route={} question_type={}",
+            request_id,
+            job_id,
+            response.route,
+            response.question_type,
+        )
+        return
+
+    job_status = "unknown"
+    with contextlib.suppress(Exception):
+        job = get_chat_async_job(user_id=user_id, job_id=job_id)
+        if job:
+            job_status = str(job.get("status") or "unknown")
+        else:
+            job_status = "missing"
+    logger.warning(
+        "⚠️ [同步后台] 任务结束回调: request_id={} job_id={} cancelled=False status={}",
+        request_id,
+        job_id,
+        job_status,
+    )
+
+
 def _ensure_chat_job_task(*, job_id: str, body: ChatRequest, request_id: str) -> asyncio.Task:
     task = _RUNNING_CHAT_JOBS.get(job_id)
     if task and not task.done():
         return task
     task = asyncio.create_task(_run_chat_async_job(job_id=job_id, body=body, request_id=request_id))
     _RUNNING_CHAT_JOBS[job_id] = task
-    task.add_done_callback(lambda _task: _RUNNING_CHAT_JOBS.pop(job_id, None))
+    task.add_done_callback(
+        lambda done_task: _on_chat_job_task_done(
+            done_task,
+            job_id=job_id,
+            request_id=request_id,
+            user_id=body.user_id,
+        )
+    )
     return task
 
 
@@ -619,12 +717,14 @@ async def chat_sync(
     )
 
     job_id = request_id
-    existing_job = get_chat_async_job(user_id=body.user_id, job_id=job_id)
-    if existing_job and existing_job.get("status") == "completed" and existing_job.get("result_json"):
-        return ChatResponse.model_validate(existing_job["result_json"])
-    if existing_job and existing_job.get("status") == "failed" and existing_job.get("error_json"):
-        error_payload = dict(existing_job["error_json"] or {})
-        return JSONResponse(status_code=500, content=error_payload)
+    existing_response = _chat_sync_terminal_response_from_job(
+        user_id=body.user_id,
+        job_id=job_id,
+        request_id=request_id,
+        log_context="复用已有后台结果",
+    )
+    if existing_response is not None:
+        return existing_response
 
     create_chat_async_job(
         job_id=job_id,
@@ -652,12 +752,82 @@ async def chat_sync(
         return response
 
     except asyncio.TimeoutError:
+        terminal_response = _chat_sync_terminal_response_from_job(
+            user_id=body.user_id,
+            job_id=job_id,
+            request_id=request_id,
+            log_context="内联预算到达时回读到结果",
+        )
+        if terminal_response is not None:
+            return terminal_response
+
+        if task.done():
+            try:
+                response = task.result()
+            except Exception as exc:  # noqa: BLE001 - return structured failure if callback has not persisted it yet
+                error_payload = _job_error_payload(exc, request_id=request_id)
+                return JSONResponse(status_code=500, content=error_payload)
+            if response is not None:
+                elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+                logger.info(
+                    "✅ [同步] 问答在内联边界完成: request_id={} route={} question_type={} elapsed_ms={}",
+                    request_id,
+                    response.route,
+                    response.question_type,
+                    elapsed_ms,
+                )
+                return response
+            terminal_response = _chat_sync_terminal_response_from_job(
+                user_id=body.user_id,
+                job_id=job_id,
+                request_id=request_id,
+                log_context="任务已结束但无直接响应，回读后台结果",
+            )
+            if terminal_response is not None:
+                return terminal_response
+
+        grace_seconds = max(0.0, _get_chat_sync_completion_grace_seconds())
+        if grace_seconds > 0:
+            try:
+                response = await asyncio.wait_for(asyncio.shield(task), timeout=grace_seconds)
+                if response is not None:
+                    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+                    logger.info(
+                        "✅ [同步] 问答在 grace 内完成: request_id={} route={} question_type={} elapsed_ms={} grace_seconds={}",
+                        request_id,
+                        response.route,
+                        response.question_type,
+                        elapsed_ms,
+                        grace_seconds,
+                    )
+                    return response
+                terminal_response = _chat_sync_terminal_response_from_job(
+                    user_id=body.user_id,
+                    job_id=job_id,
+                    request_id=request_id,
+                    log_context="grace 内任务结束后回读后台结果",
+                )
+                if terminal_response is not None:
+                    return terminal_response
+            except asyncio.TimeoutError:
+                pass
+
+        terminal_response = _chat_sync_terminal_response_from_job(
+            user_id=body.user_id,
+            job_id=job_id,
+            request_id=request_id,
+            log_context="pending 返回前最终回读",
+        )
+        if terminal_response is not None:
+            return terminal_response
+
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.warning(
-            "⏳ [同步] 问答超过内联预算，返回 pending: request_id={} job_id={} inline_budget_seconds={} elapsed_ms={}",
+            "⏳ [同步] 问答超过内联预算，返回 pending: request_id={} job_id={} inline_budget_seconds={} grace_seconds={} elapsed_ms={}",
             request_id,
             job_id,
             get_chat_sync_inline_budget_seconds(),
+            grace_seconds,
             elapsed_ms,
         )
         return _chat_sync_pending_response(session_id=body.session_id, job_id=job_id, request_id=request_id)

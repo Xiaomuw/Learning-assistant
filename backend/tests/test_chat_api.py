@@ -413,6 +413,7 @@ class ChatApiTest(unittest.TestCase):
         with (
             patch("app.interfaces.api.chat.run_chat_once", side_effect=_slow_chat_once),
             patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.01),
             patch("app.interfaces.api.chat.get_chat_sync_poll_retry_after_ms", return_value=1000),
         ):
             response = self.client.post(
@@ -451,6 +452,42 @@ class ChatApiTest(unittest.TestCase):
         job_payload = job_response.json()
         self.assertEqual(job_payload["status"], "completed")
         self.assertEqual(job_payload["response"]["final_answer"], "HTTP 是应用层协议。")
+
+    def test_chat_sync_returns_completed_when_finished_during_grace(self) -> None:
+        def _nearly_slow_chat_once(**_kwargs):
+            time.sleep(0.03)
+            return ChatExecutionResult(
+                session_id="session-grace",
+                question_type="smalltalk",
+                route="explain",
+                final_answer="你好，我在。",
+                explanation=ExplanationPayload(topic="问候"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            )
+
+        with (
+            patch("app.interfaces.api.chat.run_chat_once", side_effect=_nearly_slow_chat_once),
+            patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.2),
+        ):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-grace-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-grace",
+                    "question": "你好",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["job_id"], "weapp-grace-1")
+        self.assertEqual(payload["final_answer"], "你好，我在。")
+        self.assertEqual(self.chat_jobs["weapp-grace-1"]["status"], "completed")
 
     def test_chat_job_poll_rejects_other_user(self) -> None:
         self.chat_jobs["user-owned-job"] = {

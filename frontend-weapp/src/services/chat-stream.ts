@@ -273,14 +273,35 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
       Math.min(10000, retryAfterMs || CHAT_JOB_DEFAULT_RETRY_AFTER_MS)
     );
     let fallbackToGet = false;
-    emitAsyncJobStatus("后台结果轮询中，正在联网搜索并整理答案。", {
+    let shouldDelayBeforePoll = false;
+    const shortId = (value?: string) => {
+      const text = String(value || "").trim();
+      return text ? text.slice(0, 12) : "";
+    };
+    const pollTraceExtra = () => ({
       job_id: jobId,
       request_id: diagnostics.requestId,
       client_request_id: diagnostics.clientRequestId,
       call_id: diagnostics.callId
     });
+    const pollTraceSuffix = () => {
+      const parts = [
+        shortId(jobId) ? `job=${shortId(jobId)}` : "",
+        shortId(diagnostics.requestId) ? `request=${shortId(diagnostics.requestId)}` : "",
+        shortId(diagnostics.clientRequestId) ? `client=${shortId(diagnostics.clientRequestId)}` : "",
+        shortId(diagnostics.callId) ? `call=${shortId(diagnostics.callId)}` : ""
+      ].filter(Boolean);
+      return parts.length ? ` 诊断：${parts.join(" · ")}` : "";
+    };
+    const emitPollStatus = (detail: string) => {
+      emitAsyncJobStatus(`${detail}${pollTraceSuffix()}`, pollTraceExtra());
+    };
+    emitPollStatus("后台结果轮询中，正在联网搜索并整理答案。");
     while (!completed && Date.now() < deadlineAt) {
-      await delay(nextDelayMs);
+      if (shouldDelayBeforePoll) {
+        await delay(nextDelayMs);
+      }
+      shouldDelayBeforePoll = true;
       if (completed) return;
       let response;
       try {
@@ -303,12 +324,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
           diagnostics.clientRequestId = error.diagnostics.clientRequestId;
           diagnostics.callId = error.diagnostics.callId;
           diagnostics.degradedReason = "cloud_container_job_poll_error";
-          emitAsyncJobStatus("后台结果轮询暂时未接入后端，继续等待。", {
-            job_id: jobId,
-            request_id: diagnostics.requestId,
-            client_request_id: diagnostics.clientRequestId,
-            call_id: diagnostics.callId
-          });
+          emitPollStatus("后台结果轮询暂时未接入后端，继续等待。");
           continue;
         }
         fail(normalizeRequestError(error));
@@ -329,12 +345,8 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
       if (!fallbackToGet && (response.statusCode === 404 || response.statusCode === 405)) {
         fallbackToGet = true;
         diagnostics.degradedReason = "chat_job_post_poll_fallback_to_get";
-        emitAsyncJobStatus("POST 轮询暂不可用，已切换 GET 轮询。", {
-          job_id: jobId,
-          request_id: diagnostics.requestId,
-          client_request_id: diagnostics.clientRequestId,
-          call_id: diagnostics.callId
-        });
+        shouldDelayBeforePoll = false;
+        emitPollStatus("POST 轮询暂不可用，已切换 GET 轮询。");
         continue;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -357,12 +369,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         fail(friendlyChatErrorFromData(job.error || job, 500));
         return;
       }
-      emitAsyncJobStatus("仍在联网搜索并整理答案。", {
-        job_id: jobId,
-        request_id: diagnostics.requestId,
-        client_request_id: diagnostics.clientRequestId,
-        call_id: diagnostics.callId
-      });
+      emitPollStatus("仍在联网搜索并整理答案。");
     }
     fail("答案仍在生成中，请稍后重试获取结果。");
   };
