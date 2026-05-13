@@ -253,6 +253,7 @@ def _job_error_payload(exc: Exception, *, request_id: str) -> dict[str, Any]:
 
 async def _run_chat_async_job(*, job_id: str, body: ChatRequest, request_id: str) -> ChatResponse | None:
     token = set_request_id(request_id)
+    started_at = time.perf_counter()
     try:
         result = await asyncio.to_thread(
             run_chat_once,
@@ -266,15 +267,24 @@ async def _run_chat_async_job(*, job_id: str, body: ChatRequest, request_id: str
         )
         response = _chat_response_from_result(body=body, result=result, request_id=request_id, job_id=job_id)
         mark_chat_async_job_completed(job_id=job_id, result=_chat_response_to_job_result(response))
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.info(
+            "✅ [同步后台] 问答任务完成: request_id={} job_id={} status=completed elapsed_ms={}",
+            request_id,
+            job_id,
+            elapsed_ms,
+        )
         return response
     except Exception as exc:  # noqa: BLE001 - background job should persist structured failure
         error_payload = _job_error_payload(exc, request_id=request_id)
         mark_chat_async_job_failed(job_id=job_id, error=error_payload)
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.error(
-            "❌ [同步后台] 问答任务失败: request_id={} job_id={} reason={} error={}",
+            "❌ [同步后台] 问答任务失败: request_id={} job_id={} reason={} elapsed_ms={} error={}",
             request_id,
             job_id,
             error_payload.get("reason"),
+            elapsed_ms,
             error_payload.get("error"),
         )
         return None
@@ -363,6 +373,40 @@ class ChatJobResponse(BaseModel):
     error: dict | None = None
     retryable: bool = True
     retry_after_ms: int = 2000
+
+
+def _chat_job_response_from_row(*, job_id: str, job: dict[str, Any]) -> ChatJobResponse:
+    status = str(job.get("status") or "pending")
+    request_id = str(job.get("request_id") or job_id)
+    if status == "completed" and job.get("result_json"):
+        response = ChatResponse.model_validate(job["result_json"])
+        return ChatJobResponse(
+            status="completed",
+            job_id=job_id,
+            request_id=request_id,
+            response=response,
+            retryable=False,
+            retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+        )
+
+    if status == "failed":
+        error_payload = dict(job.get("error_json") or {})
+        return ChatJobResponse(
+            status="failed",
+            job_id=job_id,
+            request_id=request_id,
+            error=error_payload,
+            retryable=bool(error_payload.get("retryable", True)),
+            retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+        )
+
+    return ChatJobResponse(
+        status="pending",
+        job_id=job_id,
+        request_id=request_id,
+        retryable=True,
+        retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+    )
 
 
 # ---------- 路由：SSE 流式 ----------
@@ -652,34 +696,33 @@ async def get_chat_job(
     if not job:
         raise HTTPException(status_code=404, detail="聊天任务不存在")
 
-    status = str(job.get("status") or "pending")
-    request_id = str(job.get("request_id") or job_id)
-    if status == "completed" and job.get("result_json"):
-        response = ChatResponse.model_validate(job["result_json"])
-        return ChatJobResponse(
-            status="completed",
-            job_id=job_id,
-            request_id=request_id,
-            response=response,
-            retryable=False,
-            retry_after_ms=get_chat_sync_poll_retry_after_ms(),
-        )
-
-    if status == "failed":
-        error_payload = dict(job.get("error_json") or {})
-        return ChatJobResponse(
-            status="failed",
-            job_id=job_id,
-            request_id=request_id,
-            error=error_payload,
-            retryable=bool(error_payload.get("retryable", True)),
-            retry_after_ms=get_chat_sync_poll_retry_after_ms(),
-        )
-
-    return ChatJobResponse(
-        status="pending",
-        job_id=job_id,
-        request_id=request_id,
-        retryable=True,
-        retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+    response = _chat_job_response_from_row(job_id=job_id, job=job)
+    logger.info(
+        "🔎 [同步后台] 查询任务: request_id={} job_id={} status={} method=GET",
+        response.request_id,
+        job_id,
+        response.status,
     )
+    return response
+
+
+@router.post("/chat/jobs/{job_id}/poll", response_model=ChatJobResponse)
+async def poll_chat_job(
+    job_id: str,
+    current_user: AuthenticatedUser = Depends(require_current_user),
+):
+    """
+    POST /api/chat/jobs/{job_id}/poll — 小程序云托管轮询后台聊天任务结果
+    """
+    job = get_chat_async_job(user_id=current_user.id, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="聊天任务不存在")
+
+    response = _chat_job_response_from_row(job_id=job_id, job=job)
+    logger.info(
+        "🔎 [同步后台] 查询任务: request_id={} job_id={} status={} method=POST",
+        response.request_id,
+        job_id,
+        response.status,
+    )
+    return response

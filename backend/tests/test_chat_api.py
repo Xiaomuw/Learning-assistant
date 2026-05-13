@@ -208,6 +208,7 @@ class ChatApiTest(unittest.TestCase):
             display_name="测试用户",
             status="active",
         )
+        self.app = app
         self.client = TestClient(app)
         self.common_patches = [
             patch(
@@ -445,11 +446,50 @@ class ChatApiTest(unittest.TestCase):
             "job_id": "weapp-pending-1",
             "request_id": "weapp-pending-1",
         }
-        job_response = self.client.get("/api/chat/jobs/weapp-pending-1")
+        job_response = self.client.post("/api/chat/jobs/weapp-pending-1/poll")
         self.assertEqual(job_response.status_code, 200)
         job_payload = job_response.json()
         self.assertEqual(job_payload["status"], "completed")
         self.assertEqual(job_payload["response"]["final_answer"], "HTTP 是应用层协议。")
+
+    def test_chat_job_poll_rejects_other_user(self) -> None:
+        self.chat_jobs["user-owned-job"] = {
+            "job_id": "user-owned-job",
+            "user_id": "default_user",
+            "session_id": "session-1",
+            "request_id": "user-owned-job",
+            "status": "completed",
+            "result_json": {
+                "session_id": "session-1",
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": "HTTP 是应用层协议。",
+                "explanation": {"topic": "HTTP"},
+                "quiz_items": [],
+                "memory": {},
+                "status": "completed",
+                "job_id": "user-owned-job",
+                "request_id": "user-owned-job",
+            },
+            "error_json": None,
+        }
+        self.app.dependency_overrides[require_current_user] = lambda: AuthUserView(
+            id="other_user",
+            email="other@example.com",
+            display_name="其他用户",
+            status="active",
+        )
+        try:
+            response = self.client.post("/api/chat/jobs/user-owned-job/poll")
+        finally:
+            self.app.dependency_overrides[require_current_user] = lambda: AuthUserView(
+                id="default_user",
+                email="default@example.com",
+                display_name="测试用户",
+                status="active",
+            )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_run_chat_async_job_marks_completed(self) -> None:
         body = ChatRequest(

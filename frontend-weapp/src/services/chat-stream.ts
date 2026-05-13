@@ -204,7 +204,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     fail("登录已过期，请重新登录");
   };
 
-  const emitAsyncJobStatus = (detail: string) => {
+  const emitAsyncJobStatus = (detail: string, extra: Record<string, any> = {}) => {
     handlers.onEvent({
       event: "status",
       data: {
@@ -213,7 +213,8 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         detail,
         status: "running",
         streaming_mode: "sync",
-        session_id: payload.session_id
+        session_id: payload.session_id,
+        ...extra
       }
     });
     emitDiagnostics(detail, { force: true });
@@ -271,15 +272,27 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
       1000,
       Math.min(10000, retryAfterMs || CHAT_JOB_DEFAULT_RETRY_AFTER_MS)
     );
-    emitAsyncJobStatus("正在联网搜索并整理答案。");
+    let fallbackToGet = false;
+    emitAsyncJobStatus("后台结果轮询中，正在联网搜索并整理答案。", {
+      job_id: jobId,
+      request_id: diagnostics.requestId,
+      client_request_id: diagnostics.clientRequestId,
+      call_id: diagnostics.callId
+    });
     while (!completed && Date.now() < deadlineAt) {
       await delay(nextDelayMs);
       if (completed) return;
       let response;
       try {
-        response = await callApiTransport<any>(`/chat/jobs/${encodeURIComponent(jobId)}`, {
-          method: "GET",
+        const encodedJobId = encodeURIComponent(jobId);
+        const pollPath = fallbackToGet
+          ? `/chat/jobs/${encodedJobId}`
+          : `/chat/jobs/${encodedJobId}/poll`;
+        response = await callApiTransport<any>(pollPath, {
+          method: fallbackToGet ? "GET" : "POST",
+          data: fallbackToGet ? undefined : {},
           header: {
+            ...(fallbackToGet ? {} : { "Content-Type": "application/json" }),
             ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {})
           },
           timeout: requestTimeoutMs
@@ -290,7 +303,12 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
           diagnostics.clientRequestId = error.diagnostics.clientRequestId;
           diagnostics.callId = error.diagnostics.callId;
           diagnostics.degradedReason = "cloud_container_job_poll_error";
-          emitDiagnostics("获取后台答案状态暂时失败，继续等待。", { force: true });
+          emitAsyncJobStatus("后台结果轮询暂时未接入后端，继续等待。", {
+            job_id: jobId,
+            request_id: diagnostics.requestId,
+            client_request_id: diagnostics.clientRequestId,
+            call_id: diagnostics.callId
+          });
           continue;
         }
         fail(normalizeRequestError(error));
@@ -308,6 +326,17 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
       diagnostics.requestId = response.data?.request_id || response.requestId || diagnostics.requestId;
       diagnostics.clientRequestId = response.clientRequestId || diagnostics.clientRequestId;
       diagnostics.callId = response.callId || diagnostics.callId;
+      if (!fallbackToGet && (response.statusCode === 404 || response.statusCode === 405)) {
+        fallbackToGet = true;
+        diagnostics.degradedReason = "chat_job_post_poll_fallback_to_get";
+        emitAsyncJobStatus("POST 轮询暂不可用，已切换 GET 轮询。", {
+          job_id: jobId,
+          request_id: diagnostics.requestId,
+          client_request_id: diagnostics.clientRequestId,
+          call_id: diagnostics.callId
+        });
+        continue;
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         diagnostics.degradedReason = String(response.data?.reason || "chat_job_http_error");
         fail(friendlyChatErrorFromData(response.data, response.statusCode));
@@ -328,7 +357,12 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         fail(friendlyChatErrorFromData(job.error || job, 500));
         return;
       }
-      emitAsyncJobStatus("仍在联网搜索并整理答案。");
+      emitAsyncJobStatus("仍在联网搜索并整理答案。", {
+        job_id: jobId,
+        request_id: diagnostics.requestId,
+        client_request_id: diagnostics.clientRequestId,
+        call_id: diagnostics.callId
+      });
     }
     fail("答案仍在生成中，请稍后重试获取结果。");
   };
