@@ -83,6 +83,7 @@ class QAGraphInvoker:
             "request_id": str(state.get("request_id") or state.get("message_id") or ""),
             "client_request_id": str(state.get("client_request_id") or ""),
             "stream_answer_tokens": requested_token_stream,
+            "sync_fast_concept_fallback": bool(runtime_context.get("sync_fast_concept_fallback", False)),
             "streaming_degraded_reason": "",
             "thinking_mode": bool(runtime_context.get("thinking_mode", False)),
         }

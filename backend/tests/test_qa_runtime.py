@@ -389,6 +389,46 @@ class QARuntimeTest(unittest.TestCase):
 
         self.assertEqual(tool_registry.get_available_tools(agent_request=request), [])
 
+    def test_sync_fast_concept_answer_skips_llm_for_stable_concept(self) -> None:
+        profile = ModelProfile(
+            model_id="deepseek-v4-flash",
+            provider="DeepSeek",
+            family="V4",
+            supports_tool_calling=True,
+            supports_structured_output=False,
+            context_window=1_000_000,
+            supported_modalities=("text",),
+            max_output_tokens=384_000,
+        )
+        request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="network",
+            subject_name="计算机网络",
+            subject_description="",
+            question="什么是 HTTP？",
+            question_type="concept",
+            runtime_context={
+                "request_id": "req-fast-http",
+                "sync_fast_concept_fallback": True,
+                "notebook_policy": "optional",
+                "search_policy": "forbidden",
+            },
+        )
+
+        with patch(
+            "app.domains.qa.runtime.generate_plain_answer",
+            side_effect=AssertionError("stable sync concept should not call LLM"),
+        ):
+            result = QARuntimeAgent(request=request, state={}, model_profile=profile).run()
+
+        self.assertEqual(result.execution_mode, "direct_answer")
+        self.assertIsNotNone(result.answer)
+        assert result.answer is not None
+        self.assertEqual(result.answer.topic, "HTTP")
+        self.assertIn("同步模式命中稳定概念快速回答", result.reasoning_summary)
+        self.assertIn("应用层", result.final_answer)
+
     def test_stream_delta_filters_reasoning_content_blocks(self) -> None:
         chunk = type(
             "_Chunk",

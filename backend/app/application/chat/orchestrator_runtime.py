@@ -281,6 +281,7 @@ def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
             SourcePolicy.OPEN_TOOLS.value,
         },
         "stream_answer_tokens": bool(state.get("stream_answer_tokens")),
+        "sync_fast_concept_fallback": bool(state.get("sync_fast_concept_fallback", False)),
     }
     stream_writer = state.get("stream_writer")
     if callable(stream_writer):

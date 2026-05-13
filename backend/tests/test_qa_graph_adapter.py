@@ -177,13 +177,16 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         self.assertEqual(
             [item["capability"] for item in result["tool_requests"]],
-            [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value],
+            [ToolCapability.NOTEBOOK_RETRIEVE.value],
         )
         request_input = result["tool_requests"][0]["input"]
         self.assertEqual(request_input["subject_id"], "computer-network")
         self.assertEqual(request_input["concept_id"], "computer-network.application.http-https")
         self.assertFalse(result["web_search_attempted"])
-        self.assertEqual(result["web_search_reason"], "planned_without_executor")
+        self.assertIn(
+            result["web_search_reason"],
+            {"not_requested_before_evidence_judge", "no_external_search_signal"},
+        )
 
     def test_notebook_signal_plans_internal_then_web_if_evidence_insufficient(self) -> None:
         result = build_graph().compile().invoke(
@@ -199,7 +202,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         requested_capabilities = [item["capability"] for item in result["tool_requests"]]
         self.assertEqual(
             requested_capabilities,
-            [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value],
+            [ToolCapability.NOTEBOOK_RETRIEVE.value],
         )
         self.assertEqual(result["source_policy"], SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value)
         self.assertFalse(result["web_search_attempted"])
@@ -390,6 +393,48 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(result["source_usage"], "web")
         self.assertEqual(response.source_level, SourceLevel.WEB)
         self.assertEqual(response.evidence_refs, ["web-http3"])
+
+    def test_plain_stable_concept_does_not_auto_web_search_by_default(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id="fake:web_search",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-http",
+                            source_type="web",
+                            source_id="https://example.test/http",
+                            text="HTTP 是应用层协议。",
+                            score=0.9,
+                        )
+                    ],
+                )
+
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": ""}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-no-auto-web",
+                    "user_id": "u1",
+                    "user_message": "什么是 HTTP？",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                }
+            )
+
+        self.assertNotIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertFalse(result.get("web_search_attempted", False))
+        self.assertIn(
+            result.get("web_search_reason"),
+            {"not_requested_before_evidence_judge", "no_external_search_signal"},
+        )
 
     def test_unjudged_or_low_score_web_evidence_does_not_enter_final_refs(self) -> None:
         class FakeToolExecutor:

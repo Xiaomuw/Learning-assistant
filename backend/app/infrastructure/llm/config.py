@@ -13,6 +13,7 @@ DEFAULT_NVIDIA_GLM_MODEL = "z-ai/glm4.7"
 DEFAULT_LLM_TIMEOUT_SECONDS = 20.0
 DEFAULT_LLM_MAX_RETRIES = 0
 DEFAULT_CHAT_SYNC_TIMEOUT_SECONDS = 15.0
+DEFAULT_CHAT_SYNC_FAST_CONCEPT_FALLBACK = True
 DEFAULT_PRACTICE_GENERATION_TIMEOUT_SECONDS = 6.0
 DEFAULT_PRACTICE_REPAIR_TIMEOUT_SECONDS = 4.0
 MODEL_SWITCHING_STATUS_DEVELOPMENT = "development"
@@ -66,6 +67,13 @@ def get_chat_sync_timeout_seconds() -> float:
         return max(3.0, float(raw))
     except ValueError:
         return DEFAULT_CHAT_SYNC_TIMEOUT_SECONDS
+
+
+def is_chat_sync_fast_concept_fallback_enabled() -> bool:
+    raw = os.getenv("CHAT_SYNC_FAST_CONCEPT_FALLBACK")
+    if raw is None:
+        return DEFAULT_CHAT_SYNC_FAST_CONCEPT_FALLBACK
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _get_float_env(name: str, default: float, *, minimum: float) -> float:

@@ -7,6 +7,7 @@ Q&A Runtime
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -24,7 +25,11 @@ from app.domains.qa.answer_generation import (
     generate_structured_answer,
     repair_structured_output,
 )
-from app.domains.qa.explanation_fallback import explain_for_qa_fallback
+from app.domains.qa.explanation_fallback import (
+    build_general_knowledge_explanation,
+    explain_for_qa_fallback,
+    is_general_concept_question,
+)
 from app.domains.qa.middleware import postprocess_middleware, preprocess_middleware
 from app.domains.qa.mode_selection import select_execution_mode
 from app.domains.qa.prompts import build_tool_system_message, message_to_text
@@ -185,18 +190,27 @@ class QARuntimeAgent:
                     result = self._run_deterministic_fallback(result)
             else:
                 try:
-                    if stream_answer_tokens:
+                    fast_answer = self._try_sync_fast_concept_answer(prepared_request, execution_mode)
+                    if fast_answer is not None:
+                        result.raw_output = fast_answer
+                        result.answer = fast_answer
+                        result.final_answer = fast_answer.final_answer or fast_answer.thinking
+                        result.contextual_query = prepared_request.question
+                        result.reasoning_summary = "同步模式命中稳定概念快速回答，未等待模型长调用。"
+                        result.source_usage = "model"
+                    elif stream_answer_tokens:
                         result.raw_output = self._generate_streamed_plain_answer(prepared_request)
                         result.answer = _streamed_answer_schema(str(result.raw_output or ""), prepared_request)
                         result.final_answer = result.answer.final_answer
                     else:
                         result.raw_output = self._generate_plain_answer(prepared_request)
                     result.contextual_query = prepared_request.question
-                    result.reasoning_summary = (
-                        "模型判断本轮可以直接回复，未调用工具；回答内容已安全实时输出。"
-                        if stream_answer_tokens
-                        else "模型判断本轮可以直接回复，未调用工具。"
-                    )
+                    if fast_answer is None:
+                        result.reasoning_summary = (
+                            "模型判断本轮可以直接回复，未调用工具；回答内容已安全实时输出。"
+                            if stream_answer_tokens
+                            else "模型判断本轮可以直接回复，未调用工具。"
+                        )
                     result.source_usage = "model"
                 except Exception as exc:
                     fallback_result = self._try_fallback_model(
@@ -355,7 +369,46 @@ class QARuntimeAgent:
         )
 
     def _generate_plain_answer(self, request: AgentRequest) -> str:
-        return generate_plain_answer(request=request, get_llm=self._get_llm)
+        started_at = time.perf_counter()
+        logger.info(
+            "🤖 LLM 直接回答开始 | request_id={} model={} type={}",
+            str(request.runtime_context.get("request_id") or ""),
+            self.model_profile.model_id,
+            request.question_type,
+        )
+        try:
+            return generate_plain_answer(request=request, get_llm=self._get_llm)
+        finally:
+            elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+            logger.info(
+                "🤖 LLM 直接回答结束 | request_id={} model={} elapsed_ms={}",
+                str(request.runtime_context.get("request_id") or ""),
+                self.model_profile.model_id,
+                elapsed_ms,
+            )
+
+    def _try_sync_fast_concept_answer(
+        self,
+        request: AgentRequest,
+        execution_mode: str,
+    ) -> AnswerSchema | None:
+        if not _should_use_sync_fast_concept_answer(request, execution_mode):
+            return None
+
+        payload = build_general_knowledge_explanation(
+            request.question,
+            dict(request.runtime_context.get("retrieval_diagnosis") or {}),
+            mention_notebook=_should_mention_notebook_miss(request),
+        )
+        answer = AnswerSchema.model_validate(payload)
+        answer = answer.model_copy(update={"final_answer": answer.final_answer or answer.thinking})
+        logger.info(
+            "⚡ 同步稳定概念快速回答 | request_id={} topic={} type={}",
+            str(request.runtime_context.get("request_id") or ""),
+            answer.topic,
+            request.question_type,
+        )
+        return answer
 
     def _generate_streamed_plain_answer(
         self,
@@ -669,6 +722,99 @@ def _should_try_fallback_model(exc: Exception) -> bool:
         "api",
     )
     return any(marker in message for marker in retryable_markers)
+
+
+_LIVE_OR_SOURCE_MARKERS = (
+    "最新",
+    "今天",
+    "官网",
+    "官方",
+    "来源",
+    "引用",
+    "浏览器支持",
+    "价格",
+    "政策",
+    "搜索",
+    "查一下",
+    "mdn",
+    "2025",
+    "2026",
+    "latest",
+    "current version",
+    "browser support",
+)
+
+_STRICT_SOURCE_MARKERS = (
+    "根据",
+    "依据",
+    "基于",
+    "当前 pdf",
+    "当前文档",
+    "notebook",
+    "笔记",
+    "资料",
+    "课件",
+    "课程",
+    "知识库",
+)
+
+
+def _should_use_sync_fast_concept_answer(
+    request: AgentRequest,
+    execution_mode: str,
+) -> bool:
+    runtime_context = request.runtime_context or {}
+    if execution_mode != "direct_answer":
+        return False
+    if not bool(runtime_context.get("sync_fast_concept_fallback")):
+        return False
+    if bool(runtime_context.get("stream_answer_tokens")):
+        return False
+    if str(request.question_type or "") != "concept":
+        return False
+    if not is_general_concept_question(request.question):
+        return False
+    if _requires_live_or_strict_source(request):
+        return False
+    retrieved_docs = (
+        runtime_context.get("verified_context")
+        or runtime_context.get("retrieved_docs")
+        or runtime_context.get("documents")
+        or []
+    )
+    return not bool(retrieved_docs)
+
+
+def _requires_live_or_strict_source(request: AgentRequest) -> bool:
+    question = request.question or ""
+    lowered = question.lower()
+    if any(marker in question or marker in lowered for marker in _LIVE_OR_SOURCE_MARKERS):
+        return True
+    if any(marker in question or marker in lowered for marker in _STRICT_SOURCE_MARKERS):
+        return True
+
+    runtime_context = request.runtime_context or {}
+    if bool(runtime_context.get("notebook_required")):
+        return True
+    notebook_policy = str(runtime_context.get("notebook_policy") or "").strip().lower()
+    if notebook_policy in {"strict", "required"}:
+        return True
+    search_policy = str(runtime_context.get("search_policy") or "").strip().lower()
+    return search_policy == "required"
+
+
+def _should_mention_notebook_miss(request: AgentRequest) -> bool:
+    runtime_context = request.runtime_context or {}
+    notebook_policy = str(runtime_context.get("notebook_policy") or "").strip().lower()
+    if notebook_policy not in {"optional", "required", "strict"}:
+        return False
+    retrieved_docs = (
+        runtime_context.get("verified_context")
+        or runtime_context.get("retrieved_docs")
+        or runtime_context.get("documents")
+        or []
+    )
+    return not bool(retrieved_docs)
 
 
 def _should_stream_answer_tokens(request: AgentRequest) -> bool:

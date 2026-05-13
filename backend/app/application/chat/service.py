@@ -8,6 +8,7 @@ from app.application.chat.messages import normalize_explanation_payload
 from app.application.chat.orchestrator_runtime import run_orchestrator_chat, stream_orchestrator_chat
 from app.application.chat.persistence import persist_chat_session
 from app.application.chat.state_builder import build_initial_state
+from app.infrastructure.llm.config import is_chat_sync_fast_concept_fallback_enabled
 from app.domains.practice.service import normalize_quiz_item
 from app.shared.schemas.contracts import ChatExecutionResult, UserMemoryRecord
 
@@ -33,6 +34,7 @@ def run_chat_once(
         thinking_mode=thinking_mode,
         client_request_id=client_request_id,
     )
+    initial_state["sync_fast_concept_fallback"] = is_chat_sync_fast_concept_fallback_enabled()
     final_state = run_orchestrator_chat(initial_state, request_mode="sync")
     persist_chat_session(
         user_id=user_id,

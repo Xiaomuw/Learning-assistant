@@ -640,6 +640,27 @@ def _build_general_knowledge_fallback(
     }
 
 
+def is_general_concept_question(question: str) -> bool:
+    """Public wrapper for fast-path callers that need the same stable concept heuristic."""
+
+    return _is_general_concept_question(question)
+
+
+def build_general_knowledge_explanation(
+    question: str,
+    retrieval_diagnosis: dict[str, Any] | None = None,
+    *,
+    mention_notebook: bool = False,
+) -> dict[str, Any]:
+    """Build a deterministic concept explanation without invoking an external LLM."""
+
+    return _build_general_knowledge_fallback(
+        question,
+        retrieval_diagnosis,
+        mention_notebook=mention_notebook,
+    )
+
+
 def _build_notebook_insufficient_fallback(question: str) -> dict[str, Any]:
     topic = question[:32] or "notebook 问答"
     if _is_general_concept_question(question):

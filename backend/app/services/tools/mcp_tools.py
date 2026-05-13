@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import time
 from typing import Any
+
+from loguru import logger
 
 from app.infrastructure.mcp import (
     build_external_query,
@@ -58,14 +62,42 @@ def mcp_web_search(
         active_topic=str(agent_request.session_memory.get("active_topic", "") or ""),
         requested_query=requested_query,
     )
-    raw_payload = call_mcp_tool(
+    started_at = time.perf_counter()
+    query_hash = hashlib.sha256(safe_query.encode("utf-8")).hexdigest()[:12]
+    logger.info(
+        "🌐 MCP WebSearch 开始 | tool={} query_len={} query_hash={} max_results={}",
         settings.web_search_tool,
-        {
-            "query": safe_query,
-            "max_results": max_results,
-        },
+        len(safe_query),
+        query_hash,
+        max_results,
     )
-    items = normalize_search_payload(raw_payload, max_results=max_results)
+    try:
+        raw_payload = call_mcp_tool(
+            settings.web_search_tool,
+            {
+                "query": safe_query,
+                "max_results": max_results,
+            },
+        )
+        items = normalize_search_payload(raw_payload, max_results=max_results)
+    except Exception as exc:
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.warning(
+            "🌐 MCP WebSearch 失败 | tool={} query_hash={} elapsed_ms={} reason={}",
+            settings.web_search_tool,
+            query_hash,
+            elapsed_ms,
+            exc.__class__.__name__,
+        )
+        raise
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    logger.info(
+        "🌐 MCP WebSearch 完成 | tool={} query_hash={} doc_count={} elapsed_ms={}",
+        settings.web_search_tool,
+        query_hash,
+        len(items),
+        elapsed_ms,
+    )
     remembered_urls = [item["url"] for item in items if item.get("url")]
     remember_mcp_urls(agent_request, remembered_urls)
     return {

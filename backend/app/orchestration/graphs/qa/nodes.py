@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -1522,7 +1523,6 @@ def _has_external_search_signal(question: str) -> bool:
         for term in (
             "最新",
             "现在",
-            "当前",
             "今天",
             "官网",
             "官方",
@@ -1542,6 +1542,13 @@ def _has_external_search_signal(question: str) -> bool:
             "browser support",
         )
     )
+
+
+def _web_search_empty_concepts_enabled() -> bool:
+    raw = os.getenv("QA_WEB_SEARCH_EMPTY_CONCEPTS")
+    if raw is None:
+        return False
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _knowledge_route(
@@ -1690,6 +1697,8 @@ def _should_run_web_retrieval(
         return False
     if _has_external_search_signal(question):
         return True
+    if not _web_search_empty_concepts_enabled():
+        return False
 
     gate = dict(state.get("evidence_gate") or {})
     question_type = str(state.get("question_type") or _infer_question_type(question))
