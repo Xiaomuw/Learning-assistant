@@ -33,9 +33,10 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from app.application.chat.service import (
-    run_chat_once,
+    run_chat_once_with_state,
     stream_chat,
 )
+from app.application.chat.persistence import persist_chat_session
 from app.infrastructure.db.repositories.chat_jobs import (
     create_chat_async_job,
     get_chat_async_job,
@@ -56,6 +57,7 @@ router = APIRouter()
 CHAT_HEARTBEAT_SECONDS = 12.0
 CHAT_SYNC_COMPLETION_GRACE_SECONDS = 1.0
 _RUNNING_CHAT_JOBS: dict[str, asyncio.Task] = {}
+_RUNNING_CHAT_PERSISTENCE_TASKS: set[asyncio.Task] = set()
 
 
 def _get_chat_sync_completion_grace_seconds() -> float:
@@ -290,20 +292,100 @@ def _job_error_payload(exc: Exception, *, request_id: str) -> dict[str, Any]:
     }
 
 
+def _run_chat_once_for_async_job(*, body: ChatRequest, request_id: str):
+    return run_chat_once_with_state(
+        user_id=body.user_id,
+        session_id=body.session_id,
+        question=body.question,
+        subject_id=body.subject_id,
+        thinking_mode=body.thinking_mode,
+        client_request_id=body.client_request_id,
+        request_id=request_id,
+        persist=False,
+    )
+
+
+async def _persist_chat_session_after_response(
+    *,
+    user_id: str,
+    session_id: str,
+    subject_id: str,
+    question: str,
+    final_state: dict[str, Any],
+    request_id: str,
+    job_id: str,
+) -> None:
+    started_at = time.perf_counter()
+    token = set_request_id(request_id)
+    try:
+        await asyncio.to_thread(
+            persist_chat_session,
+            user_id=user_id,
+            session_id=session_id,
+            subject_id=subject_id,
+            question=question,
+            final_state=final_state,
+        )
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.info(
+            "✅ [同步后台] 会话持久化完成: request_id={} job_id={} elapsed_ms={}",
+            request_id,
+            job_id,
+            elapsed_ms,
+        )
+    except Exception as exc:  # noqa: BLE001 - persistence must not block answer delivery
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.warning(
+            "⚠️ [同步后台] 会话持久化失败: request_id={} job_id={} elapsed_ms={} error_type={}",
+            request_id,
+            job_id,
+            elapsed_ms,
+            exc.__class__.__name__,
+        )
+    finally:
+        reset_request_id(token)
+
+
+def _on_chat_persistence_task_done(task: asyncio.Task, *, job_id: str, request_id: str) -> None:
+    _RUNNING_CHAT_PERSISTENCE_TASKS.discard(task)
+    if task.cancelled():
+        logger.warning(
+            "⚠️ [同步后台] 会话持久化任务被取消: request_id={} job_id={}",
+            request_id,
+            job_id,
+        )
+        return
+    with contextlib.suppress(Exception):
+        task.result()
+
+
+def _schedule_chat_session_persistence(
+    *,
+    body: ChatRequest,
+    final_state: dict[str, Any],
+    request_id: str,
+    job_id: str,
+) -> None:
+    task = asyncio.create_task(
+        _persist_chat_session_after_response(
+            user_id=body.user_id,
+            session_id=body.session_id,
+            subject_id=body.subject_id,
+            question=body.question,
+            final_state=dict(final_state),
+            request_id=request_id,
+            job_id=job_id,
+        )
+    )
+    _RUNNING_CHAT_PERSISTENCE_TASKS.add(task)
+    task.add_done_callback(lambda done_task: _on_chat_persistence_task_done(done_task, job_id=job_id, request_id=request_id))
+
+
 async def _run_chat_async_job(*, job_id: str, body: ChatRequest, request_id: str) -> ChatResponse | None:
     token = set_request_id(request_id)
     started_at = time.perf_counter()
     try:
-        result = await asyncio.to_thread(
-            run_chat_once,
-            user_id=body.user_id,
-            session_id=body.session_id,
-            question=body.question,
-            subject_id=body.subject_id,
-            thinking_mode=body.thinking_mode,
-            client_request_id=body.client_request_id,
-            request_id=request_id,
-        )
+        result, final_state = await asyncio.to_thread(_run_chat_once_for_async_job, body=body, request_id=request_id)
         response = _chat_response_from_result(body=body, result=result, request_id=request_id, job_id=job_id)
         mark_chat_async_job_completed(job_id=job_id, result=_chat_response_to_job_result(response))
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
@@ -313,6 +395,7 @@ async def _run_chat_async_job(*, job_id: str, body: ChatRequest, request_id: str
             job_id,
             elapsed_ms,
         )
+        _schedule_chat_session_persistence(body=body, final_state=final_state, request_id=request_id, job_id=job_id)
         return response
     except Exception as exc:  # noqa: BLE001 - background job should persist structured failure
         error_payload = _job_error_payload(exc, request_id=request_id)

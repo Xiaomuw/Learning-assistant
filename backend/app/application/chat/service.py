@@ -26,6 +26,30 @@ def run_chat_once(
     client_request_id: str | None = None,
     request_id: str | None = None,
 ) -> ChatExecutionResult:
+    result, _ = run_chat_once_with_state(
+        user_id=user_id,
+        session_id=session_id,
+        question=question,
+        subject_id=subject_id,
+        thinking_mode=thinking_mode,
+        client_request_id=client_request_id,
+        request_id=request_id,
+        persist=True,
+    )
+    return result
+
+
+def run_chat_once_with_state(
+    *,
+    user_id: str,
+    session_id: str,
+    question: str,
+    subject_id: str,
+    thinking_mode: bool = False,
+    client_request_id: str | None = None,
+    request_id: str | None = None,
+    persist: bool = True,
+) -> tuple[ChatExecutionResult, dict[str, Any]]:
     initial_state = build_initial_state(
         user_id=user_id,
         session_id=session_id,
@@ -38,13 +62,18 @@ def run_chat_once(
     )
     initial_state["sync_fast_concept_fallback"] = is_chat_sync_fast_concept_fallback_enabled()
     final_state = run_orchestrator_chat(initial_state, request_mode="sync")
-    persist_chat_session(
-        user_id=user_id,
-        session_id=session_id,
-        subject_id=subject_id,
-        question=question,
-        final_state=final_state,
-    )
+    if persist:
+        persist_chat_session(
+            user_id=user_id,
+            session_id=session_id,
+            subject_id=subject_id,
+            question=question,
+            final_state=final_state,
+        )
+    return _chat_execution_result_from_state(session_id=session_id, final_state=final_state), final_state
+
+
+def _chat_execution_result_from_state(*, session_id: str, final_state: dict[str, Any]) -> ChatExecutionResult:
     return ChatExecutionResult(
         session_id=session_id,
         question_type=str(final_state.get("question_type", "concept") or "concept"),

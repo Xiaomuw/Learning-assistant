@@ -91,6 +91,23 @@ class _FakeStreamingLLM:
         return self.invoke_text
 
 
+def _state_from_chat_result(result: ChatExecutionResult) -> dict:
+    return {
+        "question_type": result.question_type,
+        "route": result.route,
+        "final_answer": result.final_answer,
+        "explanation": result.explanation.model_dump(),
+        "quiz_items": [item.model_dump() for item in result.quiz_items],
+        "quiz_request": result.quiz_request.model_dump() if result.quiz_request else None,
+        "quiz_clarification": result.quiz_clarification.model_dump() if result.quiz_clarification else None,
+        "memory": result.memory.model_dump(),
+    }
+
+
+def _chat_result_with_state(result: ChatExecutionResult) -> tuple[ChatExecutionResult, dict]:
+    return result, _state_from_chat_result(result)
+
+
 class _RuntimeWriterTokenIterator:
     def __init__(self, initial_state: dict) -> None:
         self.initial_state = initial_state
@@ -335,7 +352,7 @@ class ChatApiTest(unittest.TestCase):
                 last_session="abc",
             ),
         )
-        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state):
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", return_value=_chat_result_with_state(final_state)):
             response = self.client.post(
                 "/api/chat/sync",
                 json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
@@ -366,7 +383,10 @@ class ChatApiTest(unittest.TestCase):
                 last_session="abc",
             ),
         )
-        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state) as run_once:
+        with patch(
+            "app.interfaces.api.chat.run_chat_once_with_state",
+            return_value=_chat_result_with_state(final_state),
+        ) as run_once:
             response = self.client.post(
                 "/api/chat/sync",
                 headers={"X-Request-ID": "weapp-test-request-1"},
@@ -380,7 +400,7 @@ class ChatApiTest(unittest.TestCase):
 
     def test_chat_sync_sanitizes_provider_error_detail(self) -> None:
         with patch(
-            "app.interfaces.api.chat.run_chat_once",
+            "app.interfaces.api.chat.run_chat_once_with_state",
             side_effect=RuntimeError("APITimeoutError: Request timed out after 60s"),
         ):
             response = self.client.post(
@@ -400,7 +420,7 @@ class ChatApiTest(unittest.TestCase):
     def test_chat_sync_returns_pending_when_inline_budget_exceeded(self) -> None:
         def _slow_chat_once(**_kwargs):
             time.sleep(0.05)
-            return ChatExecutionResult(
+            return _chat_result_with_state(ChatExecutionResult(
                 session_id="session-1",
                 question_type="concept",
                 route="explain",
@@ -408,10 +428,10 @@ class ChatApiTest(unittest.TestCase):
                 explanation=ExplanationPayload(topic="HTTP"),
                 quiz_items=[],
                 memory=UserMemoryRecord(),
-            )
+            ))
 
         with (
-            patch("app.interfaces.api.chat.run_chat_once", side_effect=_slow_chat_once),
+            patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_slow_chat_once),
             patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
             patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.01),
             patch("app.interfaces.api.chat.get_chat_sync_poll_retry_after_ms", return_value=1000),
@@ -456,7 +476,7 @@ class ChatApiTest(unittest.TestCase):
     def test_chat_sync_returns_completed_when_finished_during_grace(self) -> None:
         def _nearly_slow_chat_once(**_kwargs):
             time.sleep(0.03)
-            return ChatExecutionResult(
+            return _chat_result_with_state(ChatExecutionResult(
                 session_id="session-grace",
                 question_type="smalltalk",
                 route="explain",
@@ -464,10 +484,10 @@ class ChatApiTest(unittest.TestCase):
                 explanation=ExplanationPayload(topic="问候"),
                 quiz_items=[],
                 memory=UserMemoryRecord(),
-            )
+            ))
 
         with (
-            patch("app.interfaces.api.chat.run_chat_once", side_effect=_nearly_slow_chat_once),
+            patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_nearly_slow_chat_once),
             patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
             patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.2),
         ):
@@ -554,7 +574,10 @@ class ChatApiTest(unittest.TestCase):
             memory=UserMemoryRecord(),
         )
 
-        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state) as run_once:
+        with patch(
+            "app.interfaces.api.chat.run_chat_once_with_state",
+            return_value=_chat_result_with_state(final_state),
+        ) as run_once:
             response = asyncio.run(
                 chat_module._run_chat_async_job(
                     job_id="async-job-1",
