@@ -101,4 +101,6 @@
 - `model_version`
 - `tool_version`
 
-这些字段进入 Graph State、LangSmith metadata 和未来 `graph_runs` 表。
+这些字段进入 Graph State、LangSmith metadata 和 graph run 记录。
+
+当前 `graph_runs` 表已经落地，已包含 `graph_type / graph_version / metadata_json` 等字段；`prompt_version / model_version / tool_version` 如需保存，应放入 `metadata_json` 或通过后续 Alembic migration 明确扩展，不能假设现表已有同名列。

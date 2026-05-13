@@ -1,6 +1,7 @@
 import Taro from "@tarojs/taro";
 import { clearAuthSession, getAccessToken } from "@/store/auth";
 import { API_BASE, refreshAuthSession } from "@/services/api";
+import { ApiTransportError, callApiTransport, isContainerTransportEnabled } from "@/services/api-transport";
 import {
   createSSEParser,
   decodeUtf8,
@@ -35,9 +36,13 @@ function chatRequestTimeoutMs(idleTimeoutMs: number) {
 }
 
 function normalizeRequestError(error: any) {
+  if (error instanceof ApiTransportError) {
+    return "云端服务暂时繁忙，请稍后重试。";
+  }
   const message = String(error?.errMsg || error?.message || "").trim();
   if (/timeout/i.test(message)) return "聊天响应超时，请稍后重试。";
   if (/abort|aborted|cancel/i.test(message)) return "聊天连接已中断";
+  if (/callcontainer|102002|system error/i.test(message)) return "云端服务暂时繁忙，请稍后重试。";
   return message || "聊天连接中断";
 }
 
@@ -60,6 +65,19 @@ function errorTextFromData(data: any) {
     return data.detail.reason;
   }
   return "模型处理失败";
+}
+
+function friendlyChatErrorFromData(data: any, statusCode: number) {
+  const reason = String(data?.reason || data?.error_type || "").toLowerCase();
+  if (reason === "timeout") return "模型响应超时，请稍后重试，或把问题拆小后再问。";
+  if (reason === "model_unavailable") return "当前模型服务暂时不可用，请稍后重试。";
+  const text = errorTextFromData(data);
+  if (/callcontainer|102002|system error/i.test(text)) return "云端服务暂时繁忙，请稍后重试。";
+  return text || `聊天请求失败（${statusCode}）`;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function stripMarkdownArtifacts(text: string) {
@@ -184,14 +202,22 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     fail("登录已过期，请重新登录");
   };
 
-  const sendSyncFallback = async (hasRetried = false) => {
-    diagnostics.transport = "sync_fallback";
+  const sendSyncFallback = async (
+    hasRetried = false,
+    degradedReason = "chunk_receiver_unavailable"
+  ) => {
+    diagnostics.transport =
+      degradedReason.startsWith("cloud_container") ? "cloud_container_sync" : "sync_fallback";
     diagnostics.chunkSupported = false;
-    diagnostics.degradedReason = "chunk_receiver_unavailable";
-    emitDiagnostics("当前环境未提供 chunk 接收能力，已切换同步请求。", { force: true });
+    diagnostics.degradedReason = degradedReason;
+    emitDiagnostics(
+      degradedReason.startsWith("cloud_container")
+        ? "当前使用云托管容器调用，已切换同步请求。"
+        : "当前环境未提供 chunk 接收能力，已切换同步请求。",
+      { force: true }
+    );
     try {
-      const response = await Taro.request<any>({
-        url: `${API_BASE}/chat/sync`,
+      const response = await callApiTransport<any>("/chat/sync", {
         method: "POST",
         data: payload,
         header: {
@@ -201,14 +227,19 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         timeout: requestTimeoutMs
       });
       if (response.statusCode === 401 && !hasRetried && (await refreshAuthSession())) {
-        return sendSyncFallback(true);
+        return sendSyncFallback(true, degradedReason);
       }
       if (response.statusCode === 401) {
         expireAuthSession();
         return;
       }
+      diagnostics.requestId = response.requestId;
+      diagnostics.clientRequestId = response.clientRequestId;
+      diagnostics.callId = response.callId;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        fail(`聊天请求失败（${response.statusCode}）`);
+        diagnostics.degradedReason = String(response.data?.reason || "cloud_container_http_error");
+        emitDiagnostics("云托管聊天接口返回异常。", { force: true });
+        fail(friendlyChatErrorFromData(response.data, response.statusCode));
         return;
       }
       const result = response.data || {};
@@ -255,12 +286,30 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
       handlers.onEvent({ event: "done", data: { message: "处理完成" } });
       finish();
     } catch (error: any) {
+      if (error instanceof ApiTransportError) {
+        diagnostics.requestId = error.diagnostics.requestId;
+        diagnostics.clientRequestId = error.diagnostics.clientRequestId;
+        diagnostics.callId = error.diagnostics.callId;
+        diagnostics.degradedReason = "cloud_container_error";
+        emitDiagnostics("云托管调用异常，准备进行一次重试。", { force: true });
+        if (!hasRetried && error.diagnostics.retryable) {
+          await delay(800);
+          if (!completed) {
+            return sendSyncFallback(true, "cloud_container_transport_retry");
+          }
+        }
+        emitDiagnostics("云托管调用异常，已停止本轮处理。", { force: true });
+      }
       fail(normalizeRequestError(error));
     }
   };
 
   const openStream = async (hasRetried = false) => {
     if (completed) return;
+    if (isContainerTransportEnabled()) {
+      await sendSyncFallback(hasRetried, "cloud_container_transport");
+      return;
+    }
     const decoder = typeof TextDecoder !== "undefined" ? new TextDecoder("utf-8") : null;
     const parser = createSSEParser((message) => dispatchEvent(message.event, message.data));
     scheduleIdleTimer();

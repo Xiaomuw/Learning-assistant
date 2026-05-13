@@ -431,6 +431,9 @@ export interface ChatStreamDiagnostics {
   elapsedMs?: number;
   degradedReason?: string;
   detail?: string;
+  requestId?: string;
+  clientRequestId?: string;
+  callId?: string;
 }
 
 export interface ChatProcessToolCall {

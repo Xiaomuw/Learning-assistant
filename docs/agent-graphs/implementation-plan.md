@@ -1,5 +1,7 @@
 # Agent Graph 分阶段实施计划
 
+> 历史参考说明：这份文档记录 Agent Graph 切换过程中的实施计划与阶段性下一步。当前实现状态请优先看 [Agent Graph 当前状态](status.md)、[Graph Relationship Matrix](graph-relationship-matrix.md) 和实际代码。
+
 ## Phase 0：架构基线
 
 - 已完成 Graph 文档集、共享 state/schema、Tool capability 抽象、repository interface、LearningOrchestratorGraph 骨架和 contract 测试。

@@ -56,13 +56,11 @@
 
 ## 数据库与事实表
 
-- Alembic migration：`backend/alembic/versions/0001_graph_facts.py`。
+- Alembic migrations 位于 `backend/alembic/versions/`，graph-era facts、微信身份、KB taxonomy、practice question、PGVector hardening、auth core、idempotency 和 readiness/index 相关变更都应以当前 Alembic head 为准。
 - `backend/alembic/env.py` 会加载 `backend/.env`，用于读取当前本地 `DATABASE_URL`。
-- 已对当前本地 `DATABASE_URL` 执行 `alembic upgrade head`，当前版本为 `0001_graph_facts (head)`。
-- 已验证真实 PostgreSQL 中 8 张 graph-era facts 表均存在。
 - graph facts 默认随新 Orchestrator 执行写入；`ENABLE_GRAPH_FACTS=false` 可在测试或诊断场景关闭。
 - 旧领域服务仍可读取原有业务数据；历史业务数据已具备幂等 backfill 工具，默认 dry-run，`--execute` 才写入当前 `DATABASE_URL`。
-- 已在当前本地 `DATABASE_URL` 执行 backfill：dry-run 计划 788 项；execute 后再次执行结果为 `inserted_count=0, skipped_count=788, error_count=0`。当前 graph-era 计数为 `attempts=9, mastery_snapshots=25, question_items=360, concepts=166`。
+- 历史本地快照：曾在某次本地 `DATABASE_URL` 上执行 backfill，dry-run 计划 788 项；execute 后再次执行结果为 `inserted_count=0, skipped_count=788, error_count=0`，当时 graph-era 计数为 `attempts=9, mastery_snapshots=25, question_items=360, concepts=166`。这些数字只说明当时环境，不代表当前数据库健康状态。
 
 ## LangSmith / Eval
 
@@ -99,7 +97,9 @@
 - `domains.qa.tool_loop` 已按 `ToolCapability` / provider 摘要判断 source usage、tool decision 和 trace metadata，不再基于历史 provider 工具名分支。
 - 工具 run 记录 capability/provider/status/doc_count/payload_keys，不记录完整 tool args 或正文。
 
-## 当前测试记录
+## 历史测试记录（点时快照）
+
+以下命令和数量记录的是当次切换验收快照，不代表当前工作树已经通过。每轮相关修改仍应重新运行对应测试。
 
 已通过的最小切换测试：
 
@@ -127,7 +127,7 @@ make test-graphs
 make eval-graphs
 ```
 
-当前 `make test-graphs` 覆盖 110 个 Graph / contract / persistence / backfill / eval / quiz request 用例；`make eval-graphs` 覆盖 6 个本地 deterministic eval case。
+当时 `make test-graphs` 覆盖 110 个 Graph / contract / persistence / backfill / eval / quiz request 用例；`make eval-graphs` 覆盖 6 个本地 deterministic eval case。
 
 已通过的完整后端回归：
 
@@ -135,7 +135,7 @@ make eval-graphs
 env LANGSMITH_TRACING=false backend/.venv313/bin/python -m unittest discover -s backend/tests
 ```
 
-当前完整后端回归结果：360 个测试通过，5 个按测试条件跳过。
+当时完整后端回归结果：360 个测试通过，5 个按测试条件跳过。
 
 已验证远程 eval CLI 在默认关闭状态下只输出脱敏 preview，不访问网络：
 
@@ -150,7 +150,7 @@ cd frontend && npm run lint
 cd frontend && npm run build
 ```
 
-本轮也已额外执行上述前端检查，均通过。
+该快照也曾额外执行上述前端检查，均通过。
 
 ## 剩余风险
 

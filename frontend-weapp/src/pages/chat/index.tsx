@@ -828,7 +828,13 @@ export default function ChatPage() {
       key: "stream_transport",
       label: "流式传输",
       detail: streamDiagnosticsDetail(next),
-      status: next.transport === "sync_fallback" || (next.realTokenDeltaCount || 0) > 0 ? "completed" : "running"
+      status: /error|异常|失败/.test(`${next.degradedReason || ""} ${next.detail || ""}`)
+        ? "failed"
+        : next.transport === "sync_fallback"
+          || (next.transport === "cloud_container_sync" && (next.parsedEventCount || 0) > 0)
+          || (next.realTokenDeltaCount || 0) > 0
+            ? "completed"
+            : "running"
     }, {
       setCurrentStage: false
     });

@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
+import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -33,6 +36,7 @@ from app.application.chat.service import (
     run_chat_once,
     stream_chat,
 )
+from app.infrastructure.observability.request_context import get_request_id
 from app.interfaces.auth.dependencies import AuthenticatedUser, require_current_user
 from app.interfaces.api.chat_presenter import event_name_for_node, extract_event_data
 from app.shared.schemas.subject import DEFAULT_SUBJECT_ID
@@ -125,6 +129,15 @@ def _chat_error_reason(exc: Exception) -> str:
     ):
         return "model_unavailable"
     return "workflow_error"
+
+
+def _question_log_metadata(question: str) -> dict[str, str | int]:
+    normalized = " ".join((question or "").split())
+    return {
+        "question_len": len(question or ""),
+        "question_preview": normalized[:30],
+        "question_hash": hashlib.sha256((question or "").encode("utf-8")).hexdigest()[:16],
+    }
 
 
 async def _close_chat_stream_safely(
@@ -369,29 +382,52 @@ async def chat(
 # ---------- 路由：同步（调试用） ----------
 @router.post("/chat/sync", response_model=ChatResponse)
 async def chat_sync(
-    request: ChatRequest,
+    body: ChatRequest,
+    http_request: Request,
     current_user: AuthenticatedUser = Depends(require_current_user),
 ):
     """
     POST /api/chat/sync — 非流式版本，一次性返回全部结果
     """
-    if request.user_id != current_user.id:
+    if body.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="不能使用其他用户身份发起请求")
 
-    logger.info(f"💬 [同步] 收到问题: {request.question[:50]}...")
+    request_id = get_request_id() or getattr(http_request.state, "request_id", None) or uuid.uuid4().hex
+    started_at = time.perf_counter()
+    question_meta = _question_log_metadata(body.question)
+    logger.info(
+        "💬 [同步] 收到问题: request_id={} user={} session={} subject={} "
+        "question_len={} question_preview={} question_hash={}",
+        request_id,
+        body.user_id,
+        body.session_id,
+        body.subject_id,
+        question_meta["question_len"],
+        question_meta["question_preview"],
+        question_meta["question_hash"],
+    )
 
     try:
-        result = run_chat_once(
-            user_id=request.user_id,
-            session_id=request.session_id,
-            question=request.question,
-            subject_id=request.subject_id,
-            thinking_mode=request.thinking_mode,
-            client_request_id=request.client_request_id,
+        result = await asyncio.to_thread(
+            run_chat_once,
+            user_id=body.user_id,
+            session_id=body.session_id,
+            question=body.question,
+            subject_id=body.subject_id,
+            thinking_mode=body.thinking_mode,
+            client_request_id=body.client_request_id,
+        )
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.info(
+            "✅ [同步] 问答完成: request_id={} route={} question_type={} elapsed_ms={}",
+            request_id,
+            result.route,
+            result.question_type,
+            elapsed_ms,
         )
 
         return ChatResponse(
-            session_id=request.session_id,
+            session_id=body.session_id,
             question_type=result.question_type,
             route=result.route,
             final_answer=result.final_answer,
@@ -404,5 +440,21 @@ async def chat_sync(
 
     except Exception as e:
         error_message = _safe_chat_error_message(e)
-        logger.error(f"❌ 同步工作流执行失败: {error_message}")
-        raise HTTPException(status_code=500, detail=f"处理失败: {error_message}")
+        reason = _chat_error_reason(e)
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.error(
+            "❌ [同步] 工作流执行失败: request_id={} reason={} elapsed_ms={} error={}",
+            request_id,
+            reason,
+            elapsed_ms,
+            error_message,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": error_message,
+                "reason": reason,
+                "retryable": reason in {"timeout", "model_unavailable", "workflow_error"},
+                "request_id": request_id,
+            },
+        )

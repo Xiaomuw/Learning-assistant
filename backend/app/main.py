@@ -34,6 +34,7 @@ from app.interfaces.api.subjects import router as subjects_router  # noqa: E402
 from app.interfaces.api.upload import router as upload_router  # noqa: E402
 from app.interfaces.api.user_data import router as user_data_router  # noqa: E402
 from app.interfaces.auth.router import router as auth_router  # noqa: E402
+from app.interfaces.middleware.request_logging import RequestLoggingMiddleware  # noqa: E402
 
 ensure_model_env_aliases()
 
@@ -142,6 +143,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(auth_router, prefix="/api", tags=["Auth"])
 app.include_router(chat_router, prefix="/api", tags=["Chat"])

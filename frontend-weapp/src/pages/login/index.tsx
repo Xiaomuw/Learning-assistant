@@ -88,34 +88,88 @@ export default function LoginPage() {
 
   return (
     <View className="page login-page">
-      <View className="login-hero">
-        <Text className="login-kicker">LEARNING ASSISTANT</Text>
-        <Text className="login-title">
-          用微信登录<Text className="login-title-product">学习助手</Text>
-        </Text>
-        <Text className="login-subtitle">
-          登录后可继续使用聊天讲解、智能出题、刷题反馈和掌握度记录。
-        </Text>
+      <View className="login-bg" />
+
+      <View className="login-illustration">
+        <View className="login-spark">✦</View>
+        <View className="login-dot" />
+        <View className="login-book login-book-small">
+          <View className="login-book-line" />
+          <View className="login-book-line login-book-line-short" />
+        </View>
+        <View className="login-book login-book-large">
+          <View className="login-book-line" />
+          <View className="login-book-line login-book-line-short" />
+          <View className="login-book-line" />
+        </View>
       </View>
 
-      <View className="card login-card">
-        <Text className="login-card-title">微信一键登录</Text>
-        <Text className="login-card-desc">
-          我们将使用微信登录凭证创建或找回你的学习账号。
-        </Text>
-        {error ? <Text className="login-error">{error}</Text> : null}
-        <Button className="button-primary login-button" loading={loading} disabled={loading} onClick={handleLogin}>
-          {loading ? "登录中..." : "使用微信一键登录"}
-        </Button>
-        <View className="login-agreement">
-          <Text className="login-agreement-text">登录即代表你同意</Text>
-          <Text className="login-agreement-link" onClick={handleAgreementTap}>
-            《用户协议》
+      <View className="login-content">
+        <View className="login-hero">
+          <View className="login-kicker">
+            <View className="login-kicker-dot" />
+            <Text>LEARNING ASSISTANT</Text>
+          </View>
+
+          <View className="login-title">
+            <Text className="login-title-line">用微信开启</Text>
+            <Text className="login-title-line login-title-accent">学习之旅</Text>
+          </View>
+
+          <Text className="login-subtitle">
+            登录后即可使用全部学习功能，{"\n"}数据云端同步，随时随地学习。
           </Text>
-          <Text className="login-agreement-text">和</Text>
-          <Text className="login-agreement-link" onClick={handlePrivacyTap}>
-            《隐私政策》
+
+          <View className="login-features">
+            <View className="login-feature">
+              <View className="login-feature-mark login-feature-chat" />
+              <Text>聊天讲解</Text>
+            </View>
+            <View className="login-feature">
+              <View className="login-feature-mark login-feature-quiz" />
+              <Text>智能出题</Text>
+            </View>
+            <View className="login-feature">
+              <View className="login-feature-mark login-feature-practice" />
+              <Text>刷题反馈</Text>
+            </View>
+            <View className="login-feature">
+              <View className="login-feature-mark login-feature-mastery" />
+              <Text>掌握度记录</Text>
+            </View>
+          </View>
+        </View>
+
+        <View className="login-card">
+          <Text className="login-card-label">快速登录</Text>
+          <Text className="login-card-title">微信一键登录</Text>
+          <Text className="login-card-desc">
+            使用微信凭证创建或找回你的学习账号，安全便捷。
           </Text>
+          {error ? <Text className="login-error">{error}</Text> : null}
+          <Button className="login-button" loading={loading} disabled={loading} onClick={handleLogin}>
+            {loading ? (
+              "登录中..."
+            ) : (
+              <View className="login-button-content">
+                <View className="wechat-icon">
+                  <View className="wechat-bubble wechat-bubble-primary" />
+                  <View className="wechat-bubble wechat-bubble-secondary" />
+                </View>
+                <Text>使用微信一键登录</Text>
+              </View>
+            )}
+          </Button>
+          <View className="login-agreement">
+            <Text className="login-agreement-text">登录即代表你同意</Text>
+            <Text className="login-agreement-link" onClick={handleAgreementTap}>
+              《用户协议》
+            </Text>
+            <Text className="login-agreement-text">和</Text>
+            <Text className="login-agreement-link" onClick={handlePrivacyTap}>
+              《隐私政策》
+            </Text>
+          </View>
         </View>
       </View>
     </View>

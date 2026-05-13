@@ -29,6 +29,7 @@ from app.application.chat.orchestrator_runtime import _chat_state_from_orchestra
 from app.application.chat import service as chat_service
 from app.application.chat import state_builder as chat_state_builder
 from app.interfaces.auth.dependencies import require_current_user
+from app.interfaces.middleware.request_logging import RequestLoggingMiddleware
 from app.shared.schemas.contracts import (
     AuthUserView,
     ChatExecutionResult,
@@ -167,6 +168,7 @@ class ChatApiTest(unittest.TestCase):
         AppStatus.should_exit_event = None
         app = FastAPI()
         app.include_router(chat_router, prefix="/api")
+        app.add_middleware(RequestLoggingMiddleware)
         app.dependency_overrides[require_current_user] = lambda: AuthUserView(
             id="default_user",
             email="default@example.com",
@@ -302,9 +304,39 @@ class ChatApiTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers.get("x-request-id"))
         payload = response.json()
         self.assertEqual(payload["question_type"], "concept")
         self.assertEqual(payload["explanation"]["topic"], "HTTP")
+
+    def test_chat_sync_reuses_request_id_header(self) -> None:
+        final_state = ChatExecutionResult(
+            session_id="session-1",
+            question_type="concept",
+            explanation=ExplanationPayload(
+                topic="HTTP",
+                thinking="HTTP 是应用层协议。",
+                steps=["定义请求与响应语义"],
+                mistakes="不要把 HTTP 误认为传输层协议",
+                similar=["HTTPS"],
+            ),
+            quiz_items=[],
+            memory=UserMemoryRecord(
+                weak_points=[],
+                error_count={},
+                recent_topics=["HTTP"],
+                last_session="abc",
+            ),
+        )
+        with patch("app.interfaces.api.chat.run_chat_once", return_value=final_state):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-test-request-1"},
+                json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("x-request-id"), "weapp-test-request-1")
 
     def test_chat_sync_sanitizes_provider_error_detail(self) -> None:
         with patch(
@@ -317,10 +349,13 @@ class ChatApiTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 500)
-        detail = response.json()["detail"]
-        self.assertIn("模型响应超时", detail)
-        self.assertNotIn("APITimeoutError", detail)
-        self.assertNotIn("Request timed out", detail)
+        payload = response.json()
+        self.assertIn("模型响应超时", payload["error"])
+        self.assertEqual(payload["reason"], "timeout")
+        self.assertTrue(payload["retryable"])
+        self.assertTrue(payload["request_id"])
+        self.assertNotIn("APITimeoutError", payload["error"])
+        self.assertNotIn("Request timed out", payload["error"])
 
     def test_run_chat_once_uses_orchestrator_runtime_by_default(self) -> None:
         orchestrator_state = {

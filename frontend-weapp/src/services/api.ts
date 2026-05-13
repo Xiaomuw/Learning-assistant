@@ -1,5 +1,6 @@
 import Taro from "@tarojs/taro";
 import { clearAuthSession, getAccessToken, getAuthUser, getRefreshToken, isAccessTokenExpired, persistAuthSession, updateAuthTokens } from "@/store/auth";
+import { API_BASE, callApiTransport } from "@/services/api-transport";
 import {
   DEFAULT_NOTEBOOK_ID,
   type AuthTokenEnvelope,
@@ -21,12 +22,11 @@ import {
   type UserProfile
 } from "@/types/api";
 
-const API_BASE = process.env.TARO_APP_API_BASE || "http://127.0.0.1:8000/api";
-
 interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   data?: any;
   header?: Record<string, string>;
+  timeout?: number;
 }
 
 interface NotebookKnowledgeStatusWire {
@@ -88,8 +88,7 @@ export async function refreshAuthSession(): Promise<boolean> {
     const refreshToken = getRefreshToken();
     if (!refreshToken) return false;
 
-    refreshPromise = Taro.request<AuthTokenEnvelope>({
-      url: `${API_BASE}/auth/wechat-mini/refresh`,
+    refreshPromise = callApiTransport<AuthTokenEnvelope>("/auth/wechat-mini/refresh", {
       method: "POST",
       data: { refresh_token: refreshToken },
       header: { "Content-Type": "application/json" }
@@ -111,11 +110,11 @@ export async function refreshAuthSession(): Promise<boolean> {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}, allowRefresh = true): Promise<T> {
-  const response = await Taro.request<T>({
-    url: `${API_BASE}${path}`,
+  const response = await callApiTransport<T>(path, {
     method: options.method || "GET",
     data: options.data,
-    header: buildHeaders(options.header)
+    header: buildHeaders(options.header),
+    timeout: options.timeout
   });
 
   if (response.statusCode === 401 && allowRefresh) {

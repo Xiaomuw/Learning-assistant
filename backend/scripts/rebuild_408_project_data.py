@@ -43,7 +43,7 @@ from app.infrastructure.db.database import session_scope  # noqa: E402
 
 
 CONFIRM_TOKEN = "CLEAN_408_REBUILD"
-EXPECTED_ALEMBIC_REVISION = "0010_readiness_required_indexes"
+EXPECTED_ALEMBIC_REVISION = "0011_practice_finalizer"
 DEFAULT_QUESTION_FILE = PROJECT_ROOT / "data" / "practice_questions" / "all_408.json"
 DEFAULT_BACKUP_DIR = PROJECT_ROOT / "backups"
 

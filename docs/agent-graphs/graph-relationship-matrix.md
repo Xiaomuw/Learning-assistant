@@ -35,8 +35,8 @@ flowchart LR
 | Graph | 核心职责 | 明确不负责 | 当前实现状态 |
 | --- | --- | --- | --- |
 | `QAGraph` | 问答、解释、检索、证据判断、工具 fallback、grounded answer generation、answer repair、产生学习事件 | 不出题，不评分，不写 mastery，不直接写题库或 attempt | 已通过 `ProductionQARuntimeAdapter` 接入 `/api/chat` 的 Orchestrator 路径 |
-| `QuestionGenerationGraph` | 根据学习内容生成题目、练习、测验；题目蓝图、候选题、answer key、rubric、solver verifier、quality reviewer、dedupe、difficulty calibration、题目持久化 | 不生成完整教学回答，不更新 mastery，不记录 attempt | 已具备 production graph 与 `QuestionItemRepository` 接口；完整题库质量门仍需迭代 |
-| `MasteryEvaluationGraph` | 消费 `LearningEvent`、attempt payload 和行为轨迹；区分强/中/弱信号；bounded mastery update；状态分类；下一步学习建议 | 不回答学习问题，不生成题目内容，不调用外部搜索 | 已具备 production graph 与 `MasterySnapshotRepository` 接口；历史数据 backfill 待独立推进 |
+| `QuestionGenerationGraph` | 根据学习内容生成题目、练习、测验；题目蓝图、候选题、answer key、rubric、solver verifier、quality reviewer、dedupe、difficulty calibration、题目持久化 | 不生成完整教学回答，不更新 mastery，不记录 attempt | 已具备 production graph、质量门和 `QuestionItemRepository` 接口；真实题库 dataset / 人审样本仍需持续校准 |
+| `MasteryEvaluationGraph` | 消费 `LearningEvent`、attempt payload 和行为轨迹；区分强/中/弱信号；bounded mastery update；状态分类；下一步学习建议 | 不回答学习问题，不生成题目内容，不调用外部搜索 | 已具备 production graph、`MasterySnapshotRepository`、历史兼容 adapter 和幂等 backfill 路径 |
 
 ## 直接调用矩阵
 
@@ -52,7 +52,7 @@ flowchart LR
 ### 1. 用户提问
 
 1. 用户请求进入 `LearningOrchestratorGraph`。
-2. `intent_router` 判断为 `qa`。
+2. `graph_router` 判断为 `qa`。
 3. Orchestrator 调用 `QAGraph`。
 4. `QAGraph` 生成 `FinalResponse`，同时输出 `EvidenceChunk`、`ToolResult` 和 `LearningEvent`。
 5. 若有持久化节点，`QAGraph` 只允许通过 `LearningEventRepository.append` 写入学习事件。
@@ -171,12 +171,12 @@ flowchart LR
 | 区域 | 当前状态 | 下一步 |
 | --- | --- | --- |
 | QAGraph 默认回答 | deterministic adapter | 继续保留测试默认路径 |
-| QAGraph production runtime | `ProductionQARuntimeAdapter` 已包装 `domains.qa.runtime` 并接入 Orchestrator | 继续把 runtime 内部工具名迁移到 capability |
+| QAGraph production runtime | `ProductionQARuntimeAdapter` 已包装 `domains.qa.runtime` 并接入 Orchestrator；外露工具名已收口到 capability | 后续只在 provider / compat 层维护旧工具包装 |
 | QGenGraph 默认出题 | deterministic generator | 保留单测默认路径 |
-| QGenGraph production generator | 生产 graph 已可生成 `QuestionItem` 并通过 repository 写入 | 接真实质量门和 eval dataset |
+| QGenGraph production generator | 生产 graph 已可生成 `QuestionItem`，通过质量门并写入 repository | 持续补真实题库 dataset / 人审样本 |
 | QGenGraph question repository | graph-era `question_items` SQL repository 已落地 | 旧题库历史数据如需统一报表，单独 backfill |
 | MasteryGraph 默认更新 | minimal bounded update | 保留 contract 测试路径 |
-| MasteryGraph attempts | graph-era `attempts` SQL repository 已落地；旧 attempts 可兼容读取 | 旧数据 backfill 单独推进 |
+| MasteryGraph attempts | graph-era `attempts` SQL repository 已落地；旧 attempts 可通过 recent-attempt adapter 兼容读取 | 真实环境 backfill 前先 dry-run |
 | MasteryGraph snapshots | graph-era `mastery_snapshots` SQL repository 已落地 | 历史 `user_knowledge_stats` 只读兼容 |
 | Graph run / tool run facts | `graph_runs / node_runs / tool_runs` SQL repository 已落地 | 继续与 LangSmith run id 对齐 |
 
