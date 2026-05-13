@@ -36,6 +36,11 @@ def sync_knowledge_taxonomy(registry: ConceptRegistry | None = None) -> int:
             }
             row.updated_at = utcnow()
 
+        # Alembic owns the FK constraints, while these ORM models intentionally
+        # do not define relationships. Flush parent subjects before child rows
+        # so PostgreSQL never sees kb_chapter/kb_topic/kb_concept first.
+        session.flush()
+
         chapter_seen: set[str] = set()
         topic_seen: set[str] = set()
         for index, node in enumerate(registry.list_candidates(limit=10_000), start=1):
