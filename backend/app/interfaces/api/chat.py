@@ -196,7 +196,9 @@ def _chat_response_from_result(
     result,
     request_id: str,
     job_id: str | None = None,
+    final_state: dict[str, Any] | None = None,
 ) -> ChatResponse:
+    state = final_state if isinstance(final_state, dict) else {}
     return ChatResponse(
         session_id=body.session_id,
         question_type=result.question_type,
@@ -210,6 +212,11 @@ def _chat_response_from_result(
         status="completed",
         job_id=job_id,
         request_id=request_id,
+        tool_calls=_safe_tool_call_metadata(state.get("tool_calls")),
+        external_tool_calls=_safe_tool_call_metadata(state.get("external_tool_calls")),
+        web_search_attempted=_web_search_attempted(state),
+        web_search_used=_web_search_used(state),
+        web_search_error=_web_search_error(state),
     )
 
 
@@ -247,6 +254,89 @@ def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str
 
 def _chat_response_to_job_result(response: ChatResponse) -> dict[str, Any]:
     return response.model_dump(mode="json")
+
+
+def _safe_tool_call_metadata(raw_calls: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_calls, list):
+        return []
+
+    safe_calls: list[dict[str, Any]] = []
+    for raw in raw_calls:
+        if not isinstance(raw, dict):
+            continue
+        capability = str(raw.get("capability") or raw.get("tool") or raw.get("name") or "").strip()
+        provider = str(raw.get("provider") or "").strip()
+        status = str(raw.get("status") or "").strip()
+        if not status:
+            if raw.get("success") is True:
+                status = "success"
+            elif raw.get("error"):
+                status = "failed"
+        payload: dict[str, Any] = {}
+        if capability:
+            payload["capability"] = capability
+            payload["source"] = _public_tool_source(capability=capability, provider=provider)
+        if status:
+            payload["status"] = status
+        if "doc_count" in raw:
+            payload["doc_count"] = raw.get("doc_count")
+        if "elapsed_ms" in raw:
+            payload["elapsed_ms"] = raw.get("elapsed_ms")
+        if payload:
+            safe_calls.append(payload)
+    return safe_calls
+
+
+def _public_tool_source(*, capability: str, provider: str = "") -> str:
+    normalized_capability = capability.strip().lower()
+    normalized_provider = provider.strip().lower()
+    if normalized_capability == "web_search" or "search" in normalized_capability:
+        return "web"
+    if normalized_provider in {"mcp", "tavily", "web"}:
+        return "web"
+    return "tool"
+
+
+def _web_search_attempted(final_state: dict[str, Any]) -> bool:
+    if "web_search_attempted" in final_state:
+        return bool(final_state.get("web_search_attempted"))
+    calls = [
+        *_safe_tool_call_metadata(final_state.get("tool_calls")),
+        *_safe_tool_call_metadata(final_state.get("external_tool_calls")),
+    ]
+    return any(str(call.get("capability") or "") == "web_search" for call in calls)
+
+
+def _web_search_used(final_state: dict[str, Any]) -> bool:
+    if "web_search_used" in final_state:
+        return bool(final_state.get("web_search_used"))
+    calls = [
+        *_safe_tool_call_metadata(final_state.get("tool_calls")),
+        *_safe_tool_call_metadata(final_state.get("external_tool_calls")),
+    ]
+    for call in calls:
+        if str(call.get("capability") or "") != "web_search":
+            continue
+        if str(call.get("status") or "") == "success":
+            return True
+        if _safe_int(call.get("doc_count")) > 0:
+            return True
+    return False
+
+
+def _web_search_error(final_state: dict[str, Any]) -> str | None:
+    if not _web_search_attempted(final_state) or _web_search_used(final_state):
+        return None
+    if final_state.get("web_search_error"):
+        return "unavailable"
+    return None
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _chat_sync_terminal_response_from_job(
@@ -314,7 +404,7 @@ async def _persist_chat_session_after_response(
     final_state: dict[str, Any],
     request_id: str,
     job_id: str,
-) -> None:
+) -> bool:
     started_at = time.perf_counter()
     token = set_request_id(request_id)
     try:
@@ -333,6 +423,7 @@ async def _persist_chat_session_after_response(
             job_id,
             elapsed_ms,
         )
+        return True
     except Exception as exc:  # noqa: BLE001 - persistence must not block answer delivery
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.warning(
@@ -342,8 +433,43 @@ async def _persist_chat_session_after_response(
             elapsed_ms,
             exc.__class__.__name__,
         )
+        return False
     finally:
         reset_request_id(token)
+
+
+async def _complete_chat_job_after_persistence(
+    *,
+    body: ChatRequest,
+    final_state: dict[str, Any],
+    request_id: str,
+    job_id: str,
+    response: ChatResponse,
+) -> None:
+    persistence_ok = await _persist_chat_session_after_response(
+        user_id=body.user_id,
+        session_id=body.session_id,
+        subject_id=body.subject_id,
+        question=body.question,
+        final_state=final_state,
+        request_id=request_id,
+        job_id=job_id,
+    )
+    try:
+        mark_chat_async_job_completed(job_id=job_id, result=_chat_response_to_job_result(response))
+        logger.info(
+            "✅ [同步后台] 轮询结果已开放: request_id={} job_id={} persistence_ok={}",
+            request_id,
+            job_id,
+            persistence_ok,
+        )
+    except Exception as exc:  # noqa: BLE001 - keep callback failures observable
+        logger.error(
+            "❌ [同步后台] 轮询结果开放失败: request_id={} job_id={} error_type={}",
+            request_id,
+            job_id,
+            exc.__class__.__name__,
+        )
 
 
 def _on_chat_persistence_task_done(task: asyncio.Task, *, job_id: str, request_id: str) -> None:
@@ -365,16 +491,15 @@ def _schedule_chat_session_persistence(
     final_state: dict[str, Any],
     request_id: str,
     job_id: str,
+    response: ChatResponse,
 ) -> None:
     task = asyncio.create_task(
-        _persist_chat_session_after_response(
-            user_id=body.user_id,
-            session_id=body.session_id,
-            subject_id=body.subject_id,
-            question=body.question,
+        _complete_chat_job_after_persistence(
+            body=body,
             final_state=dict(final_state),
             request_id=request_id,
             job_id=job_id,
+            response=response,
         )
     )
     _RUNNING_CHAT_PERSISTENCE_TASKS.add(task)
@@ -386,16 +511,27 @@ async def _run_chat_async_job(*, job_id: str, body: ChatRequest, request_id: str
     started_at = time.perf_counter()
     try:
         result, final_state = await asyncio.to_thread(_run_chat_once_for_async_job, body=body, request_id=request_id)
-        response = _chat_response_from_result(body=body, result=result, request_id=request_id, job_id=job_id)
-        mark_chat_async_job_completed(job_id=job_id, result=_chat_response_to_job_result(response))
+        response = _chat_response_from_result(
+            body=body,
+            result=result,
+            request_id=request_id,
+            job_id=job_id,
+            final_state=final_state,
+        )
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.info(
-            "✅ [同步后台] 问答任务完成: request_id={} job_id={} status=completed elapsed_ms={}",
+            "✅ [同步后台] 问答答案生成完成: request_id={} job_id={} status=answer_ready elapsed_ms={}",
             request_id,
             job_id,
             elapsed_ms,
         )
-        _schedule_chat_session_persistence(body=body, final_state=final_state, request_id=request_id, job_id=job_id)
+        _schedule_chat_session_persistence(
+            body=body,
+            final_state=final_state,
+            request_id=request_id,
+            job_id=job_id,
+            response=response,
+        )
         return response
     except Exception as exc:  # noqa: BLE001 - background job should persist structured failure
         error_payload = _job_error_payload(exc, request_id=request_id)
@@ -443,7 +579,7 @@ def _on_chat_job_task_done(
 
     if response is not None:
         logger.info(
-            "✅ [同步后台] 任务结束回调: request_id={} job_id={} cancelled=False status=completed route={} question_type={}",
+            "✅ [同步后台] 任务生成回调: request_id={} job_id={} cancelled=False status=answer_ready route={} question_type={}",
             request_id,
             job_id,
             response.route,
@@ -543,6 +679,11 @@ class ChatResponse(BaseModel):
     job_id: str | None = None
     request_id: str | None = None
     retry_after_ms: int | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    external_tool_calls: list[dict[str, Any]] | None = None
+    web_search_attempted: bool | None = None
+    web_search_used: bool | None = None
+    web_search_error: str | None = None
 
 
 class ChatJobResponse(BaseModel):

@@ -291,10 +291,36 @@ def event_name_for_node(node: str) -> str:
 
 
 def _sanitize_tool_call(item: dict[str, Any]) -> dict[str, Any]:
-    payload = dict(item)
-    provider = str(payload.pop("provider", "") or "").strip().lower()
-    if provider:
-        payload.setdefault("source", _public_tool_source(provider, payload))
+    provider = str(item.get("provider", "") or "").strip().lower()
+    capability = str(item.get("capability") or item.get("name") or item.get("tool") or "").strip()
+    name = str(item.get("name") or item.get("tool") or capability or "").strip()
+
+    payload: dict[str, Any] = {}
+    if name:
+        payload["name"] = name
+    if capability:
+        payload["capability"] = capability
+
+    if "success" in item:
+        payload["success"] = bool(item.get("success"))
+    status = str(item.get("status") or "").strip()
+    if status:
+        payload["status"] = status
+    elif item.get("success") is True:
+        payload["status"] = "success"
+    elif item.get("error"):
+        payload["status"] = "failed"
+
+    for key in ("doc_count", "elapsed_ms"):
+        if key in item:
+            payload[key] = item.get(key)
+    if "latency_ms" in item and "elapsed_ms" not in payload:
+        payload["elapsed_ms"] = item.get("latency_ms")
+    if item.get("error"):
+        payload["error"] = "unavailable"
+
+    source_payload = payload or {"capability": capability, "name": name}
+    payload["source"] = _public_tool_source(provider, source_payload)
     return payload
 
 

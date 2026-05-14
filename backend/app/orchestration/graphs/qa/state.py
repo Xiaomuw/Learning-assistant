@@ -19,6 +19,7 @@ class QAGraphState(BaseLearningState, total=False):
     notebook_evidence: list[dict[str, Any]]
     web_evidence: list[dict[str, Any]]
     evidence_judgement: dict[str, Any]
+    evidence_confidence: dict[str, Any]
     quality_check: dict[str, Any]
     answer_quality: dict[str, Any]
     repair_count: int

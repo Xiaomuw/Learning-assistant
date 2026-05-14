@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from app.application.chat.answer_cleaning import clean_display_answer, should_preserve_notebook_notice
 from app.application.chat.messages import normalize_explanation_payload
 from app.infrastructure.llm.langsmith import trace_run
 from app.orchestration.graphs.orchestrator.graph import build_graph as build_orchestrator_graph
@@ -216,7 +217,10 @@ def stream_orchestrator_chat(
         "node": "final",
         "state_update": {
             "finalized": True,
-            "final_answer": str(final_state.get("final_answer") or ""),
+            "final_answer": clean_display_answer(
+                str(final_state.get("final_answer") or ""),
+                preserve_notebook_notice=should_preserve_notebook_notice(final_state),
+            ),
             "question_type": final_state.get("question_type"),
             "route": final_state.get("route"),
             "degraded": bool(final_state.get("graph_warnings")),
@@ -343,7 +347,22 @@ def _chat_state_from_orchestrator_result(
                 "similar": [item.name for item in response.concepts[1:3]],
             }
         ).model_dump()
-    final_answer = str(envelope_sync.get("final_answer") or response.answer)
+    preserve_notebook_notice = should_preserve_notebook_notice(
+        {
+            **initial_state,
+            "source_policy": str(graph_result.get("source_policy") or initial_state.get("source_policy") or ""),
+            "user_message": str(initial_state.get("question") or ""),
+        }
+    )
+    if explanation.get("final_answer"):
+        explanation["final_answer"] = clean_display_answer(
+            str(explanation.get("final_answer") or ""),
+            preserve_notebook_notice=preserve_notebook_notice,
+        )
+    final_answer = clean_display_answer(
+        str(envelope_sync.get("final_answer") or response.answer),
+        preserve_notebook_notice=preserve_notebook_notice,
+    )
     return {
         **initial_state,
         "message_id": str(initial_state.get("message_id") or initial_state.get("request_id") or ""),
@@ -488,11 +507,15 @@ def _stream_chunk_from_orchestrator_update(
 def _final_answer_chunk(final_state: dict[str, Any], *, node: str, elapsed: float) -> dict[str, Any]:
     runtime = final_state.get("graph_runtime") if isinstance(final_state.get("graph_runtime"), dict) else {}
     latency_ms = int(runtime.get("latency_ms") or round(elapsed * 1000))
+    final_answer = clean_display_answer(
+        str(final_state.get("final_answer") or ""),
+        preserve_notebook_notice=should_preserve_notebook_notice(final_state),
+    )
     state_update = {
         "question_type": final_state.get("question_type"),
         "route": final_state.get("route"),
         "explanation": final_state.get("explanation") or {},
-        "final_answer": str(final_state.get("final_answer") or ""),
+        "final_answer": final_answer,
         "execution_mode": str(final_state.get("execution_mode") or "orchestrator_graph"),
         "degraded": bool(final_state.get("degraded") or final_state.get("graph_warnings")),
         "reasoning_summary": _streaming_reasoning_summary(final_state),
@@ -507,6 +530,11 @@ def _final_answer_chunk(final_state: dict[str, Any], *, node: str, elapsed: floa
         "streaming_token_count": int(final_state.get("streaming_token_count") or 0),
         "streaming_degraded_reason": str(final_state.get("streaming_degraded_reason") or ""),
         "model_latency_ms": latency_ms,
+        "tool_calls": list(final_state.get("tool_calls") or []),
+        "external_tool_calls": list(final_state.get("external_tool_calls") or []),
+        "web_search_attempted": bool(final_state.get("web_search_attempted", False)),
+        "web_search_used": bool(final_state.get("web_search_used", False)),
+        "web_search_error": str(final_state.get("web_search_error") or ""),
     }
     if node == "graph_error_node":
         state_update["graph_error"] = {"message": "LearningOrchestratorGraph failed"}

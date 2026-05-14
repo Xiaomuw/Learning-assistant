@@ -588,10 +588,11 @@ def _build_general_knowledge_fallback(
     if "http" in normalized:
         return {
             "topic": "HTTP",
-            "thinking": f"{prefix}HTTP 是 Web 中用于客户端和服务器通信的应用层协议。",
+            "thinking": f"{prefix}HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。",
             "steps": [
-                "HTTP 的全称是 HyperText Transfer Protocol，核心作用是在浏览器、App、服务器之间传输网页、接口数据、图片等资源。",
-                "它采用请求-响应模型：客户端发送请求，服务器返回状态码、响应头和响应体。",
+                "HTTP 的全称是 HyperText Transfer Protocol，中文叫超文本传输协议。",
+                "它规定客户端如何请求资源、服务器如何返回资源，常见资源包括 HTML、图片、CSS、JavaScript 和 JSON 数据。",
+                "HTTP 采用请求-响应模型：浏览器或 App 发起请求，服务器返回状态码、响应头和响应体。",
                 "HTTP 本身是无状态协议，每次请求默认彼此独立；Cookie、Session、Token 等机制常用来补充登录态和上下文。",
                 "HTTPS 不是另一个完全不同的业务协议，而是在 HTTP 上叠加 TLS 加密，用来保护传输安全。",
             ],

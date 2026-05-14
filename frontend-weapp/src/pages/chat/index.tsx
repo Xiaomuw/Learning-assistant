@@ -78,6 +78,7 @@ interface StreamPresentation {
 }
 
 const NODE_REPLAY_INTERVAL_MS = 110;
+const CHAT_DEBUG_PROCESS = (process.env.TARO_APP_CHAT_DEBUG_PROCESS || "false").toLowerCase() === "true";
 
 function safeText(value: any) {
   return typeof value === "string" ? value.trim() : "";
@@ -113,19 +114,29 @@ function callStatusLabel(status?: string) {
 function streamingDegradedText(reason?: string) {
   const normalized = safeText(reason);
   if (!normalized) return "";
+  if (
+    normalized === "cloud_container_transport"
+    || normalized === "cloud_container_transport_retry"
+    || normalized === "cloud_container_error"
+  ) {
+    return CHAT_DEBUG_PROCESS ? `流式降级原因：${normalized}` : "当前环境使用云托管同步请求。";
+  }
+  if (normalized === "chat_async_job_pending") {
+    return "正在后台整理完整答案。";
+  }
   if (normalized === "provider_stream_returned_no_chunks") {
-    return "后端模型流没有返回 token 片段，已按节点级展示。";
+    return CHAT_DEBUG_PROCESS ? "后端模型流没有返回 token 片段，已按节点级展示。" : "已切换为同步展示。";
   }
   if (normalized === "chunk_receiver_unavailable") {
-    return "当前小程序环境未提供 chunk 接收能力，已使用同步请求。";
+    return CHAT_DEBUG_PROCESS ? "当前小程序环境未提供 chunk 接收能力，已使用同步请求。" : "当前环境使用云托管同步请求。";
   }
   if (normalized === "node_synthetic_delta") {
-    return "后端返回的是节点级回答片段，未收到真实 token 流。";
+    return CHAT_DEBUG_PROCESS ? "后端返回的是节点级回答片段，未收到真实 token 流。" : "正在展示完整回答。";
   }
   if (/timeout/i.test(normalized)) {
-    return "流式连接超时，已进入可控错误或降级处理。";
+    return CHAT_DEBUG_PROCESS ? "流式连接超时，已进入可控错误或降级处理。" : "云端正在整理答案。";
   }
-  return `流式降级原因：${normalized}`;
+  return CHAT_DEBUG_PROCESS ? `流式降级原因：${normalized}` : "已切换为同步展示。";
 }
 
 function stringifyToolArg(value: any): string {
@@ -377,8 +388,53 @@ function splitNodeReplayChunks(text: string) {
   return normalized.match(/[\s\S]{1,72}/g) || [normalized];
 }
 
+function webSearchStatusText(data: any) {
+  const stage = safeText(data?.stream_stage);
+  const hasWebSignal = stage === "web_search_if_needed"
+    || data?.web_search_attempted !== undefined
+    || data?.web_search_used !== undefined
+    || Boolean(data?.web_search_diagnosis);
+  if (!hasWebSignal) return "";
+
+  if (data?.web_search_error || data?.status === "failed") {
+    return "联网检索暂时不可用，我先基于通用知识说明。";
+  }
+  if (data?.web_search_used || Number(data?.doc_count || 0) > 0) {
+    return "已联网参考资料整理。";
+  }
+  if (data?.status === "skipped" || data?.web_search_attempted === false) {
+    return "";
+  }
+  return "我正在联网检索并整理答案。";
+}
+
+function asyncJobStatusText(data: any) {
+  const stage = safeText(data?.stream_stage);
+  const status = safeText(data?.status);
+  const detail = safeText(data?.detail);
+  if (stage === "chat_async_job_completed" || status === "completed" || /完成|ready/i.test(detail)) {
+    return "答案已经整理完成。";
+  }
+  if (
+    stage === "chat_async_job_pending" ||
+    stage === "chat_async_job" ||
+    status === "pending"
+  ) {
+    return "我正在联网检索并整理答案，稍等一下就好。";
+  }
+  return "";
+}
+
+function isInternalProcessText(text?: string) {
+  const normalized = safeText(text);
+  if (!normalized) return false;
+  return /cloud_container|chunk|流式降级|未接入|真实\s*\d|节点\s*\d|notebook\s*(?:未命中|暂无|没有)|知识库策略|学习记忆|练习方向待确认|MCP|provider/i.test(normalized);
+}
+
 function readableStatus(data: any) {
-  return (
+  const friendly = webSearchStatusText(data) || asyncJobStatusText(data);
+  if (friendly) return friendly;
+  const raw = (
     qualityFailureText(data) ||
     data?.detail ||
     data?.rag_warning ||
@@ -388,6 +444,10 @@ function readableStatus(data: any) {
     data?.stage_label ||
     ""
   );
+  if (!CHAT_DEBUG_PROCESS && isInternalProcessText(raw)) {
+    return safeText(data?.stage_label) || "";
+  }
+  return raw;
 }
 
 function stringifyStatusValue(value: any): string {
@@ -481,10 +541,11 @@ function statusStage(data: any): ChatProcessStage {
     };
   }
   if (data?.web_search_attempted !== undefined || data?.web_search_diagnosis) {
+    const searchStatus = webSearchStatusText(data);
     return {
       key: "web_search",
       label: "网络搜索",
-      detail: data?.web_search_diagnosis || (data?.web_search_used ? "已使用网络搜索补充信息。" : "未使用网络搜索。"),
+      detail: searchStatus || (data?.web_search_used ? "已联网参考资料整理。" : "未使用网络搜索。"),
       status: "completed",
       ...elapsed
     };
@@ -827,7 +888,7 @@ export default function ChatPage() {
     }
     upsertStage({
       key: "stream_transport",
-      label: "流式传输",
+      label: CHAT_DEBUG_PROCESS ? "流式传输" : "云托管同步",
       detail: streamDiagnosticsDetail(next),
       status: /error|异常|失败/.test(`${next.degradedReason || ""} ${next.detail || ""}`)
         ? "failed"
@@ -842,6 +903,7 @@ export default function ChatPage() {
   }
 
   function buildProcessSnapshot(stages: ChatProcessStage[] = stagesRef.current): ChatProcess | undefined {
+    if (!CHAT_DEBUG_PROCESS) return undefined;
     const meta = processMetaRef.current;
     const reasoningSummary = meta.reasoningSummary
       || (reasoningRef.current ? `已接收 ${reasoningRef.current.length} 字模型思考过程，移动端仅保留安全摘要。` : "");
@@ -917,7 +979,7 @@ export default function ChatPage() {
     if (eventName === "routing") {
       routeRef.current = data?.route || routeRef.current;
       questionTypeRef.current = data?.question_type || questionTypeRef.current;
-      const routeText = data?.route ? `已选择路线：${data.route}` : "正在判断问题类型";
+      const routeText = CHAT_DEBUG_PROCESS && data?.route ? `已选择路线：${data.route}` : "正在理解问题";
       setStatusText(routeText);
       upsertStage({
         key: "routing",
@@ -932,7 +994,7 @@ export default function ChatPage() {
       const delta = data?.delta || "";
       if (delta) {
         reasoningRef.current += delta;
-        setStatusText(`模型思考中：已接收 ${reasoningRef.current.length} 字`);
+        setStatusText(CHAT_DEBUG_PROCESS ? `模型思考中：已接收 ${reasoningRef.current.length} 字` : "正在整理回答");
         upsertStage({
           key: "reasoning",
           label: "模型思考",
@@ -1346,6 +1408,11 @@ export default function ChatPage() {
   }
 
   function streamStatusLabel(presentation: StreamPresentation) {
+    if (!CHAT_DEBUG_PROCESS) {
+      if (presentation.mode === "token" && !presentation.synthetic) return "正在生成";
+      if (presentation.mode === "node" || presentation.synthetic) return "云托管同步";
+      return presentation.active ? "正在整理" : "";
+    }
     if (presentation.mode === "token" && !presentation.synthetic) {
       return presentation.deltaCount > 0 ? `实时流式 · ${presentation.deltaCount} 段` : "实时流式";
     }
@@ -1377,6 +1444,7 @@ export default function ChatPage() {
   }
 
   function renderProcessPanel(process: ChatProcess | undefined, panelKey: string) {
+    if (!CHAT_DEBUG_PROCESS) return null;
     if (!process) return null;
     const stages = process.stages || [];
     const toolCalls = process.toolCalls || [];

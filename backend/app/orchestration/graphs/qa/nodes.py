@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from typing import Any
 from uuid import uuid4
+
+from loguru import logger
 
 from app.orchestration.graphs.qa.adapter import DeterministicQARuntimeAdapter, QARuntimeAdapter
 from app.orchestration.graphs.qa.state import QAGraphState
@@ -34,6 +37,9 @@ GRAPH_VERSION = "0.1.0"
 MIN_EVIDENCE_SCORE = 0.55
 PARTIAL_EVIDENCE_SCORE = 0.55
 STRONG_EVIDENCE_SCORE = 0.70
+DEFAULT_EVIDENCE_CONFIDENCE_THRESHOLD = 0.72
+DEFAULT_EVIDENCE_CONFIDENCE_HIGH = 0.82
+DEFAULT_EVIDENCE_CONFIDENCE_LOW = 0.45
 MAX_KNOWLEDGE_ROUTES = 3
 MAX_WEB_REPAIRS = 1
 MAX_ANSWER_REPAIR_ATTEMPTS = 1
@@ -431,11 +437,13 @@ def web_search_if_needed_node(
     gate = dict(state.get("evidence_gate") or {})
     question = _resolved_question(state)
     reason = str(gate.get("reason") or "evidence_judge_not_sufficient")
+    if _has_external_search_signal(question):
+        reason = "explicit_external_search_signal"
     existing_requests = list(state.get("tool_requests") or [])
     existing_results = [item.model_dump(mode="json") for item in _collect_tool_results(state)]
     retrieval_report = dict(state.get("retrieval_report") or {})
     allowed = _should_run_web_retrieval(state, question, source_policy)
-    should_run_web = bool(not gate.get("sufficient") and allowed)
+    should_run_web = bool(allowed)
 
     if not should_run_web:
         blocked_reason = "internal_evidence_sufficient" if gate.get("sufficient") else "source_policy_disallows_web"
@@ -551,22 +559,32 @@ def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
     notebook_required = source_policy == SourcePolicy.NOTEBOOK_ONLY.value or _has_strict_notebook_signal(question)
     if source_policy == SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value and _has_notebook_signal(question):
         notebook_required = True
-    usable = notebook_evidence
-    strong = [item for item in usable if item.score >= STRONG_EVIDENCE_SCORE]
-    if strong:
+    confidence = _evidence_confidence(
+        state,
+        question=question,
+        evidence=notebook_evidence,
+        source_policy=source_policy,
+    )
+    sufficient = bool(confidence.get("sufficient"))
+    usable = notebook_evidence if sufficient else []
+    strong = [item for item in notebook_evidence if item.score >= STRONG_EVIDENCE_SCORE]
+    if sufficient and strong:
         status = "strong"
         usable = strong
         reason = "strong_notebook_evidence"
-    elif usable:
+    elif sufficient and usable:
         status = "partial"
         reason = "partial_notebook_evidence"
+    elif notebook_evidence:
+        status = "low_confidence"
+        reason = "low_evidence_confidence"
     else:
         status = "insufficient"
         reason = "no_sufficient_notebook_evidence"
 
     gate = {
-        "sufficient": bool(usable),
-        "insufficient": notebook_required and not notebook_evidence,
+        "sufficient": sufficient,
+        "insufficient": notebook_required and not sufficient,
         "source_policy": source_policy,
         "notebook_required": notebook_required,
         "usable_evidence_refs": [item.id for item in usable],
@@ -574,10 +592,11 @@ def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
         "missing_topic": question,
         "reason": reason,
         "status": status,
+        "evidence_confidence": confidence,
     }
     judgement = {
         "status": status,
-        "missing_reason": "" if usable else reason,
+        "missing_reason": "" if sufficient else reason,
         "verified_count": len(usable),
         "discarded_count": max(0, len(all_evidence) - len(usable)),
         "strong_count": len(strong),
@@ -585,14 +604,33 @@ def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
         "notebook_count": len(notebook_evidence),
         "web_count": 0,
         "route_count": len(state.get("knowledge_routes") or []),
+        "evidence_confidence": confidence,
     }
+    logger.info(
+        "QA 证据置信度评估 | request_id={} score={} level={} sufficient={} reason={} usable={} strong={}",
+        str(state.get("request_id") or state.get("message_id") or state.get("run_id") or ""),
+        confidence.get("score"),
+        confidence.get("level"),
+        confidence.get("sufficient"),
+        confidence.get("reason"),
+        len(notebook_evidence),
+        len(strong),
+    )
     return {
         "evidence": [item.model_dump(mode="json") for item in usable],
         "notebook_evidence": [item.model_dump(mode="json") for item in notebook_evidence],
         "web_evidence": [],
         "evidence_judgement": judgement,
+        "evidence_confidence": confidence,
+        "retrieval_report": {
+            **dict(state.get("retrieval_report") or {}),
+            "evidence_confidence": confidence,
+        },
         "evidence_gate": gate,
-        "grounding_report": gate,
+        "grounding_report": {
+            **gate,
+            "evidence_confidence": confidence,
+        },
     }
 
 
@@ -600,12 +638,12 @@ def route_after_evidence_judge(state: QAGraphState) -> str:
     """Run web fallback only when the judged evidence is insufficient and policy/signals allow it."""
 
     gate = dict(state.get("evidence_gate") or {})
-    if gate.get("sufficient"):
-        return "evidence_merge"
     source_policy = _source_policy(state)
     question = _resolved_question(state)
     if _should_run_web_retrieval(state, question, source_policy):
         return "web_search_if_needed"
+    if gate.get("sufficient"):
+        return "evidence_merge"
     return "evidence_merge"
 
 
@@ -933,6 +971,7 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
         "retrieval_skipped_reason": str(state.get("retrieval_skipped_reason") or ""),
         "retrieval_report": dict(state.get("retrieval_report") or {}),
         "evidence_judgement": dict(state.get("evidence_judgement") or {}),
+        "evidence_confidence": dict(state.get("evidence_confidence") or {}),
         "answer_quality": dict(state.get("answer_quality") or {}),
         "quality_check": dict(state.get("quality_check") or {}),
         "repair_count": int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0),
@@ -1518,30 +1557,84 @@ def _has_notebook_signal(question: str) -> bool:
 
 def _has_external_search_signal(question: str) -> bool:
     lowered = question.lower()
-    return any(
-        term in question or term in lowered
-        for term in (
-            "最新",
-            "现在",
-            "今天",
-            "官网",
-            "官方",
-            "文档",
-            "来源",
-            "引用",
-            "浏览器支持",
-            "价格",
-            "政策",
-            "搜索",
-            "查一下",
-            "mdn",
-            "2025",
-            "2026",
-            "latest",
-            "current",
-            "browser support",
-        )
+    strong_terms = (
+        "调用工具",
+        "用工具",
+        "工具查",
+        "联网",
+        "联网查",
+        "联网搜索",
+        "网络搜索",
+        "网络检索",
+        "外部搜索",
+        "外部检索",
+        "网上查",
+        "网上搜",
+        "搜索",
+        "搜索一下",
+        "搜一下",
+        "查一下",
+        "查找",
+        "找一下",
+        "最新",
+        "现在",
+        "今天",
+        "官网",
+        "官方",
+        "官方文档",
+        "浏览器支持",
+        "价格",
+        "政策",
+        "网页",
+        "mdn",
+        "2025",
+        "2026",
+        "use tool",
+        "tool",
+        "web search",
+        "search",
+        "latest",
+        "current",
+        "browser support",
     )
+    if any(term in question or term in lowered for term in strong_terms):
+        return True
+
+    ambiguous_terms = ("检索", "找资料", "来源", "资料来源", "引用", "参考资料", "文档")
+    if not any(term in question or term in lowered for term in ambiguous_terms):
+        return False
+
+    external_context_terms = (
+        "网络",
+        "网上",
+        "网页",
+        "互联网",
+        "外部",
+        "官网",
+        "官方",
+        "mdn",
+        "google",
+        "百度",
+        "搜索",
+        "最新",
+        "浏览器支持",
+    )
+    if any(term in question or term in lowered for term in external_context_terms):
+        return True
+
+    source_terms = ("来源", "资料来源", "引用", "参考资料")
+    return any(term in question or term in lowered for term in source_terms) and not _has_notebook_signal(question)
+
+
+def _is_simple_arithmetic_question(question: str) -> bool:
+    compact = re.sub(r"\s+", "", question.strip().lower())
+    if not compact:
+        return False
+    compact = compact.rstrip("？?")
+    compact = compact.replace("等于", "=").replace("是多少", "").replace("多少", "")
+    if not re.fullmatch(r"[\d+\-*/×÷().（）=]+", compact):
+        return False
+    return bool(re.search(r"\d", compact) and re.search(r"[+\-*/×÷]", compact))
 
 
 def _web_search_empty_concepts_enabled() -> bool:
@@ -1549,6 +1642,129 @@ def _web_search_empty_concepts_enabled() -> bool:
     if raw is None:
         return False
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _evidence_confidence_thresholds() -> tuple[float, float, float]:
+    threshold = _env_float("QA_EVIDENCE_CONFIDENCE_THRESHOLD", DEFAULT_EVIDENCE_CONFIDENCE_THRESHOLD)
+    high = _env_float("QA_EVIDENCE_CONFIDENCE_HIGH", DEFAULT_EVIDENCE_CONFIDENCE_HIGH)
+    low = _env_float("QA_EVIDENCE_CONFIDENCE_LOW", DEFAULT_EVIDENCE_CONFIDENCE_LOW)
+    threshold = _clamp(threshold)
+    high = max(threshold, _clamp(high))
+    low = min(threshold, _clamp(low))
+    return threshold, high, low
+
+
+def _evidence_confidence(
+    state: QAGraphState,
+    *,
+    question: str,
+    evidence: list[EvidenceChunk],
+    source_policy: str,
+) -> dict[str, Any]:
+    threshold, high_threshold, low_threshold = _evidence_confidence_thresholds()
+    candidates = [item for item in evidence if item.text.strip()]
+    if not candidates:
+        return {
+            "score": 0.0,
+            "level": "none",
+            "threshold": threshold,
+            "sufficient": False,
+            "reason": "no_sufficient_notebook_evidence",
+            "signals": {
+                "top_score": 0.0,
+                "avg_top3": 0.0,
+                "usable_count": 0,
+                "strong_count": 0,
+                "source_alignment": 0.0,
+                "coverage_bonus": 0.0,
+                "strong_bonus": 0.0,
+            },
+        }
+
+    ordered = sorted(candidates, key=lambda item: float(item.score or 0.0), reverse=True)
+    top_scores = [float(item.score or 0.0) for item in ordered[:3]]
+    top_score = top_scores[0]
+    avg_top3 = sum(top_scores) / len(top_scores)
+    usable_count = len(candidates)
+    strong_count = len([item for item in candidates if item.score >= STRONG_EVIDENCE_SCORE])
+    coverage_bonus = min(usable_count, 3) / 3 * 0.12
+    strong_bonus = min(strong_count, 2) / 2 * 0.10
+    source_alignment = _evidence_source_alignment(state, question=question, evidence=ordered, source_policy=source_policy)
+    score = _clamp(top_score * 0.55 + avg_top3 * 0.25 + coverage_bonus + strong_bonus + source_alignment)
+    sufficient = score >= threshold
+    if score >= high_threshold:
+        level = "high"
+    elif sufficient:
+        level = "medium"
+    elif score >= low_threshold:
+        level = "low"
+    else:
+        level = "none"
+    reason = "evidence_confidence_sufficient" if sufficient else "low_evidence_confidence"
+    return {
+        "score": round(score, 4),
+        "level": level,
+        "threshold": threshold,
+        "sufficient": sufficient,
+        "reason": reason,
+        "signals": {
+            "top_score": round(top_score, 4),
+            "avg_top3": round(avg_top3, 4),
+            "usable_count": usable_count,
+            "strong_count": strong_count,
+            "source_alignment": round(source_alignment, 4),
+            "coverage_bonus": round(coverage_bonus, 4),
+            "strong_bonus": round(strong_bonus, 4),
+        },
+    }
+
+
+def _evidence_source_alignment(
+    state: QAGraphState,
+    *,
+    question: str,
+    evidence: list[EvidenceChunk],
+    source_policy: str,
+) -> float:
+    if not evidence:
+        return 0.0
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        return 0.08
+    concept_linking = dict(state.get("concept_linking") or {})
+    concept_id = str(concept_linking.get("concept_id") or "").strip().lower()
+    topic_id = str(concept_linking.get("topic_id") or "").strip().lower()
+    route_subjects = {
+        str(route.get("subject_id") or route.get("knowledge_base_id") or "").strip().lower()
+        for route in list(state.get("knowledge_routes") or [])
+        if isinstance(route, dict)
+    }
+    question_terms = {term.lower() for term in _query_terms(question) if len(term.strip()) >= 2}
+    for item in evidence[:3]:
+        metadata = {str(key).lower(): str(value).lower() for key, value in dict(item.metadata or {}).items()}
+        haystack = " ".join([item.source_id.lower(), item.text[:160].lower(), *metadata.values()])
+        if concept_id and concept_id in haystack:
+            return 0.08
+        if topic_id and topic_id in haystack:
+            return 0.08
+        if route_subjects and any(subject and subject in haystack for subject in route_subjects):
+            return 0.08
+        if question_terms and any(term in haystack for term in question_terms):
+            return 0.05
+    return 0.0
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
+    return max(minimum, min(maximum, float(value)))
 
 
 def _knowledge_route(
@@ -1703,11 +1919,14 @@ def _should_run_web_retrieval(
     gate = dict(state.get("evidence_gate") or {})
     question_type = str(state.get("question_type") or _infer_question_type(question))
     intent = str((state.get("intent_result") or {}).get("intent") or "")
-    return (
-        not gate.get("sufficient")
-        and str(gate.get("status") or "") == "insufficient"
-        and (question_type == "concept" or intent == "concept_explain")
-    )
+    if intent == "smalltalk" or question_type == "smalltalk" or _is_simple_arithmetic_question(question):
+        return False
+    if intent in {"question_generation", "answer_review", "learning_diagnosis"}:
+        return False
+    web_candidate = question_type in {"concept", "qa", "fact"} or intent == "concept_explain"
+    if not web_candidate:
+        return False
+    return not gate.get("sufficient")
 
 
 def _query_terms(question: str) -> list[str]:

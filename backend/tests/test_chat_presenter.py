@@ -15,7 +15,7 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
-from app.application.chat.messages import build_message_process
+from app.application.chat.messages import build_assistant_message, build_message_process
 from app.interfaces.api.chat_presenter import event_name_for_node, extract_event_data
 
 
@@ -66,6 +66,8 @@ class ChatPresenterTest(unittest.TestCase):
                         "provider": "tavily",
                         "success": True,
                         "doc_count": 3,
+                        "args": {"query": "不应暴露给前端"},
+                        "raw_output": {"secret": "raw-provider-payload"},
                     }
                 ],
                 "web_search_attempted": True,
@@ -106,7 +108,10 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertEqual(data["external_tool_calls"][0]["name"], "web_search")
         self.assertEqual(data["external_tool_calls"][0]["source"], "web")
         self.assertNotIn("provider", data["external_tool_calls"][0])
+        self.assertNotIn("args", data["external_tool_calls"][0])
+        self.assertNotIn("raw_output", data["external_tool_calls"][0])
         self.assertNotIn("tavily", json.dumps(data, ensure_ascii=False).lower())
+        self.assertNotIn("raw-provider-payload", json.dumps(data, ensure_ascii=False))
 
     def test_message_process_keeps_model_call_evidence_for_history(self) -> None:
         process = build_message_process(
@@ -305,6 +310,37 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertEqual(data["streaming_token_count"], 0)
         self.assertEqual(data["streaming_degraded_reason"], "provider_stream_returned_no_chunks")
         self.assertEqual(data["model_latency_ms"], 1200)
+
+    def test_assistant_message_cleans_notebook_miss_notice_for_general_question(self) -> None:
+        message = build_assistant_message(
+            {
+                "question": "什么是 HTTP？",
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": (
+                    "当前 notebook 未命中足够相关的资料，下面先按通用知识解释。"
+                    "HTTP 是 Web 中用于客户端和服务器通信的应用层协议。"
+                    "当前 notebook 未命中足够相关的资料，下面先按通用知识解释。"
+                    "HTTP 是 Web 中用于客户端和服务器通信的应用层协议。"
+                ),
+            }
+        )
+
+        self.assertNotIn("notebook 未命中", message["content"])
+        self.assertEqual(message["content"].count("HTTP 是 Web 中用于客户端和服务器通信的应用层协议。"), 1)
+
+    def test_assistant_message_preserves_material_notice_when_user_asked_for_notebook(self) -> None:
+        message = build_assistant_message(
+            {
+                "question": "根据我的 notebook 解释 HTTP",
+                "source_policy": "notebook_only",
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": "当前 notebook 未命中足够相关的资料，下面先按通用知识解释。HTTP 是应用层协议。",
+            }
+        )
+
+        self.assertIn("notebook 未命中", message["content"])
 
     def test_answer_events_can_include_accumulated_question_type(self) -> None:
         data = extract_event_data(

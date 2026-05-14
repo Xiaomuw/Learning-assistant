@@ -436,6 +436,164 @@ class QAGraphAdapterTest(unittest.TestCase):
             {"not_requested_before_evidence_judge", "no_external_search_signal"},
         )
 
+    def test_explicit_tool_lookup_forces_web_search_without_auto_empty_flag(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                evidence = []
+                if request.capability == ToolCapability.WEB_SEARCH:
+                    evidence = [
+                        EvidenceChunk(
+                            id="web-http",
+                            source_type="web",
+                            source_id="https://example.test/http",
+                            text="HTTP 是 Web 客户端和服务器之间的应用层协议。",
+                            score=0.9,
+                        )
+                    ]
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=evidence,
+                )
+
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": ""}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-explicit-tool-web",
+                    "user_id": "u1",
+                    "user_message": "调用工具查一下什么是 HTTP",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [],
+                }
+            )
+
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result.get("web_search_reason"), "explicit_external_search_signal")
+
+    def test_material_reference_does_not_force_external_search(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        for question in ("根据我的文档回答 HTTP", "引用我的资料解释 HTTP"):
+            executor = FakeToolExecutor()
+            with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": ""}, clear=False):
+                result = build_graph(tool_executor=executor).compile().invoke(
+                    {
+                        "run_id": f"run-qa-material-reference-{hash(question)}",
+                        "user_id": "u1",
+                        "user_message": question,
+                        "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                        "evidence": [],
+                    }
+                )
+
+            self.assertNotIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+            self.assertFalse(result.get("web_search_attempted", False))
+
+    def test_official_document_signal_forces_external_search(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-http-doc",
+                            source_type="web",
+                            source_id="https://example.test/http",
+                            text="HTTP 是 Web 中客户端和服务器之间通信的应用层协议。",
+                            score=0.9,
+                        )
+                    ],
+                )
+
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": ""}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-official-doc-web",
+                    "user_id": "u1",
+                    "user_message": "查看官方文档说明 HTTP",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [],
+                }
+            )
+
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result.get("web_search_reason"), "explicit_external_search_signal")
+
+    def test_smalltalk_and_simple_math_do_not_auto_web_search_when_enabled(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": "true"}, clear=False):
+            smalltalk_executor = FakeToolExecutor()
+            smalltalk = build_graph(tool_executor=smalltalk_executor).compile().invoke(
+                {
+                    "run_id": "run-qa-no-web-smalltalk",
+                    "user_id": "u1",
+                    "user_message": "你好",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [],
+                }
+            )
+            math_executor = FakeToolExecutor()
+            simple_math = build_graph(tool_executor=math_executor).compile().invoke(
+                {
+                    "run_id": "run-qa-no-web-math",
+                    "user_id": "u1",
+                    "user_message": "1+1 等于多少？",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [],
+                }
+            )
+
+        self.assertNotIn(ToolCapability.WEB_SEARCH, smalltalk_executor.capabilities)
+        self.assertFalse(smalltalk.get("web_search_attempted", False))
+        self.assertNotIn(ToolCapability.WEB_SEARCH, math_executor.capabilities)
+        self.assertFalse(simple_math.get("web_search_attempted", False))
+
     def test_empty_concept_can_auto_web_search_when_enabled(self) -> None:
         class FakeToolExecutor:
             def __init__(self) -> None:
@@ -474,6 +632,189 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
         self.assertTrue(result.get("web_search_attempted", False))
         self.assertEqual(result.get("web_search_reason"), "no_sufficient_notebook_evidence")
+
+    def test_low_confidence_notebook_evidence_triggers_web_when_enabled(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id="fake:web_search",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-http",
+                            source_type="web",
+                            source_id="https://example.test/http",
+                            text="HTTP 是 Web 客户端和服务器之间通信的应用层协议。",
+                            score=0.9,
+                        )
+                    ],
+                )
+
+        low_evidence = EvidenceChunk(
+            id="nb-http-low",
+            source_type="notebook",
+            source_id="chunk-low",
+            text="HTTP 和网页有关。",
+            score=0.56,
+        )
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": "true"}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-low-confidence-web",
+                    "user_id": "u1",
+                    "user_message": "什么是 HTTP？",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [low_evidence.model_dump(mode="json")],
+                }
+            )
+
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result["evidence_gate"]["reason"], "low_evidence_confidence")
+        self.assertFalse(result["evidence_confidence"]["sufficient"])
+
+    def test_high_confidence_notebook_evidence_skips_web_when_enabled(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        evidence = [
+            EvidenceChunk(
+                id="nb-http-1",
+                source_type="notebook",
+                source_id="chunk-1",
+                text="HTTP 是 Web 中客户端和服务器通信的应用层协议。",
+                score=0.86,
+            ),
+            EvidenceChunk(
+                id="nb-http-2",
+                source_type="notebook",
+                source_id="chunk-2",
+                text="HTTP 使用请求和响应模型传输网页、JSON 等资源。",
+                score=0.83,
+            ),
+        ]
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": "true"}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-high-confidence-no-web",
+                    "user_id": "u1",
+                    "user_message": "什么是 HTTP？",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [item.model_dump(mode="json") for item in evidence],
+                }
+            )
+
+        self.assertNotIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertFalse(result.get("web_search_attempted", False))
+        self.assertTrue(result["evidence_confidence"]["sufficient"])
+        self.assertIn(result["evidence_confidence"]["level"], {"medium", "high"})
+
+    def test_explicit_tool_lookup_runs_web_even_with_high_confidence_notebook(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id="fake:web_search",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-http",
+                            source_type="web",
+                            source_id="https://example.test/http",
+                            text="HTTP 全称 HyperText Transfer Protocol。",
+                            score=0.9,
+                        )
+                    ],
+                )
+
+        evidence = EvidenceChunk(
+            id="nb-http",
+            source_type="notebook",
+            source_id="chunk-1",
+            text="HTTP 是 Web 中客户端和服务器通信的应用层协议。",
+            score=0.9,
+        )
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": ""}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-explicit-web-with-high-confidence",
+                    "user_id": "u1",
+                    "user_message": "调用工具查一下什么是 HTTP",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [evidence.model_dump(mode="json")],
+                }
+            )
+
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result.get("web_search_reason"), "explicit_external_search_signal")
+
+    def test_notebook_only_low_confidence_does_not_trigger_web(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        low_evidence = EvidenceChunk(
+            id="nb-http-low",
+            source_type="notebook",
+            source_id="chunk-low",
+            text="HTTP 和网页有关。",
+            score=0.56,
+        )
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": "true"}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-notebook-only-low-confidence",
+                    "user_id": "u1",
+                    "user_message": "什么是 HTTP？",
+                    "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                    "evidence": [low_evidence.model_dump(mode="json")],
+                }
+            )
+
+        self.assertNotIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertFalse(result.get("web_search_attempted", False))
+        self.assertFalse(result["evidence_confidence"]["sufficient"])
 
     def test_unjudged_or_low_score_web_evidence_does_not_enter_final_refs(self) -> None:
         class FakeToolExecutor:

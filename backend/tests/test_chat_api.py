@@ -352,7 +352,23 @@ class ChatApiTest(unittest.TestCase):
                 last_session="abc",
             ),
         )
-        with patch("app.interfaces.api.chat.run_chat_once_with_state", return_value=_chat_result_with_state(final_state)):
+        state = _state_from_chat_result(final_state)
+        state.update(
+            {
+                "web_search_attempted": True,
+                "web_search_used": True,
+                "external_tool_calls": [
+                    {
+                        "capability": "web_search",
+                        "provider": "mcp",
+                        "status": "success",
+                        "doc_count": 3,
+                        "args": {"query": "不应暴露原始查询"},
+                    }
+                ],
+            }
+        )
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", return_value=(final_state, state)):
             response = self.client.post(
                 "/api/chat/sync",
                 json={"user_id": "default_user", "question": "什么是 HTTP？", "subject_id": "general"},
@@ -363,6 +379,13 @@ class ChatApiTest(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["question_type"], "concept")
         self.assertEqual(payload["explanation"]["topic"], "HTTP")
+        self.assertTrue(payload["web_search_attempted"])
+        self.assertTrue(payload["web_search_used"])
+        self.assertEqual(payload["external_tool_calls"][0]["capability"], "web_search")
+        self.assertEqual(payload["external_tool_calls"][0]["source"], "web")
+        self.assertEqual(payload["external_tool_calls"][0]["doc_count"], 3)
+        self.assertNotIn("provider", payload["external_tool_calls"][0])
+        self.assertNotIn("args", payload["external_tool_calls"][0])
 
     def test_chat_sync_reuses_request_id_header(self) -> None:
         final_state = ChatExecutionResult(
@@ -574,17 +597,25 @@ class ChatApiTest(unittest.TestCase):
             memory=UserMemoryRecord(),
         )
 
-        with patch(
-            "app.interfaces.api.chat.run_chat_once_with_state",
-            return_value=_chat_result_with_state(final_state),
-        ) as run_once:
-            response = asyncio.run(
-                chat_module._run_chat_async_job(
-                    job_id="async-job-1",
-                    body=body,
-                    request_id="async-request-1",
-                )
+        async def _run_and_flush_persistence():
+            response = await chat_module._run_chat_async_job(
+                job_id="async-job-1",
+                body=body,
+                request_id="async-request-1",
             )
+            pending = list(chat_module._RUNNING_CHAT_PERSISTENCE_TASKS)
+            if pending:
+                await asyncio.gather(*pending)
+            return response
+
+        with (
+            patch(
+                "app.interfaces.api.chat.run_chat_once_with_state",
+                return_value=_chat_result_with_state(final_state),
+            ) as run_once,
+            patch("app.interfaces.api.chat.persist_chat_session", return_value=None),
+        ):
+            response = asyncio.run(_run_and_flush_persistence())
 
         self.assertIsNotNone(response)
         self.assertEqual(self.chat_jobs["async-job-1"]["status"], "completed")
@@ -1354,7 +1385,7 @@ class ChatApiTest(unittest.TestCase):
             "quiz_items": [{"question": "示例题"}],
         }
 
-        message = chat_messages.build_assistant_message(final_state)
+        message = chat_messages.build_assistant_message(final_state, include_process=True)
 
         self.assertEqual(message["content"], "HTTP 是一种无状态的应用层协议。")
         self.assertEqual(message["questionType"], "practice")
@@ -1381,6 +1412,18 @@ class ChatApiTest(unittest.TestCase):
             "先确认题型，再结合上下文检索与练习目标组织回答。",
         )
 
+    def test_build_assistant_message_hides_process_by_default(self) -> None:
+        message = chat_messages.build_assistant_message(
+            {
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": "HTTP 是应用层协议。",
+                "explanation": {"topic": "HTTP", "thinking": "内部推理摘要。"},
+            }
+        )
+
+        self.assertNotIn("process", message)
+
     def test_build_assistant_message_without_tools_uses_summary_content(self) -> None:
         final_state = {
             "question_type": "meta",
@@ -1393,7 +1436,7 @@ class ChatApiTest(unittest.TestCase):
             },
         }
 
-        message = chat_messages.build_assistant_message(final_state)
+        message = chat_messages.build_assistant_message(final_state, include_process=True)
 
         self.assertEqual(message["content"], "我已经围绕「当前模型」整理好讲解了。")
         self.assertIn("process", message)

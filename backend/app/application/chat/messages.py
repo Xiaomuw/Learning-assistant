@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import time
+import os
 from typing import Any
 
+from app.application.chat.answer_cleaning import clean_display_answer, should_preserve_notebook_notice
 from app.domains.practice.service import normalize_quiz_item
 from app.shared.markdown_cleaning import strip_markdown_artifacts, strip_markdown_list
 from app.shared.schemas.contracts import ExplanationPayload
@@ -77,11 +79,20 @@ def build_user_message(question: str) -> dict[str, Any]:
     }
 
 
-def build_assistant_message(final_state: dict[str, Any]) -> dict[str, Any]:
+def build_assistant_message(final_state: dict[str, Any], *, include_process: bool | None = None) -> dict[str, Any]:
     explanation_payload = normalize_explanation_payload(final_state.get("explanation"))
     explanation = explanation_payload.model_dump()
     quiz_items = [normalize_quiz_item(item).model_dump() for item in (final_state.get("quiz_items") or [])]
-    final_answer = str(final_state.get("final_answer", "") or "").strip()
+    preserve_notebook_notice = should_preserve_notebook_notice(final_state)
+    final_answer = clean_display_answer(
+        str(final_state.get("final_answer", "") or ""),
+        preserve_notebook_notice=preserve_notebook_notice,
+    )
+    if explanation.get("final_answer"):
+        explanation["final_answer"] = clean_display_answer(
+            str(explanation.get("final_answer") or ""),
+            preserve_notebook_notice=preserve_notebook_notice,
+        )
     topic = explanation_payload.topic.strip()
     if final_answer:
         content = final_answer
@@ -111,10 +122,18 @@ def build_assistant_message(final_state: dict[str, Any]) -> dict[str, Any]:
         message["quiz_request"] = final_state["quiz_request"]
     if isinstance(final_state.get("quiz_clarification"), dict) and final_state.get("quiz_clarification"):
         message["quiz_clarification"] = final_state["quiz_clarification"]
-    process = build_message_process(final_state)
-    if process:
-        message["process"] = process
+    if include_process is None:
+        include_process = _include_process_in_history()
+    if include_process:
+        process = build_message_process(final_state)
+        if process:
+            message["process"] = process
     return message
+
+
+def _include_process_in_history() -> bool:
+    raw = os.getenv("CHAT_INCLUDE_PROCESS_IN_HISTORY", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def build_message_process(final_state: dict[str, Any]) -> dict[str, Any] | None:
@@ -122,8 +141,6 @@ def build_message_process(final_state: dict[str, Any]) -> dict[str, Any] | None:
     reasoning_summary = str(final_state.get("reasoning_summary", "") or "").strip()
     if not reasoning_summary:
         reasoning_summary = str(explanation.get("thinking", "") or "").strip()
-    if not reasoning_summary:
-        reasoning_summary = str(final_state.get("final_answer", "") or "").strip()
 
     stages = _build_process_stages(final_state)
     execution = _build_process_execution(final_state)
@@ -139,9 +156,10 @@ def build_message_process(final_state: dict[str, Any]) -> dict[str, Any] | None:
     process: dict[str, Any] = {
         "currentStage": current_stage,
         "stages": stages,
-        "reasoningSummary": reasoning_summary,
         "toolCalls": tool_calls,
     }
+    if reasoning_summary:
+        process["reasoningSummary"] = reasoning_summary
     if execution:
         process["execution"] = execution
     return process
