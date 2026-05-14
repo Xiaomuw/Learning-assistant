@@ -30,6 +30,7 @@ from app.domains.qa.explanation_fallback import (
     explain_for_qa_fallback,
     is_general_concept_question,
 )
+from app.domains.qa.lightweight_intent import build_lightweight_answer_schema
 from app.domains.qa.middleware import postprocess_middleware, preprocess_middleware
 from app.domains.qa.mode_selection import select_execution_mode
 from app.domains.qa.prompts import build_tool_system_message, message_to_text
@@ -190,13 +191,21 @@ class QARuntimeAgent:
                     result = self._run_deterministic_fallback(result)
             else:
                 try:
-                    fast_answer = self._try_sync_fast_concept_answer(prepared_request, execution_mode)
+                    lightweight_answer = build_lightweight_answer_schema(prepared_request.question)
+                    fast_answer = lightweight_answer or self._try_sync_fast_concept_answer(
+                        prepared_request,
+                        execution_mode,
+                    )
                     if fast_answer is not None:
                         result.raw_output = fast_answer
                         result.answer = fast_answer
                         result.final_answer = fast_answer.final_answer or fast_answer.thinking
                         result.contextual_query = prepared_request.question
-                        result.reasoning_summary = "同步模式命中稳定概念快速回答，未等待模型长调用。"
+                        result.reasoning_summary = (
+                            "同步模式命中轻量直接回答，未等待模型长调用。"
+                            if lightweight_answer is not None
+                            else "同步模式命中稳定概念快速回答，未等待模型长调用。"
+                        )
                         result.source_usage = "model"
                     elif stream_answer_tokens:
                         result.raw_output = self._generate_streamed_plain_answer(prepared_request)

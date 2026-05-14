@@ -4,7 +4,7 @@ from app.domains.qa.schemas import AgentRequest
 from app.shared.schemas.model_profile import ModelProfile
 
 # 这些类型直接回复，不需要工具调用或结构化输出
-_DIRECT_ANSWER_TYPES = {"smalltalk", "meta"}
+_DIRECT_ANSWER_TYPES = {"smalltalk", "meta", "simple_fact", "practice_generation"}
 
 _RAG_DETERMINISTIC_TYPES = {"concept", "problem", "review", "mcq_problem"}
 

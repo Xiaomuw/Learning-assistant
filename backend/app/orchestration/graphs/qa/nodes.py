@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from loguru import logger
 
+from app.domains.qa.lightweight_intent import classify_lightweight_answer_intent
 from app.orchestration.graphs.qa.adapter import DeterministicQARuntimeAdapter, QARuntimeAdapter
 from app.orchestration.graphs.qa.fact_boundary import (
     QUESTION_META_TOOL_USAGE,
@@ -1812,6 +1813,11 @@ def _normalize_tool_invocation_trace(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _infer_question_type(question: str) -> str:
+    lightweight_intent = classify_lightweight_answer_intent(question)
+    if lightweight_intent == "simple_fact":
+        return "simple_fact"
+    if lightweight_intent == "practice_generation":
+        return "practice_generation"
     normalized = question.lower()
     if any(token in question for token in ("什么是", "什么叫", "解释", "概念")):
         return "concept"
@@ -1822,6 +1828,11 @@ def _infer_question_type(question: str) -> str:
 
 def _infer_intent(question: str) -> str:
     normalized = question.lower()
+    lightweight_intent = classify_lightweight_answer_intent(question)
+    if lightweight_intent == "simple_fact":
+        return "simple_fact"
+    if lightweight_intent == "practice_generation":
+        return "question_generation"
     if _has_meta_signal(question):
         return "meta"
     if any(term in question for term in ("出题", "练习题", "刷题", "生成题目", "测验")):
@@ -1850,10 +1861,12 @@ def _qa_scoped_intent(intent: str) -> str:
 def _question_type_from_intent(intent: str, question: str) -> str:
     if intent == "meta":
         return "meta"
+    if intent == "simple_fact":
+        return "simple_fact"
     if intent == "concept_explain":
         return "concept"
     if intent == "question_generation":
-        return "practice"
+        return "practice_generation"
     if intent == "answer_review":
         return "review"
     if intent in {"problem_solving", "project_analysis"}:
@@ -1879,6 +1892,7 @@ def _intent_reason(intent: str) -> str:
         "project_analysis": "project_analysis_signal",
         "learning_diagnosis": "learning_diagnosis_signal",
         "smalltalk": "smalltalk_signal",
+        "simple_fact": "simple_fact_signal",
     }
     return reasons.get(intent, "no_strong_intent_signal")
 
@@ -2338,7 +2352,11 @@ def _should_run_web_retrieval(
     gate = dict(state.get("evidence_gate") or {})
     question_type = str(state.get("question_type") or _infer_question_type(question))
     intent = str((state.get("intent_result") or {}).get("intent") or "")
-    if intent == "smalltalk" or question_type == "smalltalk" or _is_simple_arithmetic_question(question):
+    if (
+        intent in {"smalltalk", "simple_fact"}
+        or question_type in {"smalltalk", "simple_fact", "practice_generation"}
+        or _is_simple_arithmetic_question(question)
+    ):
         return False
     if intent in {"question_generation", "answer_review", "learning_diagnosis"}:
         return False

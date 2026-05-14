@@ -124,6 +124,24 @@ class OrchestratorIntentRulesTest(unittest.TestCase):
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)
 
+    def test_arithmetic_drill_request_uses_latest_user_topic_not_stale_context(self) -> None:
+        result = resolve_intent_decision(
+            {
+                "user_id": "u1",
+                "user_message": "帮我出几道一百以内的加减法运算",
+                "chat_runtime_context": {
+                    "session_memory": {"active_topic": "1+1=2"},
+                    "current_question_topic": "1+1=2",
+                },
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
+        self.assertEqual(result["quiz_request"]["action"], "generate_practice_pack")
+        self.assertIn("加减法运算", result["quiz_request"]["topic"])
+        self.assertNotEqual(result["quiz_request"]["topic"], "1+1=2")
+
     def test_regular_question_with_question_mark_still_routes_to_qa(self) -> None:
         result = resolve_intent_decision({"user_id": "u1", "user_message": "TCP 为什么要三次握手？"})
 

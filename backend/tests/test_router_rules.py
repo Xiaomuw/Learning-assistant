@@ -20,6 +20,13 @@ class RouterRulesTest(unittest.TestCase):
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
 
+    def test_arithmetic_drill_request_routes_to_question_generation_graph(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "帮我出几道一百以内的加减法运算"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.GENERATE_QUESTION.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
+        self.assertIn("加减法运算", result["quiz_request"]["topic"])
+
     def test_weak_point_review_routes_to_mastery_graph(self) -> None:
         result = resolve_intent_decision({"user_id": "u1", "user_message": "帮我看看薄弱点"})
 

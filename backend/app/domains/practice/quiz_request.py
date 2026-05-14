@@ -22,6 +22,10 @@ QUIZ_INTENT_TERMS = (
     "做一套",
     "小测一下",
     "来几道题",
+    "来几道",
+    "出几道",
+    "给我几道",
+    "帮我出几道",
     "再来几题",
     "再出一些题",
     "继续出题",
@@ -282,6 +286,12 @@ def _has_quiz_intent(message: str, context: dict[str, Any]) -> bool:
     ):
         return True
     if re.search(r"(出|来|生成|做|练|考|测试).{0,30}(题|练习|测验|单选|选择)", message):
+        return True
+    if re.search(r"(?:帮我|给我|请)?(?:出|来|生成|给).{0,12}(?:几|[一两二三四五六七八九十0-9]+)\s*道", message):
+        return True
+    if any(term in message for term in ("加减法", "口算", "运算")) and any(
+        term in message for term in ("出", "来", "给", "生成", "帮我")
+    ):
         return True
     if re.search(r"(?:围绕|关于|针对|有关).{1,40}(?:出|生成|做|练|考|测试|题|练习|测验|单选|选择)", message):
         return True
