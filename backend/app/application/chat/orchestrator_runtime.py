@@ -320,6 +320,34 @@ def _chat_state_from_orchestrator_result(
         else _quiz_clarification_payload(graph_result, child_payload, response)
     )
     response_ui = response.ui_payload if isinstance(response.ui_payload, dict) else {}
+    tool_invocation_trace = (
+        child_payload.get("tool_invocation_trace")
+        if isinstance(child_payload.get("tool_invocation_trace"), dict)
+        else response_ui.get("tool_invocation_trace")
+        if isinstance(response_ui.get("tool_invocation_trace"), dict)
+        else {}
+    )
+    tool_calls = (
+        list(child_payload.get("tool_calls") or [])
+        if isinstance(child_payload.get("tool_calls"), list)
+        else list(response_ui.get("tool_calls") or [])
+        if isinstance(response_ui.get("tool_calls"), list)
+        else []
+    )
+    external_tool_calls = (
+        list(child_payload.get("external_tool_calls") or [])
+        if isinstance(child_payload.get("external_tool_calls"), list)
+        else list(response_ui.get("external_tool_calls") or [])
+        if isinstance(response_ui.get("external_tool_calls"), list)
+        else []
+    )
+    question_boundary = (
+        child_payload.get("question_boundary")
+        if isinstance(child_payload.get("question_boundary"), dict)
+        else response_ui.get("question_boundary")
+        if isinstance(response_ui.get("question_boundary"), dict)
+        else {}
+    )
     retrieval_skipped_reason = str(response_ui.get("retrieval_skipped_reason") or "")
     reasoning_summary = str(response_ui.get("reasoning_summary") or "")
     if not reasoning_summary and retrieval_skipped_reason == "stable_concept_model_first":
@@ -400,6 +428,13 @@ def _chat_state_from_orchestrator_result(
         "streaming_mode": str(response_ui.get("streaming_mode") or "node"),
         "streaming_token_count": int(response_ui.get("streaming_token_count") or 0),
         "streaming_degraded_reason": str(response_ui.get("streaming_degraded_reason") or ""),
+        "tool_calls": tool_calls,
+        "external_tool_calls": external_tool_calls,
+        "tool_invocation_trace": tool_invocation_trace,
+        "question_boundary": question_boundary,
+        "web_search_attempted": bool(child_payload.get("web_search_attempted", response_ui.get("web_search_attempted", False))),
+        "web_search_used": bool(child_payload.get("web_search_used", response_ui.get("web_search_used", False))),
+        "web_search_error": str(child_payload.get("web_search_error", response_ui.get("web_search_error", "")) or ""),
         "graph_runtime": {
             "mode": "orchestrator",
             "graph_type": GraphType.ORCHESTRATOR.value,
@@ -532,6 +567,7 @@ def _final_answer_chunk(final_state: dict[str, Any], *, node: str, elapsed: floa
         "model_latency_ms": latency_ms,
         "tool_calls": list(final_state.get("tool_calls") or []),
         "external_tool_calls": list(final_state.get("external_tool_calls") or []),
+        "tool_invocation_trace": final_state.get("tool_invocation_trace") or {},
         "web_search_attempted": bool(final_state.get("web_search_attempted", False)),
         "web_search_used": bool(final_state.get("web_search_used", False)),
         "web_search_error": str(final_state.get("web_search_error") or ""),

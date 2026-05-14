@@ -114,6 +114,9 @@ def build_assistant_message(final_state: dict[str, Any], *, include_process: boo
         message["questionType"] = question_type
     if route:
         message["route"] = route
+    tool_invocation_trace = final_state.get("tool_invocation_trace") or final_state.get("toolInvocationTrace")
+    if isinstance(tool_invocation_trace, dict):
+        message["toolInvocationTrace"] = _safe_tool_invocation_trace(tool_invocation_trace)
     if explanation_payload.model_fields_set or any(explanation.values()):
         message["explanation"] = explanation
     if quiz_items:
@@ -134,6 +137,33 @@ def build_assistant_message(final_state: dict[str, Any], *, include_process: boo
 def _include_process_in_history() -> bool:
     raw = os.getenv("CHAT_INCLUDE_PROCESS_IN_HISTORY", "")
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_tool_invocation_trace(raw: dict[str, Any]) -> dict[str, Any]:
+    calls = raw.get("toolCalls") if isinstance(raw.get("toolCalls"), list) else []
+    safe_calls: list[dict[str, Any]] = []
+    for item in calls:
+        if not isinstance(item, dict):
+            continue
+        payload: dict[str, Any] = {}
+        for key in ("name", "type", "status", "startedAt", "endedAt"):
+            value = item.get(key)
+            if value is not None:
+                payload[key] = str(value) if key in {"name", "type", "status", "startedAt", "endedAt"} else value
+        if payload:
+            safe_calls.append(payload)
+    tool_call_count = int(raw.get("toolCallCount") or len(safe_calls) or 0)
+    return {
+        "currentDate": raw.get("currentDate"),
+        "timezone": raw.get("timezone"),
+        "knowledgeCutoff": raw.get("knowledgeCutoff"),
+        "hasWebSearchTool": bool(raw.get("hasWebSearchTool")),
+        "webSearchEnabled": bool(raw.get("webSearchEnabled")),
+        "toolCallCount": tool_call_count,
+        "toolCalls": safe_calls,
+        "didUseWebSearch": bool(raw.get("didUseWebSearch")),
+        "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0 or safe_calls),
+    }
 
 
 def build_message_process(final_state: dict[str, Any]) -> dict[str, Any] | None:

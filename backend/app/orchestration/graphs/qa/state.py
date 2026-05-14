@@ -8,6 +8,12 @@ from app.orchestration.graphs.shared.state import BaseLearningState
 class QAGraphState(BaseLearningState, total=False):
     question_type: str
     normalized_question: str
+    runtime_time_context: dict[str, Any]
+    question_boundary: dict[str, Any]
+    previous_tool_invocation_trace: dict[str, Any] | None
+    tool_invocation_trace: dict[str, Any]
+    has_web_search_tool: bool
+    web_search_enabled: bool
     context_dependency: dict[str, Any]
     intent_result: dict[str, Any]
     parent_intent_decision: dict[str, Any]

@@ -214,6 +214,7 @@ def _chat_response_from_result(
         request_id=request_id,
         tool_calls=_safe_tool_call_metadata(state.get("tool_calls")),
         external_tool_calls=_safe_tool_call_metadata(state.get("external_tool_calls")),
+        tool_invocation_trace=_safe_tool_invocation_trace(state.get("tool_invocation_trace")),
         web_search_attempted=_web_search_attempted(state),
         web_search_used=_web_search_used(state),
         web_search_error=_web_search_error(state),
@@ -249,6 +250,14 @@ def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str
         job_id=job_id,
         request_id=request_id,
         retry_after_ms=retry_after_ms,
+        tool_invocation_trace=_safe_tool_invocation_trace(
+            {
+                "toolCallCount": 0,
+                "toolCalls": [],
+                "didUseWebSearch": False,
+                "didUseAnyTool": False,
+            }
+        ),
     )
 
 
@@ -285,6 +294,35 @@ def _safe_tool_call_metadata(raw_calls: Any) -> list[dict[str, Any]]:
         if payload:
             safe_calls.append(payload)
     return safe_calls
+
+
+def _safe_tool_invocation_trace(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    calls = raw.get("toolCalls") if isinstance(raw.get("toolCalls"), list) else []
+    safe_calls: list[dict[str, Any]] = []
+    for item in calls:
+        if not isinstance(item, dict):
+            continue
+        payload: dict[str, Any] = {}
+        for key in ("name", "type", "status", "startedAt", "endedAt"):
+            value = item.get(key)
+            if value is not None:
+                payload[key] = str(value)
+        if payload:
+            safe_calls.append(payload)
+    tool_call_count = _safe_int(raw.get("toolCallCount") if "toolCallCount" in raw else len(safe_calls))
+    return {
+        "currentDate": raw.get("currentDate"),
+        "timezone": raw.get("timezone"),
+        "knowledgeCutoff": raw.get("knowledgeCutoff"),
+        "hasWebSearchTool": bool(raw.get("hasWebSearchTool")),
+        "webSearchEnabled": bool(raw.get("webSearchEnabled")),
+        "toolCallCount": tool_call_count,
+        "toolCalls": safe_calls,
+        "didUseWebSearch": bool(raw.get("didUseWebSearch")),
+        "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0 or safe_calls),
+    }
 
 
 def _public_tool_source(*, capability: str, provider: str = "") -> str:
@@ -681,6 +719,7 @@ class ChatResponse(BaseModel):
     retry_after_ms: int | None = None
     tool_calls: list[dict[str, Any]] | None = None
     external_tool_calls: list[dict[str, Any]] | None = None
+    tool_invocation_trace: dict[str, Any] | None = None
     web_search_attempted: bool | None = None
     web_search_used: bool | None = None
     web_search_error: str | None = None

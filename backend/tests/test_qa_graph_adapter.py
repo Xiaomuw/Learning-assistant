@@ -609,10 +609,10 @@ class QAGraphAdapterTest(unittest.TestCase):
                     input_summary=request.input_summary,
                     evidence=[
                         EvidenceChunk(
-                            id="web-http",
+                            id="web-langgraph-platform",
                             source_type="web",
-                            source_id="https://example.test/http",
-                            text="HTTP 是应用层协议。",
+                            source_id="https://example.test/langgraph-platform",
+                            text="LangGraph Platform 提供部署、运行、监控和托管能力。",
                             score=0.9,
                         )
                     ],
@@ -624,7 +624,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 {
                     "run_id": "run-qa-auto-web",
                     "user_id": "u1",
-                    "user_message": "什么是 HTTP？",
+                    "user_message": "LangGraph Platform 托管能力有哪些？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
                 }
             )
@@ -648,20 +648,20 @@ class QAGraphAdapterTest(unittest.TestCase):
                     input_summary=request.input_summary,
                     evidence=[
                         EvidenceChunk(
-                            id="web-http",
+                            id="web-langgraph-platform",
                             source_type="web",
-                            source_id="https://example.test/http",
-                            text="HTTP 是 Web 客户端和服务器之间通信的应用层协议。",
+                            source_id="https://example.test/langgraph-platform",
+                            text="LangGraph Platform 支持应用部署、托管运行和运维观测。",
                             score=0.9,
                         )
                     ],
                 )
 
         low_evidence = EvidenceChunk(
-            id="nb-http-low",
+            id="nb-langgraph-platform-low",
             source_type="notebook",
             source_id="chunk-low",
-            text="HTTP 和网页有关。",
+            text="LangGraph Platform 和部署有关。",
             score=0.56,
         )
         executor = FakeToolExecutor()
@@ -670,7 +670,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 {
                     "run_id": "run-qa-low-confidence-web",
                     "user_id": "u1",
-                    "user_message": "什么是 HTTP？",
+                    "user_message": "LangGraph Platform 托管能力有哪些？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
                     "evidence": [low_evidence.model_dump(mode="json")],
                 }
@@ -680,6 +680,191 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertTrue(result.get("web_search_attempted", False))
         self.assertEqual(result["evidence_gate"]["reason"], "low_evidence_confidence")
         self.assertFalse(result["evidence_confidence"]["sufficient"])
+
+    def test_stable_knowledge_does_not_force_web_search_even_when_auto_enabled(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": "true"}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-stable-boundary-no-web",
+                    "user_id": "u1",
+                    "user_message": "什么是 HTTP",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                }
+            )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        trace = result["tool_invocation_trace"]
+        self.assertNotIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertFalse(result.get("web_search_attempted", False))
+        self.assertFalse(trace["didUseWebSearch"])
+        self.assertEqual(trace["toolCallCount"], 1)
+        self.assertNotIn("目前公开信息", response.answer)
+
+    def test_meta_tool_usage_answers_from_previous_trace(self) -> None:
+        previous_trace = {
+            "currentDate": "2026-05-14",
+            "timezone": "Asia/Shanghai",
+            "knowledgeCutoff": None,
+            "hasWebSearchTool": True,
+            "webSearchEnabled": True,
+            "toolCallCount": 0,
+            "toolCalls": [],
+            "didUseWebSearch": False,
+            "didUseAnyTool": False,
+        }
+
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-meta-tool-trace",
+                "user_id": "u1",
+                "user_message": "刚刚有联网搜索吗",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "messages": [
+                    {"role": "user", "content": "什么是 HTTP"},
+                    {
+                        "role": "assistant",
+                        "content": "HTTP 是超文本传输协议。",
+                        "toolInvocationTrace": previous_trace,
+                    },
+                    {"role": "user", "content": "刚刚有联网搜索吗"},
+                ],
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertIn("工具调用次数是 0", response.answer)
+        self.assertIn("没有调用联网搜索", response.answer)
+        self.assertFalse(result["tool_invocation_trace"]["didUseWebSearch"])
+
+    def test_realtime_question_without_web_does_not_claim_current_fact(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-realtime-no-web",
+                "user_id": "u1",
+                "user_message": "今年的 GPT 发布到哪个版本了",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "runtime_time_context": {
+                    "currentDate": "2026-05-14",
+                    "timezone": "Asia/Shanghai",
+                    "knowledgeCutoff": "2024-06",
+                },
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertIn("不能可靠确认", response.answer)
+        self.assertIn("需要联网核查", response.answer)
+        self.assertNotIn("目前公开信息", response.answer)
+        self.assertNotIn("尚未发布 GPT-5", response.answer)
+        self.assertEqual(response.ui_payload["answer_mode"], "realtime_requires_web")
+        self.assertFalse(result["tool_invocation_trace"]["didUseWebSearch"])
+
+    def test_realtime_question_with_web_tool_must_search(self) -> None:
+        class CapturingAdapter:
+            def __init__(self) -> None:
+                self.evidence_ids = []
+
+            def answer(self, **kwargs):
+                evidence = kwargs["evidence"]
+                self.evidence_ids = [item.id for item in evidence]
+                return FinalResponse(
+                    answer="按官方信息，截至检索时间，GPT/ChatGPT 模型状态以 OpenAI 官方发布页为准。",
+                    source_level=SourceLevel.WEB,
+                    evidence_refs=self.evidence_ids,
+                    ui_payload={"answer_mode": "captured"},
+                )
+
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                if request.capability == ToolCapability.WEB_SEARCH:
+                    return ToolResult(
+                        tool_id="fake:web_search",
+                        provider="fake",
+                        capability=request.capability,
+                        status=ToolStatus.SUCCESS,
+                        input_summary=request.input_summary,
+                        evidence=[
+                            EvidenceChunk(
+                                id="web-openai-models",
+                                source_type="web",
+                                source_id="https://platform.openai.com/docs/models",
+                                text="OpenAI 官方模型文档列出当前可用模型。",
+                                score=0.9,
+                            )
+                        ],
+                    )
+                return ToolResult(
+                    tool_id="fake:notebook_retrieve",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        executor = FakeToolExecutor()
+        adapter = CapturingAdapter()
+        result = build_graph(adapter=adapter, tool_executor=executor).compile().invoke(
+            {
+                "run_id": "run-qa-realtime-with-web",
+                "user_id": "u1",
+                "user_message": "今年的 GPT 发布到哪个版本了",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "runtime_time_context": {
+                    "currentDate": "2026-05-14",
+                    "timezone": "Asia/Shanghai",
+                    "knowledgeCutoff": "2024-06",
+                },
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result["tool_invocation_trace"]["didUseWebSearch"])
+        self.assertEqual(result["source_usage"], "web")
+        self.assertEqual(response.source_level, SourceLevel.WEB)
+        self.assertIn("官方", response.answer)
+        self.assertEqual(adapter.evidence_ids, ["web-openai-models"])
+
+    def test_relative_year_without_current_date_does_not_bind_year(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-relative-year-no-current-date",
+                "user_id": "u1",
+                "user_message": "今年 GPT 到哪个版本了",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "runtime_time_context": {
+                    "currentDate": None,
+                    "timezone": "Asia/Shanghai",
+                    "knowledgeCutoff": "2024-06",
+                },
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertIn("无法确定你说的“今年”是哪一年", response.answer)
+        self.assertNotIn("2026", response.answer)
+        self.assertNotIn("目前公开信息", response.answer)
 
     def test_high_confidence_notebook_evidence_skips_web_when_enabled(self) -> None:
         class FakeToolExecutor:
@@ -947,7 +1132,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "run_id": "run-qa-clarify",
                 "user_id": "u1",
                 "thread_id": "t1",
-                "user_message": "HTTP/3 现在浏览器支持怎么样？",
+                "user_message": "什么是递归？",
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
             }
         )

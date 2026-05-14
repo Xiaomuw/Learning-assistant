@@ -342,6 +342,34 @@ class ChatPresenterTest(unittest.TestCase):
 
         self.assertIn("notebook 未命中", message["content"])
 
+    def test_assistant_message_persists_safe_tool_invocation_trace(self) -> None:
+        message = build_assistant_message(
+            {
+                "question": "什么是 HTTP",
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": "HTTP 是超文本传输协议。",
+                "tool_invocation_trace": {
+                    "currentDate": "2026-05-14",
+                    "timezone": "Asia/Shanghai",
+                    "knowledgeCutoff": "2024-06",
+                    "hasWebSearchTool": True,
+                    "webSearchEnabled": True,
+                    "toolCallCount": 0,
+                    "toolCalls": [],
+                    "didUseWebSearch": False,
+                    "didUseAnyTool": False,
+                    "authorization": "Bearer should-not-leak",
+                },
+            }
+        )
+
+        trace = message["toolInvocationTrace"]
+        self.assertEqual(trace["toolCallCount"], 0)
+        self.assertFalse(trace["didUseWebSearch"])
+        self.assertEqual(trace["currentDate"], "2026-05-14")
+        self.assertNotIn("authorization", trace)
+
     def test_answer_events_can_include_accumulated_question_type(self) -> None:
         data = extract_event_data(
             "teaching_response_node",

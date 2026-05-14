@@ -94,7 +94,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         self,
         runtime_result: AgentExecutionResult,
         *,
-        question: str = "HTTP/3 现在浏览器支持怎么样？",
+        question: str = "调用工具查一下 HTTP 协议定义",
     ) -> dict:
         adapter = ProductionQARuntimeAdapter(
             model_name="test-model",
@@ -431,7 +431,8 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                 execution_mode="structured_output",
                 raw_output="",
                 final_answer="",
-            )
+            ),
+            question="什么是递归？",
         )
 
         response = FinalResponse.model_validate(result["final_response"])

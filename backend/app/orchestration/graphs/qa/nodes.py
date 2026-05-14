@@ -3,12 +3,20 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from loguru import logger
 
 from app.orchestration.graphs.qa.adapter import DeterministicQARuntimeAdapter, QARuntimeAdapter
+from app.orchestration.graphs.qa.fact_boundary import (
+    QUESTION_META_TOOL_USAGE,
+    QUESTION_REALTIME_OR_FRESH,
+    QUESTION_STABLE_KNOWLEDGE,
+    classify_question_boundary,
+)
 from app.orchestration.graphs.qa.state import QAGraphState
 from app.orchestration.graphs.shared.schemas import (
     ConceptRef,
@@ -45,12 +53,27 @@ MAX_WEB_REPAIRS = 1
 MAX_ANSWER_REPAIR_ATTEMPTS = 1
 
 
-def input_normalize_node(state: QAGraphState) -> dict[str, Any]:
+def input_normalize_node(
+    state: QAGraphState,
+    *,
+    tool_executor: ToolExecutor | None = None,
+) -> dict[str, Any]:
     """Normalize the raw user input and initialize the v2 QA chain state."""
 
     question = _question(state)
     normalized_question = " ".join(question.split()).strip()
     source_policy = _source_policy({**state, "user_message": normalized_question})
+    runtime_time_context = _runtime_time_context(state)
+    question_boundary = classify_question_boundary(
+        normalized_question,
+        current_date=runtime_time_context.get("currentDate"),
+    ).as_dict()
+    has_web_search_tool = _tool_executor_has_web_search(tool_executor)
+    web_search_enabled = _web_search_enabled_for_state(
+        {**state, "source_policy": source_policy, "user_message": normalized_question},
+        has_web_search_tool=has_web_search_tool,
+    )
+    messages = list(state.get("messages") or [{"role": "user", "content": normalized_question}])
     context_dependency = {
         "is_context_dependent": _is_context_dependent_question(normalized_question),
         "signals": _context_dependency_signals(normalized_question),
@@ -65,8 +88,13 @@ def input_normalize_node(state: QAGraphState) -> dict[str, Any]:
         "source_policy": source_policy,
         "user_message": normalized_question,
         "normalized_question": normalized_question,
+        "runtime_time_context": runtime_time_context,
+        "question_boundary": question_boundary,
+        "has_web_search_tool": has_web_search_tool,
+        "web_search_enabled": web_search_enabled,
+        "previous_tool_invocation_trace": _previous_assistant_tool_trace(messages),
         "context_dependency": context_dependency,
-        "messages": list(state.get("messages") or [{"role": "user", "content": normalized_question}]),
+        "messages": messages,
         "concepts": list(state.get("concepts") or []),
         "evidence": list(state.get("evidence") or []),
         "tool_results": list(state.get("tool_results") or []),
@@ -678,15 +706,17 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
     issues: list[str] = []
     needs_web = False
 
-    if not final_response.answer.strip():
+    if not final_response.answer.strip() or final_response.answer.strip() == "这一轮没有生成可用回答。":
         issues.append("empty_answer")
     if final_response.evidence_refs and any(ref not in evidence_by_id for ref in final_response.evidence_refs):
         issues.append("evidence_ref_missing")
+    answer_mode = str(final_response.ui_payload.get("answer_mode") or "")
     if (
         _has_external_search_signal(question)
         and not web_used
         and not bool(state.get("web_search_attempted"))
         and source_policy != SourcePolicy.NOTEBOOK_ONLY.value
+        and answer_mode not in {"realtime_requires_web", "tool_trace_meta"}
     ):
         issues.append("time_sensitive_without_web")
         needs_web = True
@@ -939,6 +969,7 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
     source_level = _source_level_from_usage(source_usage, response.source_level)
     evidence_refs = [item.id for item in evidence]
     answer = response.answer
+    tool_invocation_trace = _build_tool_invocation_trace(state)
 
     if not answer.strip() and evidence:
         lead = evidence[0].text.strip().replace("\n", " ")
@@ -962,10 +993,12 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
                 severity=GraphErrorSeverity.WARNING,
             ).model_dump(mode="json")
         )
+    answer = _clean_fact_boundary_answer(answer, state)
 
     ui_payload = {
         **dict(response.ui_payload),
         "chat_question_graph_version": "v2",
+        "question_boundary": _question_boundary(state),
         "intent_result": dict(state.get("intent_result") or {}),
         "knowledge_routes": list(state.get("knowledge_routes") or []),
         "retrieval_skipped_reason": str(state.get("retrieval_skipped_reason") or ""),
@@ -979,6 +1012,7 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
         "answer_repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
         "source_usage": source_usage,
         "web_search_attempted": bool(state.get("web_search_attempted")),
+        "tool_invocation_trace": tool_invocation_trace,
         "concept_linking": dict(state.get("concept_linking") or {}),
     }
     concepts = list(response.concepts)
@@ -1001,7 +1035,12 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
             "ui_payload": ui_payload,
         }
     )
-    return {"final_response": final_response.model_dump(mode="json"), "errors": update_errors}
+    return {
+        "final_response": final_response.model_dump(mode="json"),
+        "errors": update_errors,
+        "tool_invocation_trace": tool_invocation_trace,
+        "web_search_used": bool(tool_invocation_trace.get("didUseWebSearch")),
+    }
 
 
 final_response_node = qa_result_compose_node
@@ -1123,6 +1162,36 @@ def run_adapter(
     source_policy = _source_policy(state)
     evidence = _collect_answer_evidence(state)
     evidence_gate = dict(state.get("evidence_gate") or {})
+    boundary = _question_boundary(state, question)
+    trace = _build_tool_invocation_trace(state)
+
+    if boundary.get("category") == QUESTION_META_TOOL_USAGE:
+        response = _meta_tool_usage_response(
+            state,
+            question=question,
+            previous_trace=state.get("previous_tool_invocation_trace") if isinstance(state.get("previous_tool_invocation_trace"), dict) else None,
+            current_trace=trace,
+        )
+        return {
+            "final_response": response.model_dump(mode="json"),
+            "source_usage": "model",
+            "tool_invocation_trace": trace,
+            "runtime_summary": {"answer_mode": "tool_trace_meta"},
+        }
+
+    if boundary.get("category") == QUESTION_REALTIME_OR_FRESH and not trace.get("didUseWebSearch"):
+        response = _realtime_without_web_response(
+            question=question,
+            boundary=boundary,
+            trace=trace,
+        )
+        return {
+            "final_response": response.model_dump(mode="json"),
+            "source_usage": "model",
+            "tool_invocation_trace": trace,
+            "runtime_summary": {"answer_mode": "realtime_requires_web"},
+        }
+
     contract_runner = getattr(runtime_adapter, "answer_with_contract", None)
     if callable(contract_runner):
         contract_result = contract_runner(
@@ -1137,6 +1206,7 @@ def run_adapter(
         update: dict[str, Any] = {
             "final_response": contract_result.final_response.model_dump(mode="json"),
             "runtime_summary": dict(contract_result.runtime_summary),
+            "tool_invocation_trace": trace,
         }
         if contract_result.evidence:
             if state.get("evidence_judgement"):
@@ -1176,6 +1246,7 @@ def run_adapter(
                 *existing_errors,
                 *[item.model_dump(mode="json") for item in contract_result.errors],
             ]
+        update["tool_invocation_trace"] = _build_tool_invocation_trace({**state, **update})
         return update
 
     response = runtime_adapter.answer(
@@ -1187,7 +1258,160 @@ def run_adapter(
         user_id=str(state.get("user_id") or ""),
         graph_run_id=str(state.get("run_id") or ""),
     )
-    return {"final_response": response.model_dump(mode="json")}
+    return {
+        "final_response": response.model_dump(mode="json"),
+        "tool_invocation_trace": trace,
+    }
+
+
+def _meta_tool_usage_response(
+    state: QAGraphState,
+    *,
+    question: str,
+    previous_trace: dict[str, Any] | None,
+    current_trace: dict[str, Any],
+) -> FinalResponse:
+    _ = (state, question)
+    trace = _normalize_tool_invocation_trace(previous_trace or {}) if previous_trace else None
+    if trace is None:
+        answer = "我没有找到上一轮的工具调用记录，因此不能可靠确认刚刚是否联网搜索。"
+        trace_summary = {"trace_available": False}
+    else:
+        tool_count = int(trace.get("toolCallCount") or 0)
+        did_web = bool(trace.get("didUseWebSearch"))
+        did_any = bool(trace.get("didUseAnyTool"))
+        if did_web:
+            answer = f"有。根据刚刚那轮的运行记录，工具调用次数是 {tool_count}，其中包含联网搜索。"
+        elif tool_count == 0:
+            answer = "没有。根据刚刚那轮的运行记录，工具调用次数是 0，因此没有调用联网搜索。"
+        elif did_any:
+            answer = f"没有联网搜索。根据刚刚那轮的运行记录，工具调用次数是 {tool_count}，但没有 web_search / 联网搜索调用。"
+        else:
+            answer = "没有。根据刚刚那轮的运行记录，没有发现联网搜索调用。"
+        answer += " HTTP 属于稳定基础知识，所以那轮可以直接基于通用知识回答；这只是补充说明，真正依据是运行记录。"
+        trace_summary = {"trace_available": True, **trace}
+    return FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        coach_actions=["report_tool_trace"],
+        mastery_signals={"signal_strength": "none"},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": "tool_trace_meta",
+            "tool_invocation_trace": current_trace,
+            "previous_tool_invocation_trace": trace_summary,
+        },
+    )
+
+
+def _realtime_without_web_response(
+    *,
+    question: str,
+    boundary: dict[str, Any],
+    trace: dict[str, Any],
+) -> FinalResponse:
+    current_date = trace.get("currentDate")
+    if boundary.get("contains_relative_year") and current_date is None:
+        answer = (
+            "这是实时问题，但我无法确定你说的“今年”是哪一年；请补充年份，"
+            "或启用联网检索后我再核查官方来源。"
+        )
+    else:
+        has_tool = bool(trace.get("hasWebSearchTool"))
+        enabled = bool(trace.get("webSearchEnabled"))
+        if not has_tool or not enabled:
+            availability = "我当前没有启用联网检索"
+        else:
+            availability = "本轮没有取得联网检索结果"
+        if "gpt" in question.lower() or "openai" in question.lower() or "ChatGPT" in question or "模型" in question:
+            topic = "今年 GPT/ChatGPT/OpenAI 模型发布到了哪个版本"
+        else:
+            topic = "这个当前状态"
+        answer = (
+            f"这是实时问题，{availability}，不能可靠确认{topic}。"
+            "若只基于我的知识截止时间，我不能把它当作当前事实。"
+            "需要联网核查官方发布页、官方文档或权威来源后，才能给出确定答案。"
+        )
+    return FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        coach_actions=["require_web_verification"],
+        mastery_signals={"signal_strength": "none", "volatile": True},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": "realtime_requires_web",
+            "question_boundary": boundary,
+            "tool_invocation_trace": trace,
+            "volatile_fact": True,
+        },
+    )
+
+
+def _clean_fact_boundary_answer(answer: str, state: QAGraphState) -> str:
+    """Remove internal retrieval/realtime scaffolding from user-visible answers."""
+
+    text = str(answer or "").strip()
+    if not text:
+        return ""
+    boundary = _question_boundary(state)
+    source_policy = _source_policy(state)
+    preserve_notebook_notice = (
+        source_policy == SourcePolicy.NOTEBOOK_ONLY.value
+        or _has_notebook_signal(_question(state))
+    )
+    if not preserve_notebook_notice:
+        text = re.sub(
+            r"(当前\s*)?notebook\s*未命中足够相关的资料[，,]\s*下面先按通用知识解释[。.]?\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"(你的资料|当前资料|当前笔记|当前 notebook)\s*(中)?\s*(没有|未找到|未命中)足够相关(的)?(内容|资料)[，,]\s*(我)?先(按|基于)通用知识(解释|说明)[。.]?\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+    if boundary.get("category") == QUESTION_REALTIME_OR_FRESH and not _build_tool_invocation_trace(state).get("didUseWebSearch"):
+        text = re.sub(r"目前公开信息中[，,]?", "", text)
+        text = re.sub(r"截至目前[，,]?", "", text)
+    text = _dedupe_adjacent_sentences(text)
+    text = _dedupe_adjacent_paragraphs(text)
+    return text.strip()
+
+
+def _dedupe_adjacent_paragraphs(text: str) -> str:
+    paragraphs = re.split(r"\n{2,}", text)
+    deduped: list[str] = []
+    previous = ""
+    for paragraph in paragraphs:
+        current = paragraph.strip()
+        if not current:
+            continue
+        normalized = re.sub(r"\s+", "", current)
+        if normalized and normalized != previous:
+            deduped.append(current)
+            previous = normalized
+    return "\n\n".join(deduped)
+
+
+def _dedupe_adjacent_sentences(text: str) -> str:
+    parts = re.split(r"(?<=[。！？.!?])(\s*)", text)
+    if len(parts) <= 1:
+        return text
+    rebuilt: list[str] = []
+    previous = ""
+    for index in range(0, len(parts), 2):
+        sentence = parts[index]
+        separator = parts[index + 1] if index + 1 < len(parts) else ""
+        normalized = re.sub(r"\s+", "", sentence)
+        if normalized and normalized == previous:
+            continue
+        rebuilt.append(sentence)
+        rebuilt.append(separator)
+        if normalized:
+            previous = normalized
+    return "".join(rebuilt).strip()
 
 
 def execute_tool_requests(
@@ -1233,13 +1457,21 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
     graph_run_id = str(state.get("run_id") or "")
     message_source_id = _qa_message_source_id(state)
     tool_result_refs = [item.tool_id for item in _collect_tool_results(state)]
+    boundary = _question_boundary(state, str(qa_request.get("question") or _question(state)))
+    trace = _build_tool_invocation_trace(state)
+    is_volatile_fact = boundary.get("category") == QUESTION_REALTIME_OR_FRESH
     base_payload = {
         "question_type": str(qa_request.get("question_type") or _infer_question_type(_question(state))),
+        "question_boundary": boundary.get("category"),
         "source_level": response.source_level.value,
         "source_policy": source_policy,
         "answer_mode": str(response.ui_payload.get("answer_mode") or ""),
         "evidence_refs": list(response.evidence_refs),
         "tool_result_refs": tool_result_refs,
+        "tool_call_count": trace.get("toolCallCount"),
+        "did_use_web_search": trace.get("didUseWebSearch"),
+        "current_date": trace.get("currentDate"),
+        "volatile": is_volatile_fact,
         "degraded": bool((state.get("evidence_gate") or {}).get("insufficient")),
     }
     events = _adapter_events_from_state(state)
@@ -1302,6 +1534,10 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
                     "confidence": concept.confidence,
                     "source_level": response.source_level.value,
                     "evidence_refs": list(response.evidence_refs),
+                    "question_boundary": boundary.get("category"),
+                    "volatile": is_volatile_fact,
+                    "timestamp": trace.get("currentDate") if is_volatile_fact else None,
+                    "did_use_web_search": trace.get("didUseWebSearch"),
                 },
                 source_object_type="chat_message",
                 source_object_id=message_source_id,
@@ -1405,6 +1641,176 @@ def _source_policy(state: QAGraphState) -> str:
         return SourcePolicy.OPEN_TOOLS.value
 
 
+def _runtime_time_context(state: QAGraphState) -> dict[str, Any]:
+    raw = state.get("runtime_time_context")
+    if isinstance(raw, dict):
+        timezone = raw.get("timezone")
+        return {
+            "currentDate": raw.get("currentDate"),
+            "timezone": str(timezone or _default_timezone()),
+            "knowledgeCutoff": raw.get("knowledgeCutoff") or os.getenv("KNOWLEDGE_CUTOFF") or None,
+        }
+    timezone = _default_timezone()
+    try:
+        now = datetime.now(ZoneInfo(timezone))
+    except ZoneInfoNotFoundError:
+        timezone = "UTC"
+        now = datetime.now(ZoneInfo("UTC"))
+    return {
+        "currentDate": now.date().isoformat(),
+        "timezone": timezone,
+        "knowledgeCutoff": os.getenv("KNOWLEDGE_CUTOFF") or None,
+    }
+
+
+def _default_timezone() -> str:
+    return str(os.getenv("APP_TIMEZONE") or os.getenv("TZ") or "Asia/Shanghai").strip() or "Asia/Shanghai"
+
+
+def _question_boundary(state: QAGraphState, question: str | None = None) -> dict[str, Any]:
+    existing = state.get("question_boundary")
+    if isinstance(existing, dict) and existing.get("category"):
+        return existing
+    time_context = _runtime_time_context(state)
+    return classify_question_boundary(
+        str(question or _normalized_question(state)),
+        current_date=time_context.get("currentDate"),
+    ).as_dict()
+
+
+def _tool_executor_has_web_search(tool_executor: ToolExecutor | None) -> bool:
+    if tool_executor is None:
+        return False
+    registry = getattr(tool_executor, "registry", None)
+    if registry is None:
+        return True
+    finder = getattr(registry, "find_by_capability", None)
+    if not callable(finder):
+        return True
+    try:
+        return finder(ToolCapability.WEB_SEARCH) is not None
+    except Exception:
+        return True
+
+
+def _web_search_enabled_for_state(state: QAGraphState | dict[str, Any], *, has_web_search_tool: bool) -> bool:
+    if not has_web_search_tool:
+        return False
+    source_policy = _source_policy(state)  # type: ignore[arg-type]
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        return False
+    runtime_context = state.get("chat_runtime_context") or state.get("runtime_context") or {}
+    if isinstance(runtime_context, dict):
+        guard = runtime_context.get("guard") if isinstance(runtime_context.get("guard"), dict) else {}
+        if guard.get("allow_search") is False or runtime_context.get("allow_search") is False:
+            return False
+    return source_policy in {SourcePolicy.OPEN_TOOLS.value, SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value}
+
+
+def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
+    time_context = _runtime_time_context(state)
+    has_web_search_tool = bool(state.get("has_web_search_tool"))
+    web_search_enabled = bool(state.get("web_search_enabled"))
+    calls: list[dict[str, Any]] = []
+    for result in _collect_tool_results(state):
+        name = result.capability.value
+        status = result.status.value
+        calls.append(
+            {
+                "name": name,
+                "type": _public_source_from_capability(result.capability),
+                "status": status,
+            }
+        )
+    for raw in list(state.get("external_tool_calls") or []):
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("capability") or raw.get("name") or raw.get("tool") or "").strip()
+        if not name:
+            continue
+        status = str(raw.get("status") or ("success" if raw.get("success") is True else ""))
+        calls.append(
+            {
+                "name": name,
+                "type": "web" if "search" in name.lower() or str(raw.get("provider") or "").lower() in {"mcp", "tavily", "web"} else "tool",
+                "status": status or "unknown",
+            }
+        )
+    did_use_web = any(
+        call.get("type") == "web"
+        and ("search" in str(call.get("name") or "").lower() or str(call.get("name") or "") == ToolCapability.WEB_SEARCH.value)
+        and str(call.get("status") or "") == ToolStatus.SUCCESS.value
+        for call in calls
+    ) or bool(state.get("web_search_used"))
+    return {
+        "currentDate": time_context.get("currentDate"),
+        "timezone": time_context.get("timezone"),
+        "knowledgeCutoff": time_context.get("knowledgeCutoff"),
+        "hasWebSearchTool": has_web_search_tool,
+        "webSearchEnabled": web_search_enabled,
+        "toolCallCount": len(calls),
+        "toolCalls": calls,
+        "didUseWebSearch": did_use_web,
+        "didUseAnyTool": bool(calls),
+    }
+
+
+def _previous_assistant_tool_trace(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for message in reversed(messages):
+        if not isinstance(message, dict) or str(message.get("role") or "") != "assistant":
+            continue
+        trace = message.get("toolInvocationTrace")
+        if isinstance(trace, dict):
+            return _normalize_tool_invocation_trace(trace)
+        process = message.get("process")
+        if isinstance(process, dict):
+            tool_calls = process.get("toolCalls")
+            if isinstance(tool_calls, list):
+                calls = []
+                for raw in tool_calls:
+                    if not isinstance(raw, dict):
+                        continue
+                    name = str(raw.get("capability") or raw.get("name") or raw.get("tool") or "").strip()
+                    status = str(raw.get("status") or "").strip() or "unknown"
+                    calls.append(
+                        {
+                            "name": name,
+                            "type": "web" if "search" in name.lower() else "tool",
+                            "status": status,
+                        }
+                    )
+                if calls:
+                    did_use_web = any(call["type"] == "web" and call["status"] == ToolStatus.SUCCESS.value for call in calls)
+                    return {
+                        "currentDate": None,
+                        "timezone": None,
+                        "knowledgeCutoff": None,
+                        "hasWebSearchTool": False,
+                        "webSearchEnabled": False,
+                        "toolCallCount": len(calls),
+                        "toolCalls": calls,
+                        "didUseWebSearch": did_use_web,
+                        "didUseAnyTool": True,
+                    }
+    return None
+
+
+def _normalize_tool_invocation_trace(raw: dict[str, Any]) -> dict[str, Any]:
+    calls = raw.get("toolCalls") if isinstance(raw.get("toolCalls"), list) else []
+    tool_call_count = int(raw.get("toolCallCount") or len(calls) or 0)
+    return {
+        "currentDate": raw.get("currentDate"),
+        "timezone": raw.get("timezone"),
+        "knowledgeCutoff": raw.get("knowledgeCutoff"),
+        "hasWebSearchTool": bool(raw.get("hasWebSearchTool")),
+        "webSearchEnabled": bool(raw.get("webSearchEnabled")),
+        "toolCallCount": tool_call_count,
+        "toolCalls": [dict(item) for item in calls if isinstance(item, dict)],
+        "didUseWebSearch": bool(raw.get("didUseWebSearch")),
+        "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0),
+    }
+
+
 def _infer_question_type(question: str) -> str:
     normalized = question.lower()
     if any(token in question for token in ("什么是", "什么叫", "解释", "概念")):
@@ -1478,6 +1884,9 @@ def _intent_reason(intent: str) -> str:
 
 
 def _has_meta_signal(question: str) -> bool:
+    boundary = classify_question_boundary(question)
+    if boundary.category == QUESTION_META_TOOL_USAGE:
+        return True
     normalized = question.lower()
     chinese_terms = (
         "你是什么模型",
@@ -1556,6 +1965,11 @@ def _has_notebook_signal(question: str) -> bool:
 
 
 def _has_external_search_signal(question: str) -> bool:
+    boundary = classify_question_boundary(question)
+    if boundary.category == QUESTION_META_TOOL_USAGE:
+        return False
+    if boundary.category == QUESTION_REALTIME_OR_FRESH:
+        return True
     lowered = question.lower()
     strong_terms = (
         "调用工具",
@@ -1904,6 +2318,9 @@ def _should_run_web_retrieval(
     question: str,
     source_policy: str,
 ) -> bool:
+    boundary = _question_boundary(state, question)
+    if boundary.get("category") == QUESTION_META_TOOL_USAGE:
+        return False
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
         return False
     if source_policy not in {
@@ -1913,6 +2330,8 @@ def _should_run_web_retrieval(
         return False
     if _has_external_search_signal(question):
         return True
+    if boundary.get("category") == QUESTION_STABLE_KNOWLEDGE:
+        return False
     if not _web_search_empty_concepts_enabled():
         return False
 

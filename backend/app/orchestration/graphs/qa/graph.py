@@ -37,7 +37,7 @@ def build_graph(
 ) -> StateGraph:
     _ = learning_event_repository
     graph = StateGraph(QAGraphState)
-    graph.add_node("input_normalize", input_normalize_node)
+    graph.add_node("input_normalize", lambda state: input_normalize_node(state, tool_executor=tool_executor))
     graph.add_node("qa_intent_classifier", qa_intent_classifier_node)
     graph.add_node("context_resolver", context_resolver_node)
     graph.add_node("concept_linker", concept_linker_node)
