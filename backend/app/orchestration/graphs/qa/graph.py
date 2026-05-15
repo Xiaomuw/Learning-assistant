@@ -12,8 +12,10 @@ from app.orchestration.graphs.qa.nodes import (
     compose_learning_events,
     concept_linker_node,
     context_resolver_node,
-    evidence_judge_node,
     evidence_merge_node,
+    external_evidence_judge_node,
+    insufficient_evidence_response_node,
+    internal_evidence_judge_node,
     internal_retrieval_node,
     input_normalize_node,
     knowledge_router_node,
@@ -22,6 +24,7 @@ from app.orchestration.graphs.qa.nodes import (
     qa_result_compose_node,
     route_after_answer_quality,
     route_after_evidence_judge,
+    route_after_external_evidence_judge,
     web_search_if_needed_node,
 )
 from app.orchestration.graphs.qa.state import QAGraphState
@@ -43,8 +46,10 @@ def build_graph(
     graph.add_node("concept_linker", concept_linker_node)
     graph.add_node("knowledge_router", knowledge_router_node)
     graph.add_node("internal_retrieval", lambda state: internal_retrieval_node(state, tool_executor=tool_executor))
-    graph.add_node("evidence_judge", evidence_judge_node)
+    graph.add_node("internal_evidence_judge", internal_evidence_judge_node)
     graph.add_node("web_search_if_needed", lambda state: web_search_if_needed_node(state, tool_executor=tool_executor))
+    graph.add_node("external_evidence_judge", external_evidence_judge_node)
+    graph.add_node("insufficient_evidence_response", insufficient_evidence_response_node)
     graph.add_node("evidence_merge", evidence_merge_node)
     graph.add_node("answer_generate", lambda state: answer_generate_node(state, adapter=adapter))
     graph.add_node("answer_quality_check", answer_quality_check_node)
@@ -59,16 +64,25 @@ def build_graph(
     graph.add_edge("context_resolver", "concept_linker")
     graph.add_edge("concept_linker", "knowledge_router")
     graph.add_edge("knowledge_router", "internal_retrieval")
-    graph.add_edge("internal_retrieval", "evidence_judge")
+    graph.add_edge("internal_retrieval", "internal_evidence_judge")
     graph.add_conditional_edges(
-        source="evidence_judge",
+        source="internal_evidence_judge",
         path=route_after_evidence_judge,
         path_map={
             "web_search_if_needed": "web_search_if_needed",
             "evidence_merge": "evidence_merge",
+            "insufficient_evidence_response": "insufficient_evidence_response",
         },
     )
-    graph.add_edge("web_search_if_needed", "evidence_merge")
+    graph.add_edge("web_search_if_needed", "external_evidence_judge")
+    graph.add_conditional_edges(
+        source="external_evidence_judge",
+        path=route_after_external_evidence_judge,
+        path_map={
+            "evidence_merge": "evidence_merge",
+            "insufficient_evidence_response": "insufficient_evidence_response",
+        },
+    )
     graph.add_edge("evidence_merge", "answer_generate")
     graph.add_edge("answer_generate", "answer_quality_check")
     graph.add_conditional_edges(
@@ -81,6 +95,7 @@ def build_graph(
         },
     )
     graph.add_edge("answer_repair", "answer_quality_check")
+    graph.add_edge("insufficient_evidence_response", "qa_result_compose")
     graph.add_edge("qa_result_compose", "compose_learning_events")
     graph.add_edge("qa_clarification_response", "compose_learning_events")
     graph.add_edge("compose_learning_events", END)

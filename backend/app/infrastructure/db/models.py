@@ -371,10 +371,19 @@ class ChatAsyncJobModel(Base):
     job_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     session_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False, default="")
+    client_request_id: Mapped[str | None] = mapped_column(String(160), index=True, nullable=True, default=None)
     request_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(30), index=True, nullable=False, default="pending")
+    request_payload: Mapped[dict | None] = mapped_column(GraphJSON, nullable=True, default=None)
+    final_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    error_code: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    route: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     result_json: Mapped[dict | None] = mapped_column(GraphJSON, nullable=True, default=None)
     error_json: Mapped[dict | None] = mapped_column(GraphJSON, nullable=True, default=None)
+    expires_at: Mapped[object | None] = mapped_column(DateTime(timezone=True), index=True, nullable=True, default=None)
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

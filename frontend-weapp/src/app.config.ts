@@ -1,4 +1,5 @@
-export default defineAppConfig({
+const appConfig = {
+  cloud: true,
   pages: [
     "pages/login/index",
     "pages/chat/index",
@@ -44,4 +45,7 @@ export default defineAppConfig({
       }
     ]
   }
-});
+};
+
+// WeChat app.json supports `cloud`; Taro's AppConfig type does not expose it.
+export default defineAppConfig(appConfig as Parameters<typeof defineAppConfig>[0]);

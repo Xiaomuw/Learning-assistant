@@ -12,6 +12,7 @@ class OrchestratorIntent(StrEnum):
     QA = "qa"
     GENERATE_QUESTION = "generate_question"
     EVALUATE_MASTERY = "evaluate_mastery"
+    DIRECT_RESPONSE = "direct_response"
     FALLBACK = "fallback"
 
 
@@ -20,6 +21,8 @@ class IntentDecision(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     reason: str = ""
     target_graph_type: GraphType
+    route: str = ""
+    route_policy: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChildGraphOutput(BaseModel):

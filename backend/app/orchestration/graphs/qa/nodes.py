@@ -36,6 +36,7 @@ from app.orchestration.graphs.shared.schemas import (
     build_learning_event,
     learning_event_hash_key,
 )
+from app.orchestration.graphs.shared.trace import append_trace_record
 from app.knowledge.concept_registry import get_concept_registry
 from app.services.tooling.executor import ToolExecutor
 from app.services.tooling.schemas import ToolExecutionRequest, ToolRiskLevel
@@ -52,6 +53,16 @@ DEFAULT_EVIDENCE_CONFIDENCE_LOW = 0.45
 MAX_KNOWLEDGE_ROUTES = 3
 MAX_WEB_REPAIRS = 1
 MAX_ANSWER_REPAIR_ATTEMPTS = 1
+
+
+def _max_repair_count(state: QAGraphState) -> int:
+    raw_max = state.get("max_repair_count")
+    if raw_max is None:
+        return MAX_ANSWER_REPAIR_ATTEMPTS
+    try:
+        return max(0, int(raw_max))
+    except (TypeError, ValueError):
+        return MAX_ANSWER_REPAIR_ATTEMPTS
 
 
 def input_normalize_node(
@@ -81,7 +92,7 @@ def input_normalize_node(
     }
     question_type = str(state.get("question_type") or _infer_question_type(normalized_question))
     repair_count = int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0)
-    max_repair_count = int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS)
+    max_repair_count = _max_repair_count(state)
     return {
         "run_id": str(state.get("run_id") or uuid4()),
         "graph_type": GraphType.QA.value,
@@ -343,6 +354,15 @@ def internal_retrieval_node(
     ]
     if existing_usable:
         return {
+            "trace_records": append_trace_record(
+                state,
+                "internal_retrieval",
+                rag_called=False,
+                rag_planned=False,
+                requested_count=0,
+                result_count=0,
+                reason="preloaded_evidence_available",
+            ),
             "retrieval_report": {
                 "stage": "internal_retrieval",
                 "route_count": len(routes),
@@ -378,6 +398,15 @@ def internal_retrieval_node(
 
     if not requests:
         return {
+            "trace_records": append_trace_record(
+                state,
+                "internal_retrieval",
+                rag_called=False,
+                rag_planned=False,
+                requested_count=0,
+                result_count=0,
+                reason=str(state.get("retrieval_skipped_reason") or "no_retrieval_request"),
+            ),
             "retrieval_report": {
                 "stage": "internal_retrieval",
                 "route_count": len(routes),
@@ -393,6 +422,15 @@ def internal_retrieval_node(
 
     if tool_executor is None:
         return {
+            "trace_records": append_trace_record(
+                state,
+                "internal_retrieval",
+                rag_called=False,
+                rag_planned=True,
+                requested_count=len(requests),
+                result_count=len(existing_results),
+                reason="planned_without_executor",
+            ),
             "tool_requests": [*existing_requests, *request_payloads],
             "retrieval_report": {
                 "stage": "internal_retrieval",
@@ -427,6 +465,16 @@ def internal_retrieval_node(
 
     merged_results = [*existing_results, *[item.model_dump(mode="json") for item in new_results]]
     return {
+        "trace_records": append_trace_record(
+            state,
+            "internal_retrieval",
+            rag_called=True,
+            rag_planned=True,
+            requested_count=len(requests),
+            result_count=len(new_results),
+            success_count=len([item for item in new_results if item.status.value == "success"]),
+            error_count=len(new_errors),
+        ),
         "tool_requests": [*existing_requests, *request_payloads],
         "tool_results": merged_results,
         "errors": [*list(state.get("errors") or []), *new_errors],
@@ -487,6 +535,14 @@ def web_search_if_needed_node(
             status="skipped",
         )
         return {
+            "trace_records": append_trace_record(
+                state,
+                "web_search_if_needed",
+                web_called=False,
+                web_planned=False,
+                reason=blocked_reason,
+                web_result_count=0,
+            ),
             "retrieval_report": {
                 **retrieval_report,
                 "web_requested_count": 0,
@@ -515,7 +571,18 @@ def web_search_if_needed_node(
     request_payload = request.model_dump(mode="json")
     if tool_executor is None:
         return {
+            "trace_records": append_trace_record(
+                state,
+                "web_search_if_needed",
+                web_called=False,
+                web_planned=True,
+                reason="planned_without_executor",
+                web_requested_count=1,
+                web_result_count=0,
+            ),
             "tool_requests": [*existing_requests, request_payload],
+            "pending_web_evidence": [],
+            "web_evidence": [],
             "retrieval_report": {
                 **retrieval_report,
                 "web_requested_count": 1,
@@ -544,20 +611,32 @@ def web_search_if_needed_node(
         )
 
     tagged = _tag_tool_result_evidence(result, route=None, retrieval_source="web")
-    usable_web_evidence = [
+    candidate_web_evidence = [
         item
         for item in tagged.evidence
-        if item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE
+        if item.text.strip()
     ]
     return {
+        "trace_records": append_trace_record(
+            state,
+            "web_search_if_needed",
+            web_called=True,
+            web_planned=True,
+            reason=reason,
+            web_requested_count=1,
+            web_result_count=len(candidate_web_evidence),
+            web_success_count=1 if tagged.status == ToolStatus.SUCCESS else 0,
+            web_error_count=len(new_errors),
+        ),
         "tool_requests": [*existing_requests, request_payload],
         "tool_results": [*existing_results, tagged.model_dump(mode="json")],
-        "web_evidence": [item.model_dump(mode="json") for item in usable_web_evidence],
+        "pending_web_evidence": [item.model_dump(mode="json") for item in candidate_web_evidence],
+        "web_evidence": [],
         "errors": [*list(state.get("errors") or []), *new_errors],
         "retrieval_report": {
             **retrieval_report,
             "web_requested_count": 1,
-            "web_result_count": len(usable_web_evidence),
+            "web_result_count": len(candidate_web_evidence),
             "web_success_count": 1 if tagged.status == ToolStatus.SUCCESS else 0,
             "web_error_count": len(new_errors),
             "web_search_stage": "executed",
@@ -567,6 +646,12 @@ def web_search_if_needed_node(
         "web_search_reason": reason,
         "web_search_iteration": int(state.get("web_search_iteration") or 0) + 1,
     }
+
+
+def internal_evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
+    """Named wrapper for the internal evidence gate described by the QA subgraph."""
+
+    return evidence_judge_node(state)
 
 
 def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
@@ -646,6 +731,20 @@ def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
         len(strong),
     )
     return {
+        "trace_records": append_trace_record(
+            state,
+            "internal_evidence_judge",
+            internal_evidence_confidence={
+                "score": confidence.get("score"),
+                "level": confidence.get("level"),
+                "threshold": confidence.get("threshold"),
+                "sufficient": confidence.get("sufficient"),
+                "reason": confidence.get("reason"),
+            },
+            usable_evidence_count=len(usable),
+            strong_count=len(strong),
+            status=status,
+        ),
         "evidence": [item.model_dump(mode="json") for item in usable],
         "notebook_evidence": [item.model_dump(mode="json") for item in notebook_evidence],
         "web_evidence": [],
@@ -669,11 +768,215 @@ def route_after_evidence_judge(state: QAGraphState) -> str:
     gate = dict(state.get("evidence_gate") or {})
     source_policy = _source_policy(state)
     question = _resolved_question(state)
+    if gate.get("sufficient"):
+        if _should_run_web_retrieval(state, question, source_policy):
+            return "web_search_if_needed"
+        return "evidence_merge"
     if _should_run_web_retrieval(state, question, source_policy):
         return "web_search_if_needed"
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or bool(gate.get("insufficient")):
+        return "insufficient_evidence_response"
+    return "evidence_merge"
+
+
+def external_evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
+    """Judge web evidence before it can be merged into answer evidence."""
+
+    _emit_status(
+        stream_stage="external_evidence_judge",
+        stage_label="外部证据评估",
+        detail="正在评估联网证据是否足够可靠。",
+    )
+    question = _resolved_question(state)
+    candidates = _parse_evidence_list(state.get("pending_web_evidence") or state.get("web_evidence") or [])
+    web_candidates = [
+        item
+        for item in candidates
+        if item.source_type == "web" and item.text.strip() and item.score >= PARTIAL_EVIDENCE_SCORE
+    ]
+    confidence = _evidence_confidence(
+        state,
+        question=question,
+        evidence=web_candidates,
+        source_policy=SourcePolicy.OPEN_TOOLS.value,
+    )
+    sufficient = bool(confidence.get("sufficient"))
+    usable = web_candidates if sufficient else []
+    strong = [item for item in web_candidates if item.score >= STRONG_EVIDENCE_SCORE]
+    if sufficient and strong:
+        status = "strong"
+        reason = "strong_external_evidence"
+    elif sufficient and usable:
+        status = "partial"
+        reason = "partial_external_evidence"
+    elif web_candidates:
+        status = "low_confidence"
+        reason = "low_external_evidence_confidence"
+    else:
+        status = "insufficient"
+        reason = "no_sufficient_external_evidence"
+
+    confidence = {
+        **confidence,
+        "reason": "external_evidence_confidence_sufficient" if sufficient else reason,
+    }
+    gate = {
+        "sufficient": sufficient,
+        "insufficient": not sufficient,
+        "source_policy": _source_policy(state),
+        "usable_evidence_refs": [item.id for item in usable],
+        "usable_evidence_count": len(usable),
+        "missing_topic": question,
+        "reason": reason,
+        "status": status,
+        "evidence_confidence": confidence,
+    }
+    judgement = {
+        "status": status,
+        "missing_reason": "" if sufficient else reason,
+        "verified_count": len(usable),
+        "discarded_count": max(0, len(candidates) - len(usable)),
+        "strong_count": len(strong),
+        "partial_count": max(0, len(usable) - len(strong)),
+        "web_count": len(web_candidates),
+        "candidate_count": len(candidates),
+        "evidence_confidence": confidence,
+    }
+    logger.info(
+        "QA 外部证据置信度评估 | request_id={} score={} level={} sufficient={} reason={} candidates={} strong={}",
+        str(state.get("request_id") or state.get("message_id") or state.get("run_id") or ""),
+        confidence.get("score"),
+        confidence.get("level"),
+        confidence.get("sufficient"),
+        confidence.get("reason"),
+        len(web_candidates),
+        len(strong),
+    )
+    grounding_report = {
+        **dict(state.get("grounding_report") or {}),
+        "external_evidence_gate": gate,
+        "external_evidence_confidence": confidence,
+    }
+    update: dict[str, Any] = {
+        "trace_records": append_trace_record(
+            state,
+            "external_evidence_judge",
+            external_evidence_confidence={
+                "score": confidence.get("score"),
+                "level": confidence.get("level"),
+                "threshold": confidence.get("threshold"),
+                "sufficient": confidence.get("sufficient"),
+                "reason": confidence.get("reason"),
+            },
+            usable_evidence_count=len(usable),
+            strong_count=len(strong),
+            status=status,
+        ),
+        "web_evidence": [item.model_dump(mode="json") for item in usable],
+        "external_evidence_judgement": judgement,
+        "external_evidence_confidence": confidence,
+        "external_evidence_gate": gate,
+        "retrieval_report": {
+            **dict(state.get("retrieval_report") or {}),
+            "external_evidence_confidence": confidence,
+            "external_verified_count": len(usable),
+        },
+        "grounding_report": grounding_report,
+    }
+    if sufficient:
+        update["evidence_gate"] = {
+            **dict(state.get("evidence_gate") or {}),
+            "sufficient": True,
+            "insufficient": False,
+            "external_evidence_sufficient": True,
+            "external_evidence_reason": reason,
+            "external_evidence_status": status,
+            "external_evidence_refs": [item.id for item in usable],
+        }
+    return update
+
+
+def route_after_external_evidence_judge(state: QAGraphState) -> str:
+    gate = dict(state.get("external_evidence_gate") or {})
     if gate.get("sufficient"):
         return "evidence_merge"
-    return "evidence_merge"
+    if not bool(state.get("web_search_attempted")):
+        return "evidence_merge"
+    return "insufficient_evidence_response"
+
+
+def insufficient_evidence_response_node(state: QAGraphState) -> dict[str, Any]:
+    """Return a final response when required evidence cannot support an answer."""
+
+    source_policy = _source_policy(state)
+    question = _resolved_question(state)
+    internal_gate = dict(state.get("evidence_gate") or {})
+    external_gate = dict(state.get("external_evidence_gate") or {})
+    reason = str(external_gate.get("reason") or internal_gate.get("reason") or "insufficient_evidence")
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or internal_gate.get("notebook_required"):
+        answer = (
+            "当前资料不足，无法只依据已有 notebook 或课程资料可靠回答这个问题。"
+            f"你可以补充与「{question}」相关的资料，或允许我使用外部资料后再试。"
+        )
+        answer_mode = "insufficient_notebook"
+    elif bool(state.get("web_search_attempted")):
+        answer = (
+            "内部资料和联网补充都还没有足够可靠的证据支撑这个回答。"
+            "你可以换个更具体的问题，或稍后重新检索。"
+        )
+        answer_mode = "insufficient_external_evidence"
+    else:
+        answer = "我目前缺少足够可靠的证据来给出确定回答。你可以补充更具体的上下文后再问一次。"
+        answer_mode = "insufficient_evidence"
+
+    gate = {
+        **internal_gate,
+        "sufficient": False,
+        "insufficient": True,
+        "reason": reason,
+        "status": "insufficient",
+        "missing_topic": question,
+        "external_evidence_gate": external_gate,
+    }
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        coach_actions=["request_more_evidence"],
+        mastery_signals={"signal_strength": "none"},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": answer_mode,
+            "degraded": True,
+            "source_policy": source_policy,
+            "evidence_sufficiency": gate,
+            "external_evidence_judgement": dict(state.get("external_evidence_judgement") or {}),
+        },
+    )
+    error = GraphError(
+        code="qa_insufficient_evidence",
+        message=reason,
+        node="insufficient_evidence_response",
+        severity=GraphErrorSeverity.WARNING,
+        metadata={"source_policy": source_policy},
+    )
+    return {
+        "trace_records": append_trace_record(
+            state,
+            "final_response",
+            final_response_status=answer_mode,
+            sufficient_evidence=False,
+            reason=reason,
+            source_policy=source_policy,
+        ),
+        "final_response": response.model_dump(mode="json"),
+        "source_usage": "model",
+        "evidence_gate": gate,
+        "grounding_report": {
+            **dict(state.get("grounding_report") or {}),
+            "insufficient_evidence": gate,
+        },
+        "errors": [*list(state.get("errors") or []), error.model_dump(mode="json")],
+    }
 
 
 def answer_generate_node(
@@ -726,7 +1029,7 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
 
     passed = not issues
     repair_count = int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0)
-    max_repair_count = int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS)
+    max_repair_count = _max_repair_count(state)
     repair_action = "none"
     if issues:
         repairable = any(issue in {"empty_answer", "evidence_ref_missing"} for issue in issues)
@@ -748,6 +1051,16 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
         "max_repair_attempts": max_repair_count,
     }
     return {
+        "trace_records": append_trace_record(
+            state,
+            "answer_quality_check",
+            answer_quality_status=status,
+            passed=passed,
+            reason=quality_check["reason"],
+            repair_action=repair_action,
+            repair_attempt_count=repair_count,
+            max_repair_attempts=max_repair_count,
+        ),
         "quality_check": quality_check,
         "answer_quality": {
             "status": status,
@@ -779,7 +1092,7 @@ def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
     """Repair a failed candidate answer once, using only merged evidence."""
 
     attempt_count = int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0) + 1
-    max_repair_count = int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS)
+    max_repair_count = _max_repair_count(state)
     response = FinalResponse.model_validate(state.get("final_response") or {})
     evidence = _collect_answer_evidence(state)
     source_usage = _source_usage_from_evidence(evidence)
@@ -799,6 +1112,13 @@ def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
             }
         )
         return {
+            "trace_records": append_trace_record(
+                state,
+                "answer_repair",
+                repair_attempt_count=attempt_count,
+                max_repair_attempts=max_repair_count,
+                status="no_evidence",
+            ),
             "final_response": repaired.model_dump(mode="json"),
             "repair_count": attempt_count,
             "max_repair_count": max_repair_count,
@@ -829,6 +1149,14 @@ def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
         }
     )
     return {
+        "trace_records": append_trace_record(
+            state,
+            "answer_repair",
+            repair_attempt_count=attempt_count,
+            max_repair_attempts=max_repair_count,
+            status="rewritten",
+            source_usage=source_usage,
+        ),
         "final_response": repaired.model_dump(mode="json"),
         "repair_count": attempt_count,
         "max_repair_count": max_repair_count,
@@ -868,6 +1196,14 @@ def qa_clarification_response_node(state: QAGraphState) -> dict[str, Any]:
         metadata={"repair_action": str(quality.get("repair_action") or "")},
     )
     return {
+        "trace_records": append_trace_record(
+            state,
+            "final_response",
+            final_response_status="clarification_required",
+            answer_quality_status=str(quality.get("status") or ""),
+            reason=str(quality.get("reason") or "answer_quality_failed"),
+            source_policy=source_policy,
+        ),
         "final_response": response.model_dump(mode="json"),
         "source_usage": "model",
         "errors": [*list(state.get("errors") or []), error.model_dump(mode="json")],
@@ -1006,10 +1342,12 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
         "retrieval_report": dict(state.get("retrieval_report") or {}),
         "evidence_judgement": dict(state.get("evidence_judgement") or {}),
         "evidence_confidence": dict(state.get("evidence_confidence") or {}),
+        "external_evidence_judgement": dict(state.get("external_evidence_judgement") or {}),
+        "external_evidence_confidence": dict(state.get("external_evidence_confidence") or {}),
         "answer_quality": dict(state.get("answer_quality") or {}),
         "quality_check": dict(state.get("quality_check") or {}),
         "repair_count": int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0),
-        "max_repair_count": int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS),
+        "max_repair_count": _max_repair_count(state),
         "answer_repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
         "source_usage": source_usage,
         "web_search_attempted": bool(state.get("web_search_attempted")),
@@ -1037,6 +1375,16 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
         }
     )
     return {
+        "trace_records": append_trace_record(
+            state,
+            "final_response",
+            final_response_status="completed",
+            source_usage=source_usage,
+            source_level=source_level.value if hasattr(source_level, "value") else str(source_level),
+            web_search_used=bool(tool_invocation_trace.get("didUseWebSearch")),
+            answer_quality_status=str(dict(state.get("answer_quality") or {}).get("status") or ""),
+            repair_attempt_count=int(state.get("answer_repair_attempt_count") or 0),
+        ),
         "final_response": final_response.model_dump(mode="json"),
         "errors": update_errors,
         "tool_invocation_trace": tool_invocation_trace,
@@ -1513,7 +1861,7 @@ def compose_learning_events(state: QAGraphState) -> dict[str, Any]:
                 payload={
                     "answer_mode": answer_mode,
                     "repair_count": int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0),
-                    "max_repair_count": int(state.get("max_repair_count") or MAX_ANSWER_REPAIR_ATTEMPTS),
+                    "max_repair_count": _max_repair_count(state),
                     "repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
                     "quality_check": dict(state.get("quality_check") or {}),
                 },

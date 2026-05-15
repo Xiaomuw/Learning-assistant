@@ -60,8 +60,10 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "concept_linker",
                 "knowledge_router",
                 "internal_retrieval",
-                "evidence_judge",
+                "internal_evidence_judge",
                 "web_search_if_needed",
+                "external_evidence_judge",
+                "insufficient_evidence_response",
                 "evidence_merge",
                 "answer_generate",
                 "answer_quality_check",
@@ -105,6 +107,36 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(result["tool_requests"], [])
         json.dumps(result, ensure_ascii=False)
 
+    def test_trace_records_cover_qa_retrieval_evidence_quality_and_final_status(self) -> None:
+        evidence = EvidenceChunk(
+            id="ev-http-trace",
+            source_type="notebook",
+            source_id="chunk-trace",
+            text="HTTP 是应用层协议，使用请求-响应模型。",
+            score=0.91,
+        )
+
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-trace",
+                "user_id": "u1",
+                "user_message": "解释 HTTP",
+                "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                "evidence": [evidence.model_dump(mode="json")],
+            }
+        )
+
+        traces = list(result.get("trace_records") or [])
+        stages = [item.get("stage") for item in traces]
+        self.assertIn("internal_retrieval", stages)
+        self.assertIn("internal_evidence_judge", stages)
+        self.assertIn("answer_quality_check", stages)
+        self.assertIn("final_response", stages)
+        evidence_trace = next(item for item in traces if item.get("stage") == "internal_evidence_judge")
+        self.assertTrue(evidence_trace["internal_evidence_confidence"]["sufficient"])
+        final_trace = next(item for item in reversed(traces) if item.get("stage") == "final_response")
+        self.assertEqual(final_trace["final_response_status"], "completed")
+
     def test_notebook_only_insufficient_response_and_event(self) -> None:
         result = build_graph().compile().invoke(
             {
@@ -126,6 +158,9 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn("insufficient_evidence", event_types)
         self.assertEqual(requested_capabilities, [ToolCapability.NOTEBOOK_RETRIEVE.value])
         self.assertNotIn(ToolCapability.WEB_SEARCH.value, requested_capabilities)
+        self.assertFalse(result.get("web_search_attempted", False))
+        traces = list(result.get("trace_records") or [])
+        self.assertNotIn(True, [item.get("web_called") for item in traces if item.get("stage") == "web_search_if_needed"])
 
     def test_repeated_same_question_uses_message_id_for_learning_event_idempotency(self) -> None:
         base = {
@@ -388,6 +423,8 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
         self.assertTrue(result["web_search_attempted"])
         self.assertEqual(result["evidence_judgement"]["web_count"], 0)
+        self.assertTrue(result["external_evidence_gate"]["sufficient"])
+        self.assertEqual(result["external_evidence_judgement"]["status"], "strong")
         self.assertEqual([item["id"] for item in result["web_evidence"]], ["web-http3"])
         self.assertEqual(adapter.evidence_ids, ["web-http3"])
         self.assertEqual(result["source_usage"], "web")
@@ -1034,8 +1071,11 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         response = FinalResponse.model_validate(result["final_response"])
         self.assertEqual(result["evidence_judgement"]["web_count"], 0)
+        self.assertFalse(result["external_evidence_gate"]["sufficient"])
+        self.assertEqual(result["external_evidence_judgement"]["status"], "insufficient")
         self.assertNotIn("web-low-score", response.evidence_refs)
-        self.assertEqual(response.source_level, SourceLevel.MODEL)
+        self.assertEqual(response.source_level, SourceLevel.NONE)
+        self.assertEqual(response.ui_payload["answer_mode"], "insufficient_external_evidence")
 
     def test_retrieval_tool_exception_returns_error_result_and_learning_event(self) -> None:
         class FailingToolExecutor:
@@ -1121,6 +1161,45 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(response.evidence_refs, ["ev-http"])
         self.assertEqual(response.ui_payload["answer_mode"], "answer_repaired")
         self.assertIn("answer_repaired", event_types)
+
+    def test_answer_repair_stops_when_max_attempts_reached(self) -> None:
+        evidence = EvidenceChunk(
+            id="ev-http",
+            source_type="notebook",
+            source_id="chunk-1",
+            text="HTTP 是应用层协议，采用请求-响应模型。",
+            score=0.9,
+        )
+
+        class BadRefAdapter:
+            def answer(self, **_kwargs):
+                return FinalResponse(
+                    answer="HTTP 是协议。",
+                    source_level=SourceLevel.NOTEBOOK,
+                    evidence_refs=["missing-ref"],
+                )
+
+        result = build_graph(adapter=BadRefAdapter()).compile().invoke(
+            {
+                "run_id": "run-qa-repair-max",
+                "user_id": "u1",
+                "thread_id": "t1",
+                "user_message": "什么是 HTTP？",
+                "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                "evidence": [evidence.model_dump(mode="json")],
+                "max_repair_count": 0,
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(result["repair_count"], 0)
+        self.assertEqual(result["answer_repair_attempt_count"], 0)
+        self.assertEqual(response.source_level, SourceLevel.NONE)
+        self.assertEqual(response.ui_payload["answer_mode"], "clarification_required")
+        traces = list(result.get("trace_records") or [])
+        self.assertNotIn("answer_repair", [item.get("stage") for item in traces])
+        final_trace = next(item for item in reversed(traces) if item.get("stage") == "final_response")
+        self.assertEqual(final_trace["final_response_status"], "clarification_required")
 
     def test_answer_quality_failure_not_repairable_returns_clarification(self) -> None:
         class EmptyAnswerAdapter:

@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -186,17 +187,37 @@ class ChatApiTest(unittest.TestCase):
         chat_module._RUNNING_CHAT_JOBS.clear()
         self.chat_jobs: dict[str, dict] = {}
 
-        def _create_chat_job(*, job_id: str, user_id: str, session_id: str, request_id: str):
+        def _create_chat_job(
+            *,
+            job_id: str,
+            user_id: str,
+            session_id: str,
+            request_id: str,
+            conversation_id: str | None = None,
+            client_request_id: str | None = None,
+            request_payload: dict | None = None,
+            trace_id: str | None = None,
+            expires_at=None,
+        ):
             self.chat_jobs.setdefault(
                 job_id,
                 {
                     "job_id": job_id,
                     "user_id": user_id,
                     "session_id": session_id,
+                    "conversation_id": conversation_id or session_id,
+                    "client_request_id": client_request_id,
                     "request_id": request_id,
+                    "trace_id": trace_id or request_id,
                     "status": "pending",
+                    "request_payload": dict(request_payload or {}),
+                    "final_answer": "",
+                    "error_code": "",
+                    "error_message": "",
+                    "route": "",
                     "result_json": None,
                     "error_json": None,
+                    "expires_at": expires_at,
                 },
             )
             return dict(self.chat_jobs[job_id])
@@ -211,10 +232,16 @@ class ChatApiTest(unittest.TestCase):
             self.chat_jobs[job_id]["status"] = "completed"
             self.chat_jobs[job_id]["result_json"] = dict(result)
             self.chat_jobs[job_id]["error_json"] = None
+            self.chat_jobs[job_id]["final_answer"] = str(result.get("final_answer") or "")
+            self.chat_jobs[job_id]["route"] = str(result.get("route") or "")
+            self.chat_jobs[job_id]["error_code"] = ""
+            self.chat_jobs[job_id]["error_message"] = ""
 
         def _mark_chat_job_failed(*, job_id: str, error: dict):
             self.chat_jobs[job_id]["status"] = "failed"
             self.chat_jobs[job_id]["error_json"] = dict(error)
+            self.chat_jobs[job_id]["error_code"] = str(error.get("code") or error.get("reason") or "")
+            self.chat_jobs[job_id]["error_message"] = str(error.get("error") or error.get("message") or "")
 
         app = FastAPI()
         app.include_router(chat_router, prefix="/api")
@@ -475,7 +502,10 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(payload["session_id"], "session-1")
         self.assertEqual(payload["status"], "pending")
         self.assertEqual(payload["job_id"], "weapp-pending-1")
+        self.assertEqual(payload["retry_after_ms"], 1000)
         self.assertIn("后台继续处理", payload["explanation"]["thinking"])
+        self.assertEqual(payload["trace_records"][0]["stage"], "mobile_sync_delivery")
+        self.assertEqual(payload["trace_records"][0]["final_response_status"], "pending")
 
         self.chat_jobs["weapp-pending-1"]["status"] = "completed"
         self.chat_jobs["weapp-pending-1"]["result_json"] = {
@@ -499,7 +529,7 @@ class ChatApiTest(unittest.TestCase):
     def test_chat_sync_returns_completed_when_finished_during_grace(self) -> None:
         def _nearly_slow_chat_once(**_kwargs):
             time.sleep(0.03)
-            return _chat_result_with_state(ChatExecutionResult(
+            result, state = _chat_result_with_state(ChatExecutionResult(
                 session_id="session-grace",
                 question_type="smalltalk",
                 route="explain",
@@ -508,6 +538,11 @@ class ChatApiTest(unittest.TestCase):
                 quiz_items=[],
                 memory=UserMemoryRecord(),
             ))
+            state["trace_records"] = [
+                {"stage": "answer_quality_check", "answer_quality_status": "pass", "passed": True},
+                {"stage": "final_response", "final_response_status": "completed"},
+            ]
+            return result, state
 
         with (
             patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_nearly_slow_chat_once),
@@ -530,6 +565,7 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["job_id"], "weapp-grace-1")
         self.assertEqual(payload["final_answer"], "你好，我在。")
+        self.assertEqual(payload["trace_records"][-1]["final_response_status"], "completed")
         self.assertEqual(self.chat_jobs["weapp-grace-1"]["status"], "completed")
 
     def test_chat_job_poll_rejects_other_user(self) -> None:
@@ -570,6 +606,138 @@ class ChatApiTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_chat_job_poll_returns_failed_error(self) -> None:
+        self.chat_jobs["failed-job-1"] = {
+            "job_id": "failed-job-1",
+            "user_id": "default_user",
+            "session_id": "session-1",
+            "request_id": "failed-request-1",
+            "status": "failed",
+            "result_json": None,
+            "error_json": {
+                "code": "model_unavailable",
+                "error": "模型服务暂时不可用",
+                "reason": "model_unavailable",
+                "retryable": True,
+                "request_id": "failed-request-1",
+            },
+            "expires_at": None,
+        }
+
+        response = self.client.post("/api/chat/jobs/failed-job-1/poll")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["error"]["code"], "model_unavailable")
+        self.assertTrue(payload["retryable"])
+
+    def test_chat_job_poll_returns_typed_expired_error(self) -> None:
+        self.chat_jobs["expired-job-1"] = {
+            "job_id": "expired-job-1",
+            "user_id": "default_user",
+            "session_id": "session-1",
+            "request_id": "expired-request-1",
+            "status": "pending",
+            "result_json": None,
+            "error_json": None,
+            "expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+        }
+
+        response = self.client.post("/api/chat/jobs/expired-job-1/poll")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["error"]["code"], "chat_job_expired")
+        self.assertEqual(payload["error"]["reason"], "expired")
+        self.assertFalse(payload["retryable"])
+        self.assertGreater(payload["retry_after_ms"], 0)
+        self.assertEqual(self.chat_jobs["expired-job-1"]["status"], "failed")
+
+    def test_chat_sync_deduplicates_same_client_request_id(self) -> None:
+        def _slow_chat_once(**_kwargs):
+            time.sleep(0.08)
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-idempotent",
+                question_type="concept",
+                route="explain",
+                final_answer="HTTP 是应用层协议。",
+                explanation=ExplanationPayload(topic="HTTP"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        body = {
+            "user_id": "default_user",
+            "session_id": "session-idempotent",
+            "question": "什么是 HTTP？",
+            "subject_id": "general",
+            "client_request_id": "client-turn-42",
+        }
+        with (
+            patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_slow_chat_once),
+            patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat.get_chat_sync_poll_retry_after_ms", return_value=1000),
+        ):
+            first = self.client.post("/api/chat/sync", headers={"X-Request-ID": "req-a"}, json=body)
+            second = self.client.post("/api/chat/sync", headers={"X-Request-ID": "req-b"}, json=body)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        first_payload = first.json()
+        second_payload = second.json()
+        self.assertEqual(first_payload["status"], "pending")
+        self.assertEqual(second_payload["status"], "pending")
+        self.assertEqual(first_payload["job_id"], second_payload["job_id"])
+        self.assertEqual(len(self.chat_jobs), 1)
+        job = self.chat_jobs[first_payload["job_id"]]
+        self.assertEqual(job["client_request_id"], "client-turn-42")
+        self.assertEqual(job["conversation_id"], "session-idempotent")
+        self.assertEqual(job["trace_id"], "req-a")
+        self.assertEqual(job["request_payload"]["question"], "什么是 HTTP？")
+        self.assertEqual(job["request_payload"]["client_request_id"], "client-turn-42")
+
+    def test_chat_sync_persists_durable_job_payload_for_pending_response(self) -> None:
+        def _slow_chat_once(**_kwargs):
+            time.sleep(0.05)
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-durable",
+                question_type="concept",
+                route="explain",
+                final_answer="HTTP 是应用层协议。",
+                explanation=ExplanationPayload(topic="HTTP"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with (
+            patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_slow_chat_once),
+            patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.01),
+        ):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "durable-request-1", "X-Client-Request-ID": "durable-client-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-durable",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        job = self.chat_jobs[payload["job_id"]]
+        self.assertEqual(job["user_id"], "default_user")
+        self.assertEqual(job["conversation_id"], "session-durable")
+        self.assertEqual(job["client_request_id"], "durable-client-1")
+        self.assertEqual(job["request_payload"]["request_id"], "durable-request-1")
+        self.assertEqual(job["request_payload"]["client_request_id"], "durable-client-1")
+        self.assertIsNotNone(job["expires_at"])
 
     def test_run_chat_async_job_marks_completed(self) -> None:
         body = ChatRequest(

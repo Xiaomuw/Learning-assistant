@@ -5,6 +5,14 @@ from uuid import uuid4
 
 from loguru import logger
 
+from app.domains.qa.lightweight_intent import build_lightweight_answer_schema
+from app.orchestration.graphs.orchestrator.route_decider import (
+    BoundaryRoute,
+    RoutePolicy,
+    build_current_tool_trace,
+    build_route_policy,
+    extract_previous_tool_trace,
+)
 from app.orchestration.graphs.orchestrator.schemas import (
     ChildGraphOutput,
     ChildGraphResult,
@@ -107,6 +115,34 @@ def question_generation_graph_stub(state: OrchestratorState) -> dict[str, Any]:
     return ChildGraphInvokerFactory.from_state(state).for_graph(GraphType.QUESTION_GENERATION).invoke(state)
 
 
+def direct_response(state: OrchestratorState) -> dict[str, Any]:
+    route_decision = state.get("route_decision") if isinstance(state.get("route_decision"), dict) else {}
+    route = str(route_decision.get("route") or "")
+    policy_payload = route_decision.get("policy") if isinstance(route_decision.get("policy"), dict) else {}
+    policy = RoutePolicy.model_validate(policy_payload) if policy_payload else build_route_policy(state)
+    trace = build_current_tool_trace(state, policy)
+
+    if route == BoundaryRoute.SIMPLE_FACT.value:
+        payload = _simple_fact_payload(state, trace=trace, route_decision=route_decision)
+        status = "succeeded"
+    elif route == BoundaryRoute.META_TOOL_USAGE.value:
+        payload = _meta_tool_usage_payload(state, trace=trace, route_decision=route_decision)
+        status = "succeeded"
+    elif route == BoundaryRoute.REALTIME_OR_FRESH.value:
+        payload = _realtime_without_web_payload(state, trace=trace, route_decision=route_decision)
+        status = "needs_verification"
+    else:
+        payload = _generic_direct_payload(state, trace=trace, route_decision=route_decision)
+        status = "needs_clarification"
+
+    return _child_result_update(
+        GraphType.ORCHESTRATOR,
+        payload,
+        status=status,
+        trace_node="direct_response",
+    )
+
+
 def mastery_evaluation_graph_stub(state: OrchestratorState) -> dict[str, Any]:
     from app.orchestration.graphs.orchestrator.child_invokers import ChildGraphInvokerFactory
 
@@ -142,6 +178,163 @@ def clarify_or_safe_response(state: OrchestratorState) -> dict[str, Any]:
     """Deprecated compatibility alias for the top-level fallback node."""
 
     return top_level_clarify_or_refuse(state)
+
+
+def _simple_fact_payload(
+    state: OrchestratorState,
+    *,
+    trace: dict[str, Any],
+    route_decision: dict[str, Any],
+) -> dict[str, Any]:
+    answer_schema = build_lightweight_answer_schema(_message_text(state))
+    answer = str(answer_schema.final_answer if answer_schema is not None else "").strip()
+    if not answer:
+        answer = "这类简单问题可以直接回答，但我没有解析出稳定结果。请换一种写法再试。"
+    explanation = (
+        answer_schema.model_dump(mode="json")
+        if answer_schema is not None
+        else {
+            "topic": "简单事实",
+            "thinking": answer,
+            "steps": [answer],
+            "mistakes": "",
+            "similar": ["继续问一个简单问题", "让我帮你生成练习题"],
+            "final_answer": answer,
+        }
+    )
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.MODEL,
+        ui_payload={
+            "target_graph_type": GraphType.ORCHESTRATOR.value,
+            "answer_mode": BoundaryRoute.SIMPLE_FACT.value,
+            "explanation": explanation,
+            "tool_invocation_trace": trace,
+            "route_decision": route_decision,
+        },
+    )
+    return {
+        "answer": answer,
+        "final_response": response.model_dump(mode="json"),
+        "tool_invocation_trace": trace,
+        "route_decision": route_decision,
+    }
+
+
+def _meta_tool_usage_payload(
+    state: OrchestratorState,
+    *,
+    trace: dict[str, Any],
+    route_decision: dict[str, Any],
+) -> dict[str, Any]:
+    previous_trace = extract_previous_tool_trace(list(state.get("messages") or []))
+    if previous_trace is None:
+        answer = "我没有找到上一轮的工具调用记录，因此不能可靠确认刚刚是否联网搜索。"
+        previous_summary: dict[str, Any] = {"trace_available": False}
+    else:
+        tool_count = int(previous_trace.get("toolCallCount") or 0)
+        did_web = bool(previous_trace.get("didUseWebSearch"))
+        did_any = bool(previous_trace.get("didUseAnyTool"))
+        if did_web:
+            answer = f"有。根据刚刚那轮的运行记录，工具调用次数是 {tool_count}，其中包含联网搜索。"
+        elif tool_count == 0:
+            answer = "没有。根据刚刚那轮的运行记录，工具调用次数是 0，因此没有调用联网搜索。"
+        elif did_any:
+            answer = f"没有联网搜索。根据刚刚那轮的运行记录，工具调用次数是 {tool_count}，但没有 web_search / 联网搜索调用。"
+        else:
+            answer = "没有。根据刚刚那轮的运行记录，没有发现联网搜索调用。"
+        previous_summary = {"trace_available": True, **previous_trace}
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        ui_payload={
+            "target_graph_type": GraphType.ORCHESTRATOR.value,
+            "answer_mode": BoundaryRoute.META_TOOL_USAGE.value,
+            "tool_invocation_trace": trace,
+            "previous_tool_invocation_trace": previous_summary,
+            "route_decision": route_decision,
+        },
+    )
+    return {
+        "answer": answer,
+        "final_response": response.model_dump(mode="json"),
+        "tool_invocation_trace": trace,
+        "previous_tool_invocation_trace": previous_summary,
+        "route_decision": route_decision,
+    }
+
+
+def _realtime_without_web_payload(
+    state: OrchestratorState,
+    *,
+    trace: dict[str, Any],
+    route_decision: dict[str, Any],
+) -> dict[str, Any]:
+    boundary = route_decision.get("boundary") if isinstance(route_decision.get("boundary"), dict) else {}
+    question = _message_text(state)
+    if boundary.get("contains_relative_year") and trace.get("currentDate") is None:
+        answer = (
+            "这是实时问题，但我无法确定你说的“今年”是哪一年；请补充年份，"
+            "或启用联网检索后我再核查官方来源。"
+        )
+    else:
+        if not trace.get("hasWebSearchTool") or not trace.get("webSearchEnabled"):
+            availability = "我当前没有启用联网检索"
+        else:
+            availability = "本轮没有取得联网检索结果"
+        topic = (
+            "今年 GPT/ChatGPT/OpenAI 模型发布到了哪个版本"
+            if any(token in question.lower() for token in ("gpt", "openai", "chatgpt", "api", "模型"))
+            else "这个当前状态"
+        )
+        answer = (
+            f"这是实时问题，{availability}，不能可靠确认{topic}。"
+            "若只基于我的知识截止时间，我不能把它当作当前事实。"
+            "需要联网核查官方发布页、官方文档或权威来源后，才能给出确定答案。"
+        )
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        ui_payload={
+            "target_graph_type": GraphType.ORCHESTRATOR.value,
+            "answer_mode": "realtime_requires_web",
+            "question_boundary": boundary,
+            "tool_invocation_trace": trace,
+            "route_decision": route_decision,
+            "volatile_fact": True,
+        },
+    )
+    return {
+        "answer": answer,
+        "final_response": response.model_dump(mode="json"),
+        "tool_invocation_trace": trace,
+        "route_decision": route_decision,
+    }
+
+
+def _generic_direct_payload(
+    state: OrchestratorState,
+    *,
+    trace: dict[str, Any],
+    route_decision: dict[str, Any],
+) -> dict[str, Any]:
+    answer = "我需要更明确的学习目标，才能把请求路由到合适的学习图。"
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        ui_payload={
+            "target_graph_type": GraphType.ORCHESTRATOR.value,
+            "answer_mode": "direct_fallback",
+            "tool_invocation_trace": trace,
+            "route_decision": route_decision,
+        },
+    )
+    return {
+        "answer": answer,
+        "final_response": response.model_dump(mode="json"),
+        "tool_invocation_trace": trace,
+        "route_decision": route_decision,
+    }
 
 
 def _child_result_update(
@@ -294,6 +487,15 @@ def _response_envelope(
 
 def _question_type_for_envelope(state: OrchestratorState) -> str:
     intent = str((state.get("intent_decision") or {}).get("intent") or OrchestratorIntent.QA.value)
+    route = str((state.get("route_decision") or {}).get("route") or "")
+    if intent == OrchestratorIntent.DIRECT_RESPONSE.value:
+        if route == BoundaryRoute.SIMPLE_FACT.value:
+            return "simple_fact"
+        if route == BoundaryRoute.META_TOOL_USAGE.value:
+            return "meta"
+        if route == BoundaryRoute.REALTIME_OR_FRESH.value:
+            return "realtime_or_fresh"
+        return "direct"
     if intent == OrchestratorIntent.GENERATE_QUESTION.value:
         return "practice"
     if intent == OrchestratorIntent.EVALUATE_MASTERY.value:
@@ -305,6 +507,8 @@ def _question_type_for_envelope(state: OrchestratorState) -> str:
 
 def _route_for_envelope(state: OrchestratorState, response: FinalResponse) -> str:
     intent = str((state.get("intent_decision") or {}).get("intent") or OrchestratorIntent.QA.value)
+    if intent == OrchestratorIntent.DIRECT_RESPONSE.value:
+        return "direct"
     if intent == OrchestratorIntent.GENERATE_QUESTION.value:
         return "practice"
     if response.source_level == SourceLevel.WEB:
@@ -331,6 +535,7 @@ def response_composer(state: OrchestratorState) -> dict[str, Any]:
             "ui_payload": {
                 **response.ui_payload,
                 "intent_decision": state.get("intent_decision") or {},
+                "route_decision": state.get("route_decision") or {},
                 "quiz_request": state.get("quiz_request") or {},
                 "quiz_clarification": state.get("quiz_clarification") or {},
                 "child_graph_result": child_result,
@@ -414,6 +619,7 @@ def persist_audit_event(state: OrchestratorState, *, audit_repository: Any | Non
         "node_name": "orchestrator.audit",
         "graph_type": GraphType.ORCHESTRATOR.value,
         "intent_decision": state.get("intent_decision") or {},
+        "route_decision": state.get("route_decision") or {},
         "child_audit_event": (
             child_result.get("audit_event") if isinstance(child_result.get("audit_event"), dict) else {}
         ),

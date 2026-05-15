@@ -28,6 +28,7 @@ class BaseLearningState(TypedDict, total=False):
     concepts: list[dict[str, Any]]
     evidence: list[dict[str, Any]]
     tool_results: list[dict[str, Any]]
+    trace_records: list[dict[str, Any]]
     learning_events: list[dict[str, Any]]
     final_response: dict[str, Any]
     errors: list[dict[str, Any]]

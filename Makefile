@@ -12,6 +12,7 @@ test-backend-postgres:
 test-graphs:
 	LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false GRAPH_EVAL_LANGSMITH=false backend/.venv313/bin/python -m unittest \
 		backend.tests.test_agent_graph_contracts \
+		backend.tests.test_route_decider \
 		backend.tests.test_orchestrator_intent_rules \
 		backend.tests.test_child_invokers \
 		backend.tests.test_tooling_contracts \

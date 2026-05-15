@@ -11,6 +11,7 @@ class OrchestratorState(BaseLearningState, total=False):
     production_runtime: bool
     learner_context: dict[str, Any]
     intent_decision: dict[str, Any]
+    route_decision: dict[str, Any]
     quiz_request: dict[str, Any]
     quiz_clarification: dict[str, Any]
     child_graph_result: dict[str, Any]

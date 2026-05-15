@@ -270,7 +270,7 @@ class GraphMigrationContractTest(unittest.TestCase):
                 ).fetchone()[0]
             finally:
                 connection.close()
-            self.assertEqual(applied_revision, "0013_chat_async_jobs")
+            self.assertEqual(applied_revision, "0014_chat_async_job_state")
             self.assertTrue(
                 {
                     "subjects",
@@ -411,10 +411,19 @@ class GraphMigrationContractTest(unittest.TestCase):
                     "job_id",
                     "user_id",
                     "session_id",
+                    "conversation_id",
+                    "client_request_id",
                     "request_id",
+                    "trace_id",
                     "status",
+                    "request_payload",
+                    "final_answer",
+                    "error_code",
+                    "error_message",
+                    "route",
                     "result_json",
                     "error_json",
+                    "expires_at",
                     "created_at",
                     "updated_at",
                 },
@@ -642,9 +651,14 @@ class GraphMigrationContractTest(unittest.TestCase):
                 "chat_async_jobs": {
                     "ix_chat_async_jobs_user_id",
                     "ix_chat_async_jobs_session_id",
+                    "ix_chat_async_jobs_conversation_id",
+                    "ix_chat_async_jobs_client_request_id",
                     "ix_chat_async_jobs_request_id",
+                    "ix_chat_async_jobs_trace_id",
                     "ix_chat_async_jobs_status",
+                    "ix_chat_async_jobs_expires_at",
                     "idx_chat_async_jobs_user_created",
+                    "idx_chat_async_jobs_user_client_request",
                 },
                 "question_bank_items": {
                     "ix_question_bank_items_subject_id",

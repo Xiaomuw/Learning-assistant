@@ -56,6 +56,7 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
                 "qa_graph",
                 "question_generation_graph",
                 "mastery_evaluation_graph",
+                "direct_response",
                 "top_level_clarify_or_refuse",
                 "persist_learning_events",
                 "response_composer",
@@ -183,6 +184,57 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.MASTERY.value)
         self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.MASTERY.value)
         self.assertEqual(result["final_response"]["ui_payload"]["target_graph_type"], GraphType.MASTERY.value)
+
+    def test_simple_fact_uses_direct_response_not_qa_graph(self) -> None:
+        result = build_graph().compile().invoke(
+            {"user_id": "u1", "thread_id": "t1", "user_message": "1+1等于几"}
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.DIRECT_RESPONSE.value)
+        self.assertEqual(result["route_decision"]["route"], "simple_fact")
+        self.assertEqual(result["child_graph_result"]["task_type"], GraphType.ORCHESTRATOR.value)
+        self.assertEqual(result["response_envelope"]["sync_payload"]["route"], "direct")
+        self.assertIn("1 + 1 = 2", result["final_response"]["answer"])
+
+    def test_meta_tool_usage_uses_previous_trace(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "user_id": "u1",
+                "thread_id": "t1",
+                "user_message": "刚刚有联网搜索吗",
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "toolInvocationTrace": {
+                            "toolCallCount": 0,
+                            "toolCalls": [],
+                            "didUseWebSearch": False,
+                            "didUseAnyTool": False,
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.DIRECT_RESPONSE.value)
+        self.assertEqual(result["route_decision"]["route"], "meta_tool_usage")
+        self.assertIn("工具调用次数是 0", result["final_response"]["answer"])
+        self.assertIn("没有调用联网搜索", result["final_response"]["answer"])
+
+    def test_realtime_without_web_returns_freshness_limited_answer(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "user_id": "u1",
+                "thread_id": "t1",
+                "user_message": "今年 GPT 发布到哪个版本了",
+                "source_policy": "notebook_only",
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.DIRECT_RESPONSE.value)
+        self.assertEqual(result["route_decision"]["route"], "realtime_or_fresh")
+        self.assertIn("不能可靠确认", result["final_response"]["answer"])
+        self.assertNotIn("目前公开信息", result["final_response"]["answer"])
 
     def test_empty_message_routes_to_safe_fallback(self) -> None:
         result = build_graph().compile().invoke({"user_id": "u1", "user_message": ""})

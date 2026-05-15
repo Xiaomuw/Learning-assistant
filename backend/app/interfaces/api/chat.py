@@ -24,6 +24,7 @@ import hashlib
 import json
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -44,6 +45,7 @@ from app.infrastructure.db.repositories.chat_jobs import (
     mark_chat_async_job_failed,
 )
 from app.infrastructure.llm.config import (
+    get_chat_sync_job_ttl_seconds,
     get_chat_sync_inline_budget_seconds,
     get_chat_sync_poll_retry_after_ms,
 )
@@ -218,6 +220,7 @@ def _chat_response_from_result(
         web_search_attempted=_web_search_attempted(state),
         web_search_used=_web_search_used(state),
         web_search_error=_web_search_error(state),
+        trace_records=_safe_trace_records(state.get("trace_records")),
     )
 
 
@@ -258,11 +261,46 @@ def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str
                 "didUseAnyTool": False,
             }
         ),
+        trace_records=[
+            {
+                "stage": "mobile_sync_delivery",
+                "final_response_status": "pending",
+                "job_id": job_id,
+                "request_id": request_id,
+                "retry_after_ms": retry_after_ms,
+            }
+        ],
     )
 
 
 def _chat_response_to_job_result(response: ChatResponse) -> dict[str, Any]:
     return response.model_dump(mode="json")
+
+
+def _normalize_client_request_id(value: str | None) -> str:
+    return str(value or "").strip()[:160]
+
+
+def _client_request_id_for_sync(body: ChatRequest, request: Request) -> str:
+    return _normalize_client_request_id(body.client_request_id or request.headers.get("X-Client-Request-ID"))
+
+
+def _chat_sync_job_id(*, user_id: str, request_id: str, client_request_id: str) -> str:
+    if client_request_id:
+        digest = hashlib.sha256(f"{user_id}\0{client_request_id}".encode("utf-8")).hexdigest()[:32]
+        return f"chatjob-{digest}"
+    return str(request_id or uuid.uuid4().hex)[:100]
+
+
+def _chat_sync_job_expires_at() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(seconds=get_chat_sync_job_ttl_seconds())
+
+
+def _chat_sync_request_payload(body: ChatRequest, *, request_id: str, client_request_id: str) -> dict[str, Any]:
+    payload = body.model_dump(mode="json")
+    payload["request_id"] = request_id
+    payload["client_request_id"] = client_request_id
+    return payload
 
 
 def _safe_tool_call_metadata(raw_calls: Any) -> list[dict[str, Any]]:
@@ -323,6 +361,63 @@ def _safe_tool_invocation_trace(raw: Any) -> dict[str, Any] | None:
         "didUseWebSearch": bool(raw.get("didUseWebSearch")),
         "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0 or safe_calls),
     }
+
+
+def _safe_trace_records(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    safe_records: list[dict[str, Any]] = []
+    allowed_keys = {
+        "stage",
+        "route",
+        "target_graph_type",
+        "bypass_qagraph",
+        "uses_trace",
+        "confidence",
+        "reason",
+        "allow_web",
+        "notebook_only",
+        "has_web_search_tool",
+        "rag_called",
+        "rag_planned",
+        "web_called",
+        "web_planned",
+        "requested_count",
+        "result_count",
+        "web_requested_count",
+        "web_result_count",
+        "success_count",
+        "error_count",
+        "internal_evidence_confidence",
+        "external_evidence_confidence",
+        "answer_quality_status",
+        "passed",
+        "repair_action",
+        "repair_attempt_count",
+        "max_repair_attempts",
+        "final_response_status",
+        "source_usage",
+        "source_level",
+        "web_search_used",
+        "retry_after_ms",
+    }
+    for raw_record in raw:
+        if not isinstance(raw_record, dict):
+            continue
+        safe_record: dict[str, Any] = {}
+        for key in allowed_keys:
+            value = raw_record.get(key)
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                safe_record[key] = value
+            elif isinstance(value, dict):
+                safe_record[key] = {
+                    str(sub_key): sub_value
+                    for sub_key, sub_value in value.items()
+                    if isinstance(sub_value, (str, int, float, bool)) or sub_value is None
+                }
+        if safe_record.get("stage"):
+            safe_records.append(safe_record)
+    return safe_records
 
 
 def _public_tool_source(*, capability: str, provider: str = "") -> str:
@@ -388,6 +483,16 @@ def _chat_sync_terminal_response_from_job(
     if not job:
         return None
     status = str(job.get("status") or "pending")
+    if _job_expired(job):
+        error_payload = _expired_job_error_payload(request_id=request_id)
+        mark_chat_async_job_failed(job_id=job_id, error=error_payload)
+        logger.warning(
+            "⚠️ [同步] {}: request_id={} job_id={} status=expired",
+            log_context,
+            request_id,
+            job_id,
+        )
+        return JSONResponse(status_code=410, content=error_payload)
     if status == "completed" and job.get("result_json"):
         response = ChatResponse.model_validate(job["result_json"])
         logger.info(
@@ -723,6 +828,7 @@ class ChatResponse(BaseModel):
     web_search_attempted: bool | None = None
     web_search_used: bool | None = None
     web_search_error: str | None = None
+    trace_records: list[dict[str, Any]] | None = None
 
 
 class ChatJobResponse(BaseModel):
@@ -736,9 +842,51 @@ class ChatJobResponse(BaseModel):
     retry_after_ms: int = 2000
 
 
+def _parse_job_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _job_expired(job: dict[str, Any]) -> bool:
+    if str(job.get("status") or "") in {"completed", "failed"}:
+        return False
+    expires_at = _parse_job_datetime(job.get("expires_at"))
+    return bool(expires_at and expires_at <= datetime.now(timezone.utc))
+
+
+def _expired_job_error_payload(*, request_id: str) -> dict[str, Any]:
+    return {
+        "code": "chat_job_expired",
+        "error": "后台聊天任务已过期，请重新发送问题。",
+        "reason": "expired",
+        "retryable": False,
+        "request_id": request_id,
+    }
+
+
 def _chat_job_response_from_row(*, job_id: str, job: dict[str, Any]) -> ChatJobResponse:
     status = str(job.get("status") or "pending")
     request_id = str(job.get("request_id") or job_id)
+    if _job_expired(job):
+        return ChatJobResponse(
+            status="failed",
+            job_id=job_id,
+            request_id=request_id,
+            error=_expired_job_error_payload(request_id=request_id),
+            retryable=False,
+            retry_after_ms=get_chat_sync_poll_retry_after_ms(),
+        )
+
     if status == "completed" and job.get("result_json"):
         response = ChatResponse.model_validate(job["result_json"])
         return ChatJobResponse(
@@ -965,6 +1113,9 @@ async def chat_sync(
         raise HTTPException(status_code=403, detail="不能使用其他用户身份发起请求")
 
     request_id = get_request_id() or getattr(http_request.state, "request_id", None) or uuid.uuid4().hex
+    client_request_id = _client_request_id_for_sync(body, http_request)
+    if client_request_id and body.client_request_id != client_request_id:
+        body = body.model_copy(update={"client_request_id": client_request_id})
     started_at = time.perf_counter()
     question_meta = _question_log_metadata(body.question)
     logger.info(
@@ -979,7 +1130,11 @@ async def chat_sync(
         question_meta["question_hash"],
     )
 
-    job_id = request_id
+    job_id = _chat_sync_job_id(
+        user_id=body.user_id,
+        request_id=request_id,
+        client_request_id=client_request_id,
+    )
     existing_response = _chat_sync_terminal_response_from_job(
         user_id=body.user_id,
         job_id=job_id,
@@ -994,6 +1149,15 @@ async def chat_sync(
         user_id=body.user_id,
         session_id=body.session_id,
         request_id=request_id,
+        conversation_id=body.session_id,
+        client_request_id=client_request_id or None,
+        request_payload=_chat_sync_request_payload(
+            body,
+            request_id=request_id,
+            client_request_id=client_request_id,
+        ),
+        trace_id=request_id,
+        expires_at=_chat_sync_job_expires_at(),
     )
     task = _ensure_chat_job_task(job_id=job_id, body=body, request_id=request_id)
 
@@ -1130,6 +1294,8 @@ async def get_chat_job(
         raise HTTPException(status_code=404, detail="聊天任务不存在")
 
     response = _chat_job_response_from_row(job_id=job_id, job=job)
+    if response.status == "failed" and (response.error or {}).get("code") == "chat_job_expired":
+        mark_chat_async_job_failed(job_id=job_id, error=response.error or {})
     logger.info(
         "🔎 [同步后台] 查询任务: request_id={} job_id={} status={} method=GET",
         response.request_id,
@@ -1152,6 +1318,8 @@ async def poll_chat_job(
         raise HTTPException(status_code=404, detail="聊天任务不存在")
 
     response = _chat_job_response_from_row(job_id=job_id, job=job)
+    if response.status == "failed" and (response.error or {}).get("code") == "chat_job_expired":
+        mark_chat_async_job_failed(job_id=job_id, error=response.error or {})
     logger.info(
         "🔎 [同步后台] 查询任务: request_id={} job_id={} status={} method=POST",
         response.request_id,

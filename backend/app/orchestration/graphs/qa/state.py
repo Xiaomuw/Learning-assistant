@@ -24,8 +24,11 @@ class QAGraphState(BaseLearningState, total=False):
     retrieval_skipped_reason: str
     notebook_evidence: list[dict[str, Any]]
     web_evidence: list[dict[str, Any]]
+    pending_web_evidence: list[dict[str, Any]]
     evidence_judgement: dict[str, Any]
     evidence_confidence: dict[str, Any]
+    external_evidence_judgement: dict[str, Any]
+    external_evidence_confidence: dict[str, Any]
     quality_check: dict[str, Any]
     answer_quality: dict[str, Any]
     repair_count: int
@@ -42,6 +45,7 @@ class QAGraphState(BaseLearningState, total=False):
     knowledge_bases: list[dict[str, Any]]
     qa_request: dict[str, Any]
     evidence_gate: dict[str, Any]
+    external_evidence_gate: dict[str, Any]
     grounding_report: dict[str, Any]
     tool_requests: list[dict[str, Any]]
     adapter_learning_events: list[dict[str, Any]]

@@ -58,6 +58,26 @@
 make test-graphs
 ```
 
+QA 路由、QAGraph trace、移动同步交付的重点回归测试：
+
+```bash
+backend/.venv313/bin/python -m unittest \
+  backend.tests.test_route_decider \
+  backend.tests.test_orchestrator_intent_rules \
+  backend.tests.test_qa_graph_adapter \
+  backend.tests.test_chat_api
+```
+
+这些测试覆盖：
+
+- `simple_fact` 不进入 RAG、不调用 web。
+- `practice_generation` 绕过 QAGraph。
+- `meta_tool_usage` 只读取真实工具 trace。
+- `realtime_or_fresh` 在允许联网时才可进入 web 路径。
+- `notebook_only` 证据不足时不越权联网、不编造确定答案。
+- `answer_repair` 受最大次数限制，不进入无限修复。
+- `/api/chat/sync` 的 `completed / pending` 响应，以及 `POST /api/chat/jobs/{job_id}/poll` 的完成、失败、过期、幂等边界。
+
 本地 deterministic eval：
 
 ```bash
@@ -66,14 +86,44 @@ make eval-graphs
 
 当前 `make eval-graphs` 会执行：
 
-- `qa_model_only_concept`
+- `route_simple_fact`
+- `route_exercise_generation`
+- `route_meta_tool_usage`
+- `route_latest_allow_web`
+- `route_latest_without_web`
+- `qa_concept_filtered_retrieval`
+- `qa_explicit_web_fallback`
 - `qa_tool_policy_stable_concept_no_tools`
 - `qa_notebook_only_insufficient`
+- `qa_tutoring_sufficient_evidence`
 - `qgen_evidence_grounded`
 - `mastery_attempt_bounded_update`
 - `mastery_weak_signal_small_delta`
 
 默认 eval 不依赖真实 LLM、Tavily、生产数据库或 LangSmith。若设置 `GRAPH_EVAL_LANGSMITH=true` 且 LangSmith 已配置，则每个 eval case 会发送脱敏 trace，run name 形如 `graph.eval.<case>`。
+
+## QA Trace Records
+
+为了排查路由、证据、工具、修复和移动端交付问题，Graph State 会维护 `trace_records`。这些记录只包含可脱敏的运行事实，不包含用户全文、prompt、token、密钥、Authorization header 或外部工具原始 payload。
+
+当前约定的关键 stage：
+
+- `route_decider`：记录 route、target graph、是否绕过 QAGraph、是否读取 trace、`allow_web`、`notebook_only`、web capability。
+- `internal_retrieval`：记录 RAG 是否计划/实际调用、请求数、结果数、成功/错误计数。
+- `web_search_if_needed`：记录 web 是否计划/实际调用、触发原因、请求数、结果数、成功/错误计数。
+- `internal_evidence_judge`：记录内部证据置信度 `score / level / threshold / sufficient / reason`。
+- `external_evidence_judge`：记录外部证据置信度 `score / level / threshold / sufficient / reason`。
+- `answer_quality_check`：记录质量检查状态、是否通过、修复动作和修复次数。
+- `answer_repair`：记录当前修复次数、最大修复次数和修复结果。
+- `final_response`：记录最终响应状态，例如 `completed`、`clarification_required` 或 insufficient evidence。
+- `mobile_sync_delivery`：记录移动同步接口返回 `pending` 时的 `job_id`、`request_id`、`retry_after_ms`。
+
+验收时可从 API 响应的 `trace_records` 或云托管日志确认以下事实一致：
+
+- UI 显示 `0 次工具调用` 时，trace 中不应出现 `web_called=true`。
+- `notebook_only` 的 trace 中不应出现 `web_called=true`。
+- 证据不足路径应出现 insufficient/clarification 类 final status，而不是伪造高置信度回答。
+- 移动端 pending 响应必须带 `retry_after_ms`，poll 由服务端 job 过期时间兜底，不能无限等待。
 
 可选 LangSmith dataset / evaluator：
 

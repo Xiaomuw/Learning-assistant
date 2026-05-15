@@ -275,28 +275,13 @@ $wechat: #07c160;
 }
 
 .login-feature-practice {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-
-  &::before,
-  &::after {
-    content: "";
-  }
-
-  &,
-  &::before,
-  &::after {
-    border-radius: 2px 2px 0 0;
-  }
-
-  & {
-    width: 8px;
-    height: 22px;
-    margin-left: 10px;
-    background: $green;
-    box-shadow: 10px -8px 0 #4a90e2, 20px -2px 0 #f5c842;
-  }
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  background:
+    linear-gradient($green, $green) 2px 8px / 7px 20px no-repeat,
+    linear-gradient(#4a90e2, #4a90e2) 11px 0 / 7px 28px no-repeat,
+    linear-gradient(#f5c842, #f5c842) 20px 6px / 7px 22px no-repeat;
 }
 
 .login-feature-mastery {

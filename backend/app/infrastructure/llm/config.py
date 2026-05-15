@@ -15,6 +15,7 @@ DEFAULT_LLM_MAX_RETRIES = 0
 DEFAULT_CHAT_SYNC_TIMEOUT_SECONDS = 15.0
 DEFAULT_CHAT_SYNC_INLINE_BUDGET_SECONDS = 5.0
 DEFAULT_CHAT_SYNC_POLL_RETRY_AFTER_MS = 2000
+DEFAULT_CHAT_SYNC_JOB_TTL_SECONDS = 3600
 DEFAULT_CHAT_SYNC_FAST_CONCEPT_FALLBACK = True
 DEFAULT_PRACTICE_GENERATION_TIMEOUT_SECONDS = 6.0
 DEFAULT_PRACTICE_REPAIR_TIMEOUT_SECONDS = 4.0
@@ -91,6 +92,17 @@ def get_chat_sync_poll_retry_after_ms() -> int:
         return min(10000, max(1000, int(raw)))
     except ValueError:
         return DEFAULT_CHAT_SYNC_POLL_RETRY_AFTER_MS
+
+
+def get_chat_sync_job_ttl_seconds() -> int:
+    raw = os.getenv("CHAT_SYNC_JOB_TTL_SECONDS")
+    if not raw:
+        return DEFAULT_CHAT_SYNC_JOB_TTL_SECONDS
+
+    try:
+        return min(86400, max(60, int(raw)))
+    except ValueError:
+        return DEFAULT_CHAT_SYNC_JOB_TTL_SECONDS
 
 
 def is_chat_sync_fast_concept_fallback_enabled() -> bool:

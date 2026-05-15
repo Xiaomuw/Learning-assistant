@@ -15,6 +15,7 @@ os.environ.setdefault(
 )
 
 from app.orchestration.graphs.orchestrator.intent_rules import resolve_intent_decision
+from app.orchestration.graphs.orchestrator.route_decider import BoundaryRoute
 from app.orchestration.graphs.orchestrator.schemas import OrchestratorIntent
 from app.shared.schemas.agent_graphs import GraphType
 
@@ -51,6 +52,14 @@ class OrchestratorIntentRulesTest(unittest.TestCase):
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QUESTION_GENERATION.value)
         self.assertEqual(result["quiz_request"]["action"], "generate_practice_pack")
         self.assertEqual(result["quiz_request"]["topic"], "HTTP")
+
+    def test_context_dependent_quiz_without_context_returns_clarification(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "根据我的笔记帮我出几道 HTTP 题"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.FALLBACK.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.ORCHESTRATOR.value)
+        self.assertEqual(result["route_decision"]["route"], "practice_generation")
+        self.assertTrue(result["quiz_clarification"]["recommended_options"])
 
     def test_weak_point_quiz_request_prefers_question_generation_over_mastery(self) -> None:
         result = resolve_intent_decision(
@@ -147,6 +156,65 @@ class OrchestratorIntentRulesTest(unittest.TestCase):
 
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)
+
+    def test_simple_fact_routes_to_direct_response(self) -> None:
+        result = resolve_intent_decision({"user_id": "u1", "user_message": "1+1等于几"})
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.DIRECT_RESPONSE.value)
+        self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.ORCHESTRATOR.value)
+        self.assertEqual(result["route_decision"]["route"], BoundaryRoute.SIMPLE_FACT.value)
+        self.assertEqual(result["trace_records"][0]["stage"], "route_decider")
+        self.assertEqual(result["trace_records"][0]["route"], BoundaryRoute.SIMPLE_FACT.value)
+
+    def test_meta_tool_usage_routes_to_direct_response(self) -> None:
+        result = resolve_intent_decision(
+            {
+                "user_id": "u1",
+                "user_message": "刚刚有联网搜索吗",
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "toolInvocationTrace": {
+                            "toolCallCount": 0,
+                            "toolCalls": [],
+                            "didUseWebSearch": False,
+                            "didUseAnyTool": False,
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.DIRECT_RESPONSE.value)
+        self.assertEqual(result["route_decision"]["route"], BoundaryRoute.META_TOOL_USAGE.value)
+
+    def test_realtime_without_web_routes_to_direct_response(self) -> None:
+        result = resolve_intent_decision(
+            {
+                "user_id": "u1",
+                "user_message": "今年 GPT 发布到哪个版本了",
+                "source_policy": "notebook_only",
+                "runtime_context": {"available_capabilities": ["web_search"]},
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.DIRECT_RESPONSE.value)
+        self.assertEqual(result["route_decision"]["route"], BoundaryRoute.REALTIME_OR_FRESH.value)
+        self.assertFalse(result["route_decision"]["policy"]["allow_web"])
+
+    def test_realtime_with_web_enters_qagraph(self) -> None:
+        result = resolve_intent_decision(
+            {
+                "user_id": "u1",
+                "user_message": "今年 GPT 发布到哪个版本了",
+                "source_policy": "open_tools",
+                "runtime_context": {"available_capabilities": ["web_search"]},
+            }
+        )
+
+        self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
+        self.assertEqual(result["route_decision"]["route"], BoundaryRoute.REALTIME_OR_FRESH.value)
+        self.assertTrue(result["route_decision"]["policy"]["allow_web"])
 
     def test_custom_intent_rule_can_short_circuit_default_rules(self) -> None:
         class CustomRule:

@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.domains.practice.quiz_request import build_quiz_clarification_panel, resolve_quiz_request
+from app.orchestration.graphs.orchestrator.route_decider import BoundaryRoute, RouteDecision, decide_route
 from app.orchestration.graphs.orchestrator.schemas import IntentDecision, OrchestratorIntent
 from app.orchestration.graphs.orchestrator.state import OrchestratorState
 from app.orchestration.graphs.shared.schemas import GraphType
+from app.orchestration.graphs.shared.trace import build_trace_record
 from app.shared.schemas.contracts import QuizRequestResolution
 
 
@@ -16,6 +18,7 @@ class IntentRoutingContext:
     message: str
     lowered_message: str
     quiz_resolution: QuizRequestResolution
+    route_decision: RouteDecision
 
 
 class IntentRule(Protocol):
@@ -34,7 +37,30 @@ class RequestErrorIntentRule:
             confidence=1.0,
             reason="request_guard 已记录错误，进入安全响应分支。",
             target_graph_type=GraphType.ORCHESTRATOR,
+            route_decision=context.route_decision,
         )
+
+
+class DecisionBoundaryDirectIntentRule:
+    def decide(self, context: IntentRoutingContext) -> dict[str, Any] | None:
+        route = context.route_decision.route
+        if route in {BoundaryRoute.SIMPLE_FACT, BoundaryRoute.META_TOOL_USAGE}:
+            return _decision_update(
+                intent=OrchestratorIntent.DIRECT_RESPONSE,
+                confidence=context.route_decision.confidence,
+                reason=context.route_decision.reason,
+                target_graph_type=GraphType.ORCHESTRATOR,
+                route_decision=context.route_decision,
+            )
+        if route == BoundaryRoute.REALTIME_OR_FRESH and not context.route_decision.policy.allow_web:
+            return _decision_update(
+                intent=OrchestratorIntent.DIRECT_RESPONSE,
+                confidence=context.route_decision.confidence,
+                reason=context.route_decision.reason,
+                target_graph_type=GraphType.ORCHESTRATOR,
+                route_decision=context.route_decision,
+            )
+        return None
 
 
 class QuizGenerateIntentRule:
@@ -42,6 +68,20 @@ class QuizGenerateIntentRule:
         resolution = context.quiz_resolution
         if resolution.action != "generate_practice_pack":
             return None
+        if (
+            context.route_decision.route == BoundaryRoute.PRACTICE_GENERATION
+            and context.route_decision.target_graph_type == GraphType.ORCHESTRATOR
+        ):
+            panel = build_quiz_clarification_panel(resolution)
+            return _decision_update(
+                intent=OrchestratorIntent.FALLBACK,
+                confidence=context.route_decision.confidence,
+                reason=context.route_decision.reason,
+                target_graph_type=GraphType.ORCHESTRATOR,
+                quiz_request=resolution.model_dump(mode="json"),
+                quiz_clarification=panel.model_dump(mode="json"),
+                route_decision=context.route_decision,
+            )
         return _decision_update(
             intent=OrchestratorIntent.GENERATE_QUESTION,
             confidence=0.9,
@@ -49,6 +89,7 @@ class QuizGenerateIntentRule:
             target_graph_type=GraphType.QUESTION_GENERATION,
             quiz_request=resolution.model_dump(mode="json"),
             quiz_clarification={},
+            route_decision=context.route_decision,
         )
 
 
@@ -65,6 +106,7 @@ class QuizClarifyIntentRule:
             target_graph_type=GraphType.ORCHESTRATOR,
             quiz_request=resolution.model_dump(mode="json"),
             quiz_clarification=panel.model_dump(mode="json"),
+            route_decision=context.route_decision,
         )
 
 
@@ -77,6 +119,7 @@ class KeywordQuestionGenerationIntentRule:
             confidence=0.82,
             reason="命中出题/练习意图。",
             target_graph_type=GraphType.QUESTION_GENERATION,
+            route_decision=context.route_decision,
         )
 
 
@@ -92,6 +135,7 @@ class AnswerCheckIntentRule:
             confidence=0.84,
             reason="命中答案讲解/判别意图，交给 QAGraph 解释。",
             target_graph_type=GraphType.QA,
+            route_decision=context.route_decision,
         )
 
 
@@ -104,6 +148,7 @@ class MasteryIntentRule:
             confidence=0.88,
             reason="命中掌握度评估意图。",
             target_graph_type=GraphType.MASTERY,
+            route_decision=context.route_decision,
         )
 
 
@@ -116,6 +161,7 @@ class HelpStatusIntentRule:
             confidence=0.75,
             reason="意图不完整，需要安全澄清。",
             target_graph_type=GraphType.ORCHESTRATOR,
+            route_decision=context.route_decision,
         )
 
 
@@ -126,6 +172,7 @@ class DefaultQAIntentRule:
             confidence=0.8,
             reason="默认学习问答意图。",
             target_graph_type=GraphType.QA,
+            route_decision=context.route_decision,
         )
 
 
@@ -134,6 +181,7 @@ class DefaultQAIntentRule:
 # > mastery > help/status > default QA.
 DEFAULT_INTENT_RULES: tuple[IntentRule, ...] = (
     RequestErrorIntentRule(),
+    DecisionBoundaryDirectIntentRule(),
     QuizGenerateIntentRule(),
     QuizClarifyIntentRule(),
     KeywordQuestionGenerationIntentRule(),
@@ -150,11 +198,13 @@ def resolve_intent_decision(
     rules: tuple[IntentRule, ...] = DEFAULT_INTENT_RULES,
 ) -> dict[str, Any]:
     message = str(state.get("user_message") or "").strip()
+    quiz_resolution = resolve_quiz_request(message, _quiz_context(state))
     context = IntentRoutingContext(
         state=state,
         message=message,
         lowered_message=message.lower(),
-        quiz_resolution=resolve_quiz_request(message, _quiz_context(state)),
+        quiz_resolution=quiz_resolution,
+        route_decision=decide_route(state, quiz_resolution=quiz_resolution),
     )
     for rule in rules:
         update = rule.decide(context)
@@ -171,14 +221,35 @@ def _decision_update(
     target_graph_type: GraphType,
     quiz_request: dict[str, Any] | None = None,
     quiz_clarification: dict[str, Any] | None = None,
+    route_decision: RouteDecision | None = None,
 ) -> dict[str, Any]:
+    route = route_decision.route.value if route_decision is not None else ""
+    route_policy = route_decision.policy.model_dump(mode="json") if route_decision is not None else {}
     decision = IntentDecision(
         intent=intent,
         confidence=confidence,
         reason=reason,
         target_graph_type=target_graph_type,
+        route=route,
+        route_policy=route_policy,
     )
     update: dict[str, Any] = {"intent_decision": decision.model_dump(mode="json")}
+    if route_decision is not None:
+        update["route_decision"] = route_decision.model_dump(mode="json")
+        update["trace_records"] = [
+            build_trace_record(
+                "route_decider",
+                route=route_decision.route.value,
+                target_graph_type=route_decision.target_graph_type.value,
+                bypass_qagraph=route_decision.bypass_qagraph,
+                uses_trace=route_decision.uses_trace,
+                confidence=route_decision.confidence,
+                reason=route_decision.reason,
+                allow_web=route_decision.policy.allow_web,
+                notebook_only=route_decision.policy.notebook_only,
+                has_web_search_tool=route_decision.policy.has_web_search_tool,
+            )
+        ]
     if quiz_request is not None:
         update["quiz_request"] = quiz_request
     if quiz_clarification is not None:

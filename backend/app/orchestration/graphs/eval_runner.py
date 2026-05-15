@@ -14,6 +14,7 @@ os.environ.setdefault(
 
 from app.infrastructure.llm.langsmith import trace_run
 from app.orchestration.graphs.mastery.graph import build_graph as build_mastery_graph
+from app.orchestration.graphs.orchestrator.route_decider import BoundaryRoute, decide_route
 from app.orchestration.graphs.qa.graph import build_graph as build_qa_graph
 from app.orchestration.graphs.question_generation.graph import build_graph as build_qgen_graph
 from app.shared.schemas.agent_graphs import FinalResponse, GraphType, SourcePolicy, ToolCapability
@@ -97,6 +98,89 @@ def main() -> int:
 def _cases() -> list[GraphEvalCase]:
     return [
         GraphEvalCase(
+            name="route_simple_fact",
+            graph_type=GraphType.ORCHESTRATOR,
+            runner=lambda: _route_eval_output(
+                {
+                    "run_id": "eval-route-simple",
+                    "user_id": "eval-user",
+                    "user_message": "1+1等于几",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "runtime_context": {"available_capabilities": [ToolCapability.WEB_SEARCH.value]},
+                }
+            ),
+            assertions=[_assert_route(BoundaryRoute.SIMPLE_FACT), _assert_no_tool_request],
+            expected_metrics={"route": BoundaryRoute.SIMPLE_FACT.value, "rag_allowed": False, "web_allowed": False},
+        ),
+        GraphEvalCase(
+            name="route_exercise_generation",
+            graph_type=GraphType.ORCHESTRATOR,
+            runner=lambda: _route_eval_output(
+                {
+                    "run_id": "eval-route-practice",
+                    "user_id": "eval-user",
+                    "user_message": "帮我出几道一百以内加减法题",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                }
+            ),
+            assertions=[_assert_route(BoundaryRoute.PRACTICE_GENERATION), _assert_no_tool_request],
+            expected_metrics={"route": BoundaryRoute.PRACTICE_GENERATION.value},
+        ),
+        GraphEvalCase(
+            name="route_meta_tool_usage",
+            graph_type=GraphType.ORCHESTRATOR,
+            runner=lambda: _route_eval_output(
+                {
+                    "run_id": "eval-route-meta",
+                    "user_id": "eval-user",
+                    "user_message": "刚刚有联网搜索吗",
+                    "messages": [
+                        {
+                            "role": "assistant",
+                            "toolInvocationTrace": {
+                                "toolCallCount": 0,
+                                "toolCalls": [],
+                                "didUseWebSearch": False,
+                                "didUseAnyTool": False,
+                            },
+                        }
+                    ],
+                }
+            ),
+            assertions=[_assert_route(BoundaryRoute.META_TOOL_USAGE), _assert_route_uses_trace],
+            expected_metrics={"route": BoundaryRoute.META_TOOL_USAGE.value, "uses_trace": True},
+        ),
+        GraphEvalCase(
+            name="route_latest_allow_web",
+            graph_type=GraphType.ORCHESTRATOR,
+            runner=lambda: _route_eval_output(
+                {
+                    "run_id": "eval-route-fresh-web",
+                    "user_id": "eval-user",
+                    "user_message": "今年 GPT 发布到哪个版本了",
+                    "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "runtime_context": {"available_capabilities": [ToolCapability.WEB_SEARCH.value]},
+                }
+            ),
+            assertions=[_assert_route(BoundaryRoute.REALTIME_OR_FRESH), _assert_route_allow_web(True)],
+            expected_metrics={"route": BoundaryRoute.REALTIME_OR_FRESH.value, "allow_web": True},
+        ),
+        GraphEvalCase(
+            name="route_latest_without_web",
+            graph_type=GraphType.ORCHESTRATOR,
+            runner=lambda: _route_eval_output(
+                {
+                    "run_id": "eval-route-fresh-no-web",
+                    "user_id": "eval-user",
+                    "user_message": "今年 GPT 发布到哪个版本了",
+                    "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                    "runtime_context": {"available_capabilities": [ToolCapability.WEB_SEARCH.value]},
+                }
+            ),
+            assertions=[_assert_route(BoundaryRoute.REALTIME_OR_FRESH), _assert_route_allow_web(False)],
+            expected_metrics={"route": BoundaryRoute.REALTIME_OR_FRESH.value, "allow_web": False},
+        ),
+        GraphEvalCase(
             name="qa_concept_filtered_retrieval",
             graph_type=GraphType.QA,
             runner=lambda: build_qa_graph().compile().invoke(
@@ -171,6 +255,30 @@ def _cases() -> list[GraphEvalCase]:
             ),
             assertions=[_assert_final_response, _assert_has_learning_event("insufficient_evidence")],
             expected_metrics={"notebook_only_no_fabrication": True},
+        ),
+        GraphEvalCase(
+            name="qa_tutoring_sufficient_evidence",
+            graph_type=GraphType.QA,
+            runner=lambda: build_qa_graph().compile().invoke(
+                {
+                    "run_id": "eval-qa-tutoring-evidence",
+                    "user_id": "eval-user",
+                    "user_message": "请一步步解释 HTTP 请求响应模型",
+                    "question_type": "concept",
+                    "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                    "evidence": [
+                        {
+                            "id": "eval-evidence-http-model",
+                            "source_type": "notebook",
+                            "source_id": "chunk-http-model",
+                            "text": "HTTP 使用请求-响应模型：客户端发送请求，服务器返回响应。",
+                            "score": 0.92,
+                        }
+                    ],
+                }
+            ),
+            assertions=[_assert_final_response, _assert_non_empty_answer, _assert_internal_evidence_sufficient],
+            expected_metrics={"internal_evidence_sufficient": True, "non_empty_response": True},
         ),
         GraphEvalCase(
             name="qgen_evidence_grounded",
@@ -267,6 +375,30 @@ def _cases() -> list[GraphEvalCase]:
     ]
 
 
+def _route_eval_output(state: dict[str, Any]) -> dict[str, Any]:
+    decision = decide_route(state)
+    return {
+        "route_decision": {
+            "route": decision.route.value,
+            "target_graph_type": decision.target_graph_type.value,
+            "bypass_qagraph": decision.bypass_qagraph,
+            "uses_trace": decision.uses_trace,
+            "policy": decision.policy.model_dump(mode="json"),
+        },
+        "tool_requests": [],
+        "tool_results": [],
+        "trace_records": [
+            {
+                "stage": "route_decider",
+                "route": decision.route.value,
+                "allow_web": decision.policy.allow_web,
+                "notebook_only": decision.policy.notebook_only,
+                "uses_trace": decision.uses_trace,
+            }
+        ],
+    }
+
+
 def _run_case(case: GraphEvalCase) -> dict[str, Any]:
     t0 = time.perf_counter()
     status = "passed"
@@ -324,6 +456,34 @@ def _assert_final_response(output: dict[str, Any]) -> str | None:
 
 def _assert_non_empty_answer(output: dict[str, Any]) -> str | None:
     return "final_answer_empty" if _final_answer_empty(output) else None
+
+
+def _assert_route(expected: BoundaryRoute) -> Callable[[dict[str, Any]], str | None]:
+    def assertion(output: dict[str, Any]) -> str | None:
+        decision = output.get("route_decision") or {}
+        if not isinstance(decision, dict) or decision.get("route") != expected.value:
+            return f"route_mismatch:{expected.value}"
+        return None
+
+    return assertion
+
+
+def _assert_route_allow_web(expected: bool) -> Callable[[dict[str, Any]], str | None]:
+    def assertion(output: dict[str, Any]) -> str | None:
+        decision = output.get("route_decision") or {}
+        policy = decision.get("policy") if isinstance(decision, dict) else {}
+        if not isinstance(policy, dict) or bool(policy.get("allow_web")) is not expected:
+            return f"route_allow_web_mismatch:{expected}"
+        return None
+
+    return assertion
+
+
+def _assert_route_uses_trace(output: dict[str, Any]) -> str | None:
+    decision = output.get("route_decision") or {}
+    if not isinstance(decision, dict) or decision.get("uses_trace") is not True:
+        return "route_trace_not_used"
+    return None
 
 
 def _assert_has_learning_event(event_type: str) -> Callable[[dict[str, Any]], str | None]:
@@ -400,6 +560,16 @@ def _assert_no_web_fallback_planned(output: dict[str, Any]) -> str | None:
 def _assert_no_tool_request(output: dict[str, Any]) -> str | None:
     if list(output.get("tool_requests") or []):
         return "unexpected_tool_request"
+    return None
+
+
+def _assert_internal_evidence_sufficient(output: dict[str, Any]) -> str | None:
+    confidence = output.get("evidence_confidence") or {}
+    gate = output.get("evidence_gate") or {}
+    if not isinstance(confidence, dict) or confidence.get("sufficient") is not True:
+        return "internal_evidence_not_sufficient"
+    if isinstance(gate, dict) and gate.get("sufficient") is not True:
+        return "internal_evidence_gate_not_sufficient"
     return None
 
 
