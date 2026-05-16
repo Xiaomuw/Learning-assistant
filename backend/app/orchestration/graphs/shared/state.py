@@ -23,6 +23,8 @@ class BaseLearningState(TypedDict, total=False):
     graph_type: Literal["orchestrator", "qa", "question_generation", "mastery"]
     graph_version: str
     source_policy: Literal["notebook_only", "notebook_plus_external", "open_tools"]
+    allow_web: bool
+    web_search_requested: bool
     user_message: str | None
     messages: list[dict[str, Any]]
     concepts: list[dict[str, Any]]

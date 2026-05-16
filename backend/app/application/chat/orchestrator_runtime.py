@@ -256,6 +256,8 @@ def _orchestrator_state_from_chat_state(
         "tool_results": list(state.get("tool_results") or []),
         "learning_events": list(state.get("learning_events") or []),
         "errors": list(state.get("errors") or []),
+        "allow_web": bool(state.get("allow_web", False)),
+        "web_search_requested": bool(state.get("web_search_requested") or state.get("allow_web")),
         "chat_runtime_context": _chat_runtime_context(state),
         "production_runtime": True,
     }
@@ -279,6 +281,8 @@ def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
         "long_term_context": str(state.get("long_term_context") or ""),
         "model_name": str(state.get("model_name") or ""),
         "thinking_mode": bool(state.get("thinking_mode", False)),
+        "allow_web": bool(state.get("allow_web", False)),
+        "web_search_requested": bool(state.get("web_search_requested") or state.get("allow_web")),
         "allow_tools": _source_policy_from_chat_state(state) != SourcePolicy.NOTEBOOK_ONLY.value,
         "allow_search": _source_policy_from_chat_state(state) in {
             SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
@@ -1154,6 +1158,8 @@ def _source_policy_from_chat_state(state: dict[str, Any]) -> str:
     question = str(state.get("contextual_question") or state.get("question") or "")
     if notebook_policy == "strict":
         return SourcePolicy.NOTEBOOK_ONLY.value
+    if bool(state.get("web_search_requested") or state.get("allow_web")):
+        return SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value
     if notebook_policy == "required":
         return SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value
     if notebook_policy == "optional" and _has_notebook_signal(question):

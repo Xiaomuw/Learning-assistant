@@ -6,6 +6,7 @@ from loguru import logger
 
 from app.domains.memory.service import build_request_context
 from app.infrastructure.db.repositories.subjects import get_subject_record
+from app.orchestration.graphs.shared.schemas import SourcePolicy
 from app.services.runtime_models import resolve_active_chat_model
 from app.shared.schemas.subject import DEFAULT_SUBJECTS, normalize_subject_id
 from app.shared.schemas.state import AgentState
@@ -19,6 +20,7 @@ def build_initial_state(
     subject_id: str,
     request_mode: str,
     thinking_mode: bool = False,
+    allow_web: bool = False,
     client_request_id: str | None = None,
     request_id: str | None = None,
 ) -> AgentState:
@@ -46,6 +48,8 @@ def build_initial_state(
         "question": question,
         "request_mode": request_mode,
         "thinking_mode": thinking_mode,
+        "allow_web": bool(allow_web),
+        "web_search_requested": bool(allow_web),
         "memory": context["memory"],
         "user_style_name": "",
         "user_style_prompt": "",
@@ -56,6 +60,8 @@ def build_initial_state(
         "long_term_context": context["long_term_context"],
         "model_name": resolve_active_chat_model(),
     }
+    if allow_web:
+        initial_state["source_policy"] = SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value
     logger.info(
         f"📋 初始 State 构建完成 | user={user_id} | subject={subject_name} | "
         f"short_term_messages={len(context['short_term_messages'])} | "

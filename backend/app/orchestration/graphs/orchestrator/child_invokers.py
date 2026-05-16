@@ -93,6 +93,8 @@ class QAGraphInvoker:
             "sync_fast_concept_fallback": bool(runtime_context.get("sync_fast_concept_fallback", False)),
             "streaming_degraded_reason": "",
             "thinking_mode": bool(runtime_context.get("thinking_mode", False)),
+            "allow_web": bool(runtime_context.get("allow_web", False)),
+            "web_search_requested": bool(runtime_context.get("web_search_requested") or state.get("web_search_requested")),
         }
         if qa_runtime_context["stream_answer_tokens"]:
             if callable(injected_stream_writer):
@@ -522,6 +524,7 @@ def _persist_fallback_learning_events_safely(raw_events: list[Any]) -> None:
 
 def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, Any]:
     message = str(state.get("user_message") or "").strip()
+    runtime_context = state.get("chat_runtime_context") if isinstance(state.get("chat_runtime_context"), dict) else {}
     return {
         "run_id": f"{state.get('run_id', '')}:{graph_type.value}",
         "tenant_id": state.get("tenant_id", ""),
@@ -543,8 +546,10 @@ def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, A
         "tool_results": list(state.get("tool_results") or []),
         "learning_events": list(state.get("learning_events") or []),
         "errors": list(state.get("errors") or []),
+        "allow_web": bool(state.get("allow_web", False)),
+        "web_search_requested": bool(state.get("web_search_requested") or runtime_context.get("web_search_requested")),
         "parent_intent_decision": state.get("intent_decision") or {},
         "quiz_request": state.get("quiz_request") or {},
-        "chat_runtime_context": state.get("chat_runtime_context") or {},
+        "chat_runtime_context": runtime_context,
         "production_runtime": bool(state.get("production_runtime")),
     }

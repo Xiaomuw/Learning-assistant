@@ -1085,6 +1085,24 @@ class ChatApiTest(unittest.TestCase):
         self.assertIn('"thinking_mode": true', body)
         self.assertTrue(stream_chat.call_args.kwargs["thinking_mode"])
 
+    def test_chat_sse_passes_allow_web_to_stream_chat(self) -> None:
+        with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_stream_workflow) as stream_chat:
+            with self.client.stream(
+                "POST",
+                "/api/chat",
+                json={
+                    "user_id": "default_user",
+                    "question": "联网搜索一下 HTTP/3 现状",
+                    "subject_id": "general",
+                    "allow_web": True,
+                },
+            ) as response:
+                body = "".join(chunk for chunk in response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: status", body)
+        self.assertTrue(stream_chat.call_args.kwargs["allow_web"])
+
     def test_chat_sse_emits_heartbeat_during_slow_processing(self) -> None:
         with patch.object(chat_module, "CHAT_HEARTBEAT_SECONDS", 0.001):
             with patch("app.interfaces.api.chat.stream_chat", side_effect=_fake_stream_with_slow_first_chunk):
@@ -1390,6 +1408,15 @@ class ChatApiTest(unittest.TestCase):
             "session_memory_context": "",
             "long_term_context": "",
             "model_name": "deepseek-v4-pro",
+            "evidence": [
+                {
+                    "id": "http-notebook-evidence",
+                    "source_type": "notebook",
+                    "source_id": "general:http",
+                    "text": "HTTP 是一种应用层协议，用于客户端和服务器之间传输超文本资源。",
+                    "score": 0.95,
+                }
+            ],
         }
         fake_llm = _FakeStreamingLLM(["HTTP 是", "应用层协议。"])
 
@@ -1544,6 +1571,20 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(state["session_memory"]["active_topic"], "HTTP")
         self.assertIn("当前主主题：HTTP", state["session_memory_context"])
         self.assertIn("用户昵称：测试用户", state["long_term_context"])
+
+    def test_initial_state_marks_client_requested_web_search(self) -> None:
+        state = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-web",
+            question="什么是 HTTP？",
+            subject_id="general",
+            request_mode="sync",
+            allow_web=True,
+        )
+
+        self.assertTrue(state["allow_web"])
+        self.assertTrue(state["web_search_requested"])
+        self.assertEqual(state["source_policy"], "notebook_plus_external")
 
     def test_initial_state_generates_distinct_message_ids_without_client_request_id(self) -> None:
         first = chat_state_builder.build_initial_state(

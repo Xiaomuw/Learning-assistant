@@ -23,6 +23,7 @@ def run_chat_once(
     question: str,
     subject_id: str,
     thinking_mode: bool = False,
+    allow_web: bool = False,
     client_request_id: str | None = None,
     request_id: str | None = None,
 ) -> ChatExecutionResult:
@@ -32,6 +33,7 @@ def run_chat_once(
         question=question,
         subject_id=subject_id,
         thinking_mode=thinking_mode,
+        allow_web=allow_web,
         client_request_id=client_request_id,
         request_id=request_id,
         persist=True,
@@ -46,6 +48,7 @@ def run_chat_once_with_state(
     question: str,
     subject_id: str,
     thinking_mode: bool = False,
+    allow_web: bool = False,
     client_request_id: str | None = None,
     request_id: str | None = None,
     persist: bool = True,
@@ -57,6 +60,7 @@ def run_chat_once_with_state(
         subject_id=subject_id,
         request_mode="sync",
         thinking_mode=thinking_mode,
+        allow_web=allow_web,
         client_request_id=client_request_id,
         request_id=request_id,
     )
@@ -94,6 +98,7 @@ async def stream_chat(
     question: str,
     subject_id: str,
     thinking_mode: bool = False,
+    allow_web: bool = False,
     client_request_id: str | None = None,
     request_id: str | None = None,
     stream_writer: Callable[[dict[str, Any]], None] | None = None,
@@ -105,6 +110,7 @@ async def stream_chat(
         subject_id=subject_id,
         request_mode="sse",
         thinking_mode=thinking_mode,
+        allow_web=allow_web,
         client_request_id=client_request_id,
         request_id=request_id,
     )

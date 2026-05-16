@@ -562,6 +562,7 @@ def _run_chat_once_for_async_job(*, body: ChatRequest, request_id: str):
         question=body.question,
         subject_id=body.subject_id,
         thinking_mode=body.thinking_mode,
+        allow_web=body.allow_web,
         client_request_id=body.client_request_id,
         request_id=request_id,
         persist=False,
@@ -830,6 +831,7 @@ class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
     subject_id: str = Field(default=DEFAULT_SUBJECT_ID, description="知识库 ID，默认用于辅助参考")
     thinking_mode: bool = Field(default=False, description="是否为本轮 DeepSeek V4 请求启用思考模式")
+    allow_web: bool = Field(default=False, description="是否为本轮请求主动启用联网搜索")
     client_request_id: str | None = Field(
         default=None,
         max_length=160,
@@ -1003,6 +1005,7 @@ async def chat(
                 question=request.question,
                 subject_id=request.subject_id,
                 thinking_mode=request.thinking_mode,
+                allow_web=request.allow_web,
                 client_request_id=request.client_request_id,
                 stream_writer=runtime_stream_writer,
             )
