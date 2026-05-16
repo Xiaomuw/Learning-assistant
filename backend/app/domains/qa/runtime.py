@@ -887,6 +887,13 @@ def _streaming_answer_messages(
         "- 不要使用 Markdown 表格、分隔线、粗体、引用或代码块；不要输出 ||、---、### 这类排版符号。\n"
         "- 用 2 到 5 个短自然段组织回答；需要列点时最多 4 点，每点一句话。\n"
     )
+    if str(request.question_type or "").strip() == "concept":
+        stream_instruction += (
+            "\n## 概念题输出顺序\n"
+            "- 如果用户问“什么是/什么叫/解释 X”，第一句必须直接回答“X 是……”。\n"
+            "- 不要以“为什么需要 X”、生活类比或使用场景开头；这些内容只能放在定义之后。\n"
+            "- 推荐顺序：定义 → 所属层级/位置 → 工作方式 → 作用或易错点。\n"
+        )
     if conversation:
         return [
             SystemMessage(content=f"{build_tool_system_message(request)}{stream_instruction}"),

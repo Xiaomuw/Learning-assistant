@@ -26,9 +26,11 @@ function buildCoreModule() {
 const {
   buildDisplayAnswerContent,
   buildChatStreamPayload,
+  buildChatStreamUrl,
   createSSEParser,
   dedupeDisplayAnswer,
   decodeUtf8,
+  normalizeApiBase,
   recordStreamChunkDiagnostics,
   recordStreamEventDiagnostics
 } = buildCoreModule();
@@ -88,6 +90,20 @@ try {
       0,
       "chat transports should not bypass the normalized payload"
     );
+    assert.ok(
+      chatStreamSource.includes("CHAT_STREAM_API_BASE"),
+      "chat stream transport should use the dedicated stream API base"
+    );
+    assert.ok(
+      !chatStreamSource.includes("if (isContainerTransportEnabled())"),
+      "container transport should not force chat streaming into sync fallback"
+    );
+  }
+
+  {
+    assert.equal(normalizeApiBase(" https://api.example.com/api/ "), "https://api.example.com/api");
+    assert.equal(buildChatStreamUrl("https://api.example.com/api/"), "https://api.example.com/api/chat");
+    assert.equal(buildChatStreamUrl(""), "");
   }
 
   {
@@ -150,7 +166,28 @@ try {
           ]
         }
       ),
-      "HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。"
+      "HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。\n\nHTTP 的全称是 HyperText Transfer Protocol，中文叫超文本传输协议。\n\n它规定客户端如何请求资源、服务器如何返回资源。\n\nHTTP 采用请求-响应模型。"
+    );
+    assert.equal(
+      buildDisplayAnswerContent(
+        "想象你在餐厅点餐：你是顾客，厨房是服务器，而服务员就是 HTTP。你想吃一份牛排，需要告诉服务员，服务员把要求送到厨房，再把做好的牛排端回来。",
+        {
+          topic: "HTTP",
+          steps: [
+            "HTTP 是 Web 中客户端和服务器之间通信的应用层协议。",
+            "它采用请求-响应模型：浏览器发出请求，服务器返回响应。",
+            "HTTP 本身无状态，常见易错点是不要把它当成传输层协议。"
+          ]
+        }
+      ),
+      "HTTP 是 Web 中客户端和服务器之间通信的应用层协议。\n\n它采用请求-响应模型：浏览器发出请求，服务器返回响应。\n\nHTTP 本身无状态，常见易错点是不要把它当成传输层协议。"
+    );
+    assert.equal(
+      buildDisplayAnswerContent(
+        "为什么需要HTTP：浏览器和服务器之间需要一种共同规则来交换网页资源。HTTP就是这种规则。HTTP是什么：HTTP 全称是超文本传输协议，是 Web 中客户端和服务器之间通信的应用层协议。HTTP如何工作：客户端发送请求，服务器返回响应。",
+        { topic: "HTTP", steps: [] }
+      ),
+      "HTTP是什么：HTTP 全称是超文本传输协议，是 Web 中客户端和服务器之间通信的应用层协议。\n\n为什么需要HTTP：浏览器和服务器之间需要一种共同规则来交换网页资源。HTTP就是这种规则。\n\nHTTP如何工作：客户端发送请求，服务器返回响应。"
     );
     assert.equal(
       buildDisplayAnswerContent("", {

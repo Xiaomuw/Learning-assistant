@@ -1,8 +1,14 @@
 import Taro from "@tarojs/taro";
 import { clearAuthSession, getAccessToken } from "@/store/auth";
-import { API_BASE, refreshAuthSession } from "@/services/api";
-import { ApiTransportError, callApiTransport, isContainerTransportEnabled } from "@/services/api-transport";
+import { refreshAuthSession } from "@/services/api";
 import {
+  ApiTransportError,
+  callApiTransport,
+  CHAT_STREAM_API_BASE,
+  isContainerTransportEnabled
+} from "@/services/api-transport";
+import {
+  buildChatStreamUrl,
   buildDisplayAnswerContent,
   buildChatStreamPayload,
   createSSEParser,
@@ -120,7 +126,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
       elapsedMs: now - startedAt
     };
     handlers.onEvent({ event: "stream_diagnostics", data: diagnosticsPayload });
-    const apiBase = process.env.TARO_APP_API_BASE || "";
+    const apiBase = process.env.TARO_APP_CHAT_STREAM_API_BASE || process.env.TARO_APP_API_BASE || "";
     if (apiBase.includes("127.0.0.1") || apiBase.includes("localhost")) {
       console.info("[chat-stream]", diagnosticsPayload);
     }
@@ -449,8 +455,12 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
 
   const openStream = async (hasRetried = false) => {
     if (completed) return;
-    if (isContainerTransportEnabled()) {
-      await sendSyncFallback(hasRetried, "cloud_container_transport");
+    const streamUrl = buildChatStreamUrl(CHAT_STREAM_API_BASE);
+    if (!streamUrl) {
+      await sendSyncFallback(
+        hasRetried,
+        isContainerTransportEnabled() ? "cloud_container_transport" : "chat_stream_api_base_missing"
+      );
       return;
     }
     const decoder = typeof TextDecoder !== "undefined" ? new TextDecoder("utf-8") : null;
@@ -458,7 +468,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     scheduleIdleTimer();
 
     activeTask = Taro.request({
-      url: `${API_BASE}/chat`,
+      url: streamUrl,
       method: "POST",
       data: requestPayload,
       header: {

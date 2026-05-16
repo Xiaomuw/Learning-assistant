@@ -60,7 +60,7 @@ def build_graph(
     graph.add_node("rethink_and_revise", rethink_and_revise_node)
     graph.add_node("hard_fallback", hard_fallback_node)
     graph.add_node("clarify", clarify_node)
-    graph.add_node("out_of_scope", out_of_scope_node)
+    graph.add_node("out_of_scope", lambda state: out_of_scope_node(state, adapter=adapter))
     graph.add_node("finalize", finalize_node)
 
     graph.set_entry_point("normalize")

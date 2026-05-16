@@ -1,5 +1,8 @@
 const apiTransport = process.env.TARO_APP_API_TRANSPORT || "request";
 const defaultApiBase = apiTransport === "container" ? "" : "http://127.0.0.1:8000/api";
+const chatStreamApiBase = process.env.TARO_APP_CHAT_STREAM_API_BASE
+  || process.env.TARO_APP_API_BASE
+  || defaultApiBase;
 
 const config = {
   projectName: "learning-assistant-weapp",
@@ -17,6 +20,7 @@ const config = {
     "process.env.TARO_APP_API_BASE": JSON.stringify(
       process.env.TARO_APP_API_BASE || defaultApiBase
     ),
+    "process.env.TARO_APP_CHAT_STREAM_API_BASE": JSON.stringify(chatStreamApiBase),
     "process.env.TARO_APP_API_TRANSPORT": JSON.stringify(apiTransport),
     "process.env.TARO_APP_CLOUD_ENV": JSON.stringify(process.env.TARO_APP_CLOUD_ENV || ""),
     "process.env.TARO_APP_CONTAINER_SERVICE": JSON.stringify(

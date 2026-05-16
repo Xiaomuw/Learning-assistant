@@ -611,6 +611,87 @@ class ChatApiTest(unittest.TestCase):
         self.assertNotIn("需要从", payload["final_answer"])
         self.assertEqual(payload["final_answer"].count("客户端发送请求"), 1)
 
+    def test_chat_sync_prefers_steps_when_concept_answer_starts_with_long_analogy(self) -> None:
+        def _analogy_chat_once(**_kwargs):
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-analogy",
+                question_type="concept",
+                route="explain",
+                final_answer=(
+                    "想象你在餐厅点餐：你是顾客，厨房是服务器，而服务员就是 HTTP。"
+                    "你想吃一份牛排，需要告诉服务员，服务员把要求送到厨房，再把做好的牛排端回来。"
+                ),
+                explanation=ExplanationPayload(
+                    topic="HTTP",
+                    thinking="用户想了解 HTTP。",
+                    steps=[
+                        "HTTP 是 Web 中客户端和服务器之间通信的应用层协议。",
+                        "它采用请求-响应模型：浏览器发出请求，服务器返回响应。",
+                        "HTTP 本身无状态，常见易错点是不要把它当成传输层协议。",
+                    ],
+                    mistakes="不要把 HTTP 当成传输层协议。",
+                    similar=["HTTPS", "TCP"],
+                ),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_analogy_chat_once):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-analogy-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-analogy",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("HTTP 是 Web 中客户端和服务器之间通信的应用层协议", payload["final_answer"])
+        self.assertIn("请求-响应模型", payload["final_answer"])
+        self.assertIn("无状态", payload["final_answer"])
+        self.assertNotIn("餐厅", payload["final_answer"])
+        self.assertNotIn("点餐", payload["final_answer"])
+
+    def test_chat_sync_reorders_concept_answer_when_why_section_comes_first(self) -> None:
+        def _why_first_chat_once(**_kwargs):
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-why-first",
+                question_type="concept",
+                route="explain",
+                final_answer=(
+                    "为什么需要HTTP：浏览器和服务器之间需要一种共同规则来交换网页资源。"
+                    "HTTP就是这种规则，让不同设备和软件能可靠沟通。"
+                    "HTTP是什么：HTTP 全称是超文本传输协议，是 Web 中客户端和服务器之间通信的应用层协议。"
+                    "HTTP如何工作：客户端发送请求，服务器返回响应，响应里包含状态码、响应头和资源内容。"
+                ),
+                explanation=ExplanationPayload(topic="HTTP"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_why_first_chat_once):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-why-first-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-why-first",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["final_answer"].startswith("HTTP是什么"))
+        self.assertLess(payload["final_answer"].find("HTTP是什么"), payload["final_answer"].find("为什么需要HTTP"))
+        self.assertIn("应用层协议", payload["final_answer"])
+        self.assertIn("请求，服务器返回响应", payload["final_answer"])
+
     def test_chat_sync_empty_final_answer_does_not_fall_back_to_thinking(self) -> None:
         def _empty_final_chat_once(**_kwargs):
             return _chat_result_with_state(ChatExecutionResult(

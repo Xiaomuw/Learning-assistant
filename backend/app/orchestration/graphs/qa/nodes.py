@@ -242,6 +242,7 @@ def goal_router_node(state: QAGraphState) -> dict[str, Any]:
     intent = str((classifier_update.get("intent_result") or {}).get("intent") or "")
     context_dependency = dict(state.get("context_dependency") or {})
     active_topic = _active_topic(state)
+    boundary = _question_boundary({**state, **classifier_update}, question)
     goal_route = "answer_408"
     reason = "answer_408_default"
     if not question:
@@ -253,6 +254,13 @@ def goal_router_node(state: QAGraphState) -> dict[str, Any]:
     elif intent in {"smalltalk", "simple_fact"}:
         goal_route = "out_of_scope"
         reason = f"{intent}_handled_outside_qagraph"
+    elif (
+        boundary.get("category") == QUESTION_REALTIME_OR_FRESH
+        and bool(state.get("web_search_enabled"))
+        and _has_external_search_signal(question)
+    ):
+        goal_route = "answer_408"
+        reason = "realtime_web_search_enabled"
     elif not (_looks_like_408_scope(question) or _looks_like_408_scope(active_topic)):
         goal_route = "out_of_scope"
         reason = "outside_408_scope"
@@ -313,23 +321,90 @@ def clarify_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
-def out_of_scope_node(state: QAGraphState) -> dict[str, Any]:
-    response = FinalResponse(
-        answer="这个问题看起来不属于 408 计算机基础范围。我可以继续帮你解答数据结构、计算机网络、组成原理和操作系统相关问题。",
-        source_level=SourceLevel.NONE,
-        coach_actions=["redirect_to_408_scope"],
-        mastery_signals={"signal_strength": "none"},
-        ui_payload={
-            "target_graph_type": GraphType.QA.value,
-            "answer_mode": "out_of_scope",
-            "goal_route": "out_of_scope",
-            "qa_flow_version": QA_FLOW_VERSION,
-        },
-    )
+def out_of_scope_node(
+    state: QAGraphState,
+    *,
+    adapter: QARuntimeAdapter | None = None,
+) -> dict[str, Any]:
+    source_policy = _source_policy(state)
+    question = _normalized_question(state)
+    boundary = _question_boundary(state, question)
+    trace = _build_tool_invocation_trace(state)
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        response = FinalResponse(
+            answer="本轮要求只使用内部资料，但这个问题不属于当前 408 资料范围；我不能混入通用知识编造答案。请补充对应资料，或关闭 notebook_only 后再问。",
+            source_level=SourceLevel.NONE,
+            coach_actions=["request_more_notebook_evidence"],
+            mastery_signals={"signal_strength": "none"},
+            ui_payload={
+                "target_graph_type": GraphType.QA.value,
+                "answer_mode": "notebook_only_out_of_scope",
+                "goal_route": "out_of_scope",
+                "qa_flow_version": QA_FLOW_VERSION,
+                "source_policy": source_policy,
+            },
+        )
+    elif boundary.get("category") == QUESTION_REALTIME_OR_FRESH and not bool(state.get("web_search_attempted")):
+        response = _realtime_without_web_response(question=question, boundary=boundary, trace=trace)
+        response = response.model_copy(
+            update={
+                "ui_payload": {
+                    **dict(response.ui_payload),
+                    "goal_route": "out_of_scope",
+                    "qa_flow_version": QA_FLOW_VERSION,
+                    "general_answer_route": "out_of_scope_general_answer",
+                    "source_policy": source_policy,
+                }
+            }
+        )
+    else:
+        runtime_adapter = adapter or DeterministicQARuntimeAdapter()
+        try:
+            response = runtime_adapter.answer(
+                question=question,
+                question_type="general",
+                source_policy=source_policy,
+                evidence=[],
+                evidence_gate={
+                    "sufficient": True,
+                    "insufficient": False,
+                    "status": "general_answer",
+                    "reason": "outside_408_scope_general_answer",
+                },
+                user_id=str(state.get("user_id") or ""),
+                graph_run_id=str(state.get("run_id") or ""),
+            )
+        except Exception as exc:  # noqa: BLE001 - keep out-of-scope QA fail-open and user-safe
+            logger.warning(f"General out-of-scope answer failed open: {exc.__class__.__name__}")
+            response = FinalResponse(
+                answer="这个问题可以按普通问答处理，但当前模型链路暂时不可用。请稍后重试，或换一种更具体的问法。",
+                source_level=SourceLevel.NONE,
+                coach_actions=["retry_general_answer"],
+                mastery_signals={"signal_strength": "none"},
+                ui_payload={"target_graph_type": GraphType.QA.value},
+            )
+        response = response.model_copy(
+            update={
+                "ui_payload": {
+                    **dict(response.ui_payload),
+                    "target_graph_type": GraphType.QA.value,
+                    "answer_mode": "out_of_scope_general_answer",
+                    "goal_route": "out_of_scope",
+                    "qa_flow_version": QA_FLOW_VERSION,
+                    "general_answer_route": "out_of_scope_general_answer",
+                    "source_policy": source_policy,
+                }
+            }
+        )
     return {
-        "trace_records": append_trace_record(state, "out_of_scope", final_response_status="out_of_scope"),
+        "trace_records": append_trace_record(
+            state,
+            "out_of_scope",
+            final_response_status=str(response.ui_payload.get("answer_mode") or "out_of_scope_general_answer"),
+            general_answer_route=str(response.ui_payload.get("general_answer_route") or ""),
+        ),
         "final_response": response.model_dump(mode="json"),
-        "source_usage": "model",
+        "source_usage": response.source_level.value if response.source_level != SourceLevel.NONE else "model",
     }
 
 
@@ -3014,7 +3089,7 @@ def _qa_scoped_intent(intent: str) -> str:
 
 def _looks_like_408_scope(question: str) -> bool:
     normalized = question.lower()
-    if _has_meta_signal(question) or _has_external_search_signal(question):
+    if _has_meta_signal(question):
         return True
     terms = (
         "408",

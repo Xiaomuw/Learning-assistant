@@ -115,6 +115,14 @@ npm run check:weapp
 TARO_APP_API_BASE=https://your-domain.example.com/api TARO_APP_ID=wx123... npm run build:weapp
 ```
 
+如果 `TARO_APP_API_TRANSPORT=container` 用于普通 API，聊天真流式仍需要单独配置 HTTPS request 域名：
+
+```bash
+TARO_APP_API_TRANSPORT=container TARO_APP_CHAT_STREAM_API_BASE=https://your-domain.example.com/api TARO_APP_ID=wx123... npm run build:weapp
+```
+
+`TARO_APP_CHAT_STREAM_API_BASE` 未设置时会回退到 `TARO_APP_API_BASE`。真机预览/体验版必须把该域名加入微信后台 request 合法域名；云托管 `wx.cloud.callContainer` 只能作为 `/chat/sync` 同步兜底，不能承载 SSE chunked 真流式。
+
 常用脚本：
 
 ```bash
@@ -130,6 +138,7 @@ npm run check:weapp
 体验版或真机内测前确认：
 
 - request 合法域名包含后端 HTTPS API 域名，不包含路径，例如 `https://api.example.com`。
+- 若开启云托管 transport，聊天流式域名也必须出现在 request 合法域名中。
 - 服务器 TLS 证书有效，域名能从公网访问。
 - 后端 CORS/网关允许小程序请求的 API 域名。
 - 后端已经配置真实 `WECHAT_MINI_APP_ID`、`WECHAT_MINI_APP_SECRET`。

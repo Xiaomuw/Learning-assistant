@@ -20,7 +20,7 @@ from app.infrastructure.llm.structured import invoke_with_schema, validate_schem
 from app.shared.schemas.model_profile import ModelProfile
 
 # 这些类型走轻量直接回复，不走结构化 AnswerSchema
-_PLAIN_ANSWER_TYPES = {"smalltalk", "meta"}
+_PLAIN_ANSWER_TYPES = {"smalltalk", "meta", "general"}
 
 
 def generate_structured_answer(

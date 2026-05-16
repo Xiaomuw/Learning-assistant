@@ -102,6 +102,8 @@ LangSmith tracing 开启后会记录用户原始问题、路由、工具调用�
 | `status` | 已接入引擎，开始处理 |
 | `routing` | 问题分类完成 |
 | `retrieval` | 检索结果摘要 |
+| `answer_delta` | 回答正文片段；前端可边收边追加显示 |
+| `reasoning_delta` | 思考模式调试片段；仅本轮临时展示，不写入正常回答 |
 | `explanation` | 讲解结果或元问题回答 |
 | `quiz` | 题包结果 |
 | `memory` | 学习记忆更新 |
@@ -126,6 +128,11 @@ data: {"doc_count":3,"top_scores":[0.91,0.84,0.79],"elapsed":1.28}
 ```
 
 ```text
+event: answer_delta
+data: {"delta":"HTTP 是","streaming_mode":"token","is_synthetic_delta":false}
+```
+
+```text
 event: explanation
 data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes":"...","similar":["..."]},"elapsed":2.14}
 ```
@@ -134,6 +141,7 @@ data: {"explanation":{"topic":"HTTP","thinking":"...","steps":["..."],"mistakes"
 
 - `meta` 与 `smalltalk` 路径不会进入检索节点
 - `meta / smalltalk` 等非检索回答也复用 `explanation` 事件
+- 支持 token 的模型路径会在最终 `explanation` 前发送 `answer_delta`
 - 服务端会发送 `ping=10` 心跳，避免长时间无字节输出导致前端误判断线
 
 ### 4.2 POST `/api/chat/sync`

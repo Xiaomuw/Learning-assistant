@@ -32,6 +32,40 @@ _PLANNING_PHRASE_PATTERNS = (
 
 _TEACHING_ANSWER_TYPES = {"", "concept", "problem", "compare", "application", "review", "mcq_problem"}
 _MIN_TEACHING_ANSWER_CHARS = 36
+_MAX_CONCEPT_PARAGRAPH_CHARS = 180
+_ANALOGY_LEAD_MARKERS = (
+    "想象",
+    "比如",
+    "举个例子",
+    "打个比方",
+    "就像",
+    "好比",
+    "类似",
+    "可以把",
+    "你可以把",
+    "假设",
+)
+_ANALOGY_SCENE_MARKERS = (
+    "餐厅",
+    "点餐",
+    "厨师",
+    "服务员",
+    "快递",
+    "外卖",
+    "包裹",
+    "寄件",
+    "收件",
+    "图书馆",
+    "邮局",
+)
+_SECTION_HEADING_RE = re.compile(
+    r"(?P<heading>"
+    r"(?:为什么(?:需要|要)\s*[A-Za-z0-9\u4e00-\u9fff/+\-.#]{0,32}|"
+    r"[A-Za-z0-9\u4e00-\u9fff/+\-.#]{0,32}\s*(?:是\s*什么|是什么|如何工作|怎么工作|工作方式|"
+    r"主要作用|作用|特点|易错点))"
+    r"\s*[：:]"
+    r")"
+)
 
 
 def should_preserve_notebook_notice(final_state: dict[str, Any] | None = None) -> bool:
@@ -96,7 +130,7 @@ def compose_display_answer(
         preserve_notebook_notice=preserve_notebook_notice,
     )
     if _should_use_final_answer(final_clean, steps, question_type=question_type):
-        return final_clean
+        return _postprocess_display_answer(final_clean, question_type=question_type)
 
     if steps and _should_use_steps_as_answer(steps, question_type=question_type):
         step_answer = clean_display_answer(
@@ -104,10 +138,10 @@ def compose_display_answer(
             preserve_notebook_notice=preserve_notebook_notice,
         )
         if step_answer:
-            return step_answer
+            return _postprocess_display_answer(step_answer, question_type=question_type)
 
     if final_clean:
-        return final_clean
+        return _postprocess_display_answer(final_clean, question_type=question_type)
 
     topic = clean_display_answer(str(explanation.get("topic") or ""), preserve_notebook_notice=True)
     if topic:
@@ -242,6 +276,8 @@ def _should_use_final_answer(
     if normalized_type in _TEACHING_ANSWER_TYPES and steps:
         if len(re.sub(r"\s+", "", final_answer)) < _MIN_TEACHING_ANSWER_CHARS:
             return False
+        if normalized_type == "concept" and _has_weak_concept_display_shape(final_answer):
+            return False
     return True
 
 
@@ -261,6 +297,74 @@ def _looks_like_planning_text(value: str) -> bool:
     if not text:
         return False
     return any(pattern.search(text) for pattern in _PLANNING_PHRASE_PATTERNS)
+
+
+def _postprocess_display_answer(value: str, *, question_type: str) -> str:
+    normalized_type = str(question_type or "").strip()
+    if normalized_type == "concept":
+        return _prioritize_definition_section(value)
+    return value
+
+
+def _prioritize_definition_section(value: str) -> str:
+    text = str(value or "").strip()
+    if not text or not _starts_with_why_needed(text):
+        return text
+    matches = list(_SECTION_HEADING_RE.finditer(text))
+    if len(matches) < 2:
+        return text
+
+    segments: list[tuple[str, str]] = []
+    prefix = text[: matches[0].start()].strip()
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        segment = text[start:end].strip()
+        if segment:
+            segments.append((match.group("heading"), segment))
+
+    definition_index = next(
+        (
+            index
+            for index, (heading, _segment) in enumerate(segments)
+            if "是什么" in re.sub(r"\s+", "", heading) or "是什么" in heading
+        ),
+        -1,
+    )
+    if definition_index <= 0:
+        return text
+
+    ordered = [segments[definition_index], *segments[:definition_index], *segments[definition_index + 1 :]]
+    paragraphs = [segment for _heading, segment in ordered]
+    if prefix:
+        paragraphs.append(prefix)
+    return "\n\n".join(_tidy_display_text(paragraph) for paragraph in paragraphs if paragraph.strip()).strip()
+
+
+def _starts_with_why_needed(value: str) -> bool:
+    compact = re.sub(r"\s+", "", str(value or "").strip())[:80]
+    return compact.startswith("为什么需要") or compact.startswith("为什么要")
+
+
+def _has_weak_concept_display_shape(value: str) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if _starts_with_analogy(text):
+        return True
+    paragraphs = [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
+    if len(paragraphs) <= 1 and len(re.sub(r"\s+", "", text)) > _MAX_CONCEPT_PARAGRAPH_CHARS:
+        return True
+    return any(len(re.sub(r"\s+", "", paragraph)) > _MAX_CONCEPT_PARAGRAPH_CHARS for paragraph in paragraphs)
+
+
+def _starts_with_analogy(value: str) -> bool:
+    first_sentence = re.split(r"[。！？!?]", str(value or "").strip(), maxsplit=1)[0][:140]
+    if not first_sentence:
+        return False
+    has_lead = any(marker in first_sentence for marker in _ANALOGY_LEAD_MARKERS)
+    has_scene = any(marker in first_sentence for marker in _ANALOGY_SCENE_MARKERS)
+    return has_lead or has_scene
 
 
 def _strip_planning_phrases(value: str) -> str:

@@ -42,6 +42,15 @@ export function decodeUtf8(buffer: ArrayBuffer, decoder: TextDecoder | null): st
   }
 }
 
+export function normalizeApiBase(apiBase?: string): string {
+  return String(apiBase || "").trim().replace(/\/+$/, "");
+}
+
+export function buildChatStreamUrl(apiBase?: string): string {
+  const normalizedBase = normalizeApiBase(apiBase);
+  return normalizedBase ? `${normalizedBase}/chat` : "";
+}
+
 export function createSSEParser(onMessage: (message: ParsedSSEMessage) => void) {
   let buffer = "";
   let eventName = "";
@@ -150,6 +159,36 @@ export interface DisplayAnswerExplanation {
   steps?: string[];
 }
 
+const SHORT_FINAL_ANSWER_MAX_CHARS = 80;
+const LONG_SINGLE_PARAGRAPH_MAX_CHARS = 220;
+const ANALOGY_LEAD_MARKERS = [
+  "想象",
+  "比如",
+  "举个例子",
+  "打个比方",
+  "就像",
+  "好比",
+  "类似",
+  "可以把",
+  "你可以把",
+  "假设"
+];
+const ANALOGY_SCENE_MARKERS = [
+  "餐厅",
+  "点餐",
+  "厨师",
+  "服务员",
+  "顾客",
+  "快递",
+  "外卖",
+  "包裹",
+  "寄件",
+  "收件",
+  "图书馆",
+  "邮局"
+];
+const SECTION_HEADING_PATTERN = /((?:为什么(?:需要|要)\s*[\w\u4e00-\u9fff/+\-.#]{0,32}|[\w\u4e00-\u9fff/+\-.#]{0,32}\s*(?:是\s*什么|是什么|如何工作|怎么工作|工作方式|主要作用|作用|特点|易错点))\s*[：:])/g;
+
 export function stripMarkdownArtifacts(text: string): string {
   return stripPlanningArtifacts(String(text || "")
     .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-zA-Z]*\n?/g, "").replace(/```/g, ""))
@@ -162,19 +201,26 @@ export function buildDisplayAnswerContent(
   finalAnswer: string,
   explanation?: DisplayAnswerExplanation
 ): string {
-  const finalContent = stripMarkdownArtifacts(finalAnswer);
+  const finalContent = prioritizeDefinitionSection(stripMarkdownArtifacts(finalAnswer));
   const stepContent = (explanation?.steps || [])
     .map((item) => stripMarkdownArtifacts(item))
     .filter((item) => !looksLikePlanningText(item))
     .filter(Boolean)
     .join("\n\n");
+  const normalizedStepContent = prioritizeDefinitionSection(stepContent);
 
   if (finalContent && !looksLikePlanningText(finalContent)) {
+    if (normalizedStepContent && shouldPreferStepContent(finalContent, normalizedStepContent)) {
+      return dedupeDisplayAnswer(normalizedStepContent);
+    }
+    if (normalizedStepContent && shouldExpandShortFinalAnswer(finalContent, normalizedStepContent)) {
+      return dedupeDisplayAnswer(`${finalContent}\n\n${normalizedStepContent}`);
+    }
     return dedupeDisplayAnswer(finalContent);
   }
 
-  if (stepContent) {
-    return dedupeDisplayAnswer(stepContent);
+  if (normalizedStepContent) {
+    return dedupeDisplayAnswer(normalizedStepContent);
   }
   if (explanation?.topic?.trim()) {
     return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
@@ -203,6 +249,78 @@ function stripPlanningArtifacts(text: string): string {
 
 function looksLikePlanningText(text: string): boolean {
   return /用户想|用户希望|用户需要|需要从.*(?:方面|角度|维度).*讲解|我将|我会|下面我/.test(text);
+}
+
+function prioritizeDefinitionSection(text: string): string {
+  const normalized = String(text || "").trim();
+  if (!startsWithWhyNeeded(normalized)) return normalized;
+
+  const matches: Array<{ heading: string; index: number }> = [];
+  let match: RegExpExecArray | null;
+  SECTION_HEADING_PATTERN.lastIndex = 0;
+  while ((match = SECTION_HEADING_PATTERN.exec(normalized)) !== null) {
+    matches.push({ heading: String(match[1] || ""), index: match.index });
+  }
+  SECTION_HEADING_PATTERN.lastIndex = 0;
+  if (matches.length < 2) return normalized;
+
+  const segments = matches
+    .map((item, index) => {
+      const start = item.index;
+      const end = index + 1 < matches.length ? matches[index + 1].index : normalized.length;
+      return {
+        heading: item.heading,
+        text: normalized.slice(start, end).trim()
+      };
+    })
+    .filter((item) => item.text);
+
+  const definitionIndex = segments.findIndex((item) => item.heading.replace(/\s+/g, "").includes("是什么"));
+  if (definitionIndex <= 0) return normalized;
+
+  const ordered = [
+    segments[definitionIndex],
+    ...segments.slice(0, definitionIndex),
+    ...segments.slice(definitionIndex + 1)
+  ];
+  return ordered.map((item) => item.text).join("\n\n").trim();
+}
+
+function startsWithWhyNeeded(text: string): boolean {
+  const compact = String(text || "").replace(/\s+/g, "").slice(0, 80);
+  return compact.startsWith("为什么需要") || compact.startsWith("为什么要");
+}
+
+function shouldPreferStepContent(finalContent: string, stepContent: string): boolean {
+  if (!stepContent.trim()) return false;
+  if (startsWithAnalogy(finalContent)) return true;
+  return isSingleLongParagraph(finalContent, LONG_SINGLE_PARAGRAPH_MAX_CHARS);
+}
+
+function shouldExpandShortFinalAnswer(finalContent: string, stepContent: string): boolean {
+  const finalLength = compactTextLength(finalContent);
+  const stepLength = compactTextLength(stepContent);
+  if (!finalLength || finalLength > SHORT_FINAL_ANSWER_MAX_CHARS) return false;
+  return stepLength >= Math.max(36, Math.floor(finalLength * 1.4));
+}
+
+function startsWithAnalogy(text: string): boolean {
+  const firstSentence = String(text || "").trim().split(/[。！？!?]/, 1)[0].slice(0, 160);
+  if (!firstSentence) return false;
+  const hasLeadAtStart = ANALOGY_LEAD_MARKERS.some((marker) => firstSentence.startsWith(marker));
+  if (hasLeadAtStart) return true;
+  const hasAnalogyCue = ANALOGY_LEAD_MARKERS.some((marker) => firstSentence.includes(marker));
+  const hasScene = ANALOGY_SCENE_MARKERS.some((marker) => firstSentence.includes(marker));
+  return hasAnalogyCue && hasScene;
+}
+
+function isSingleLongParagraph(text: string, maxCompactLength: number): boolean {
+  const paragraphs = String(text || "").split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
+  return paragraphs.length <= 1 && compactTextLength(text) > maxCompactLength;
+}
+
+function compactTextLength(text: string): number {
+  return String(text || "").replace(/\s+/g, "").length;
 }
 
 function collapseAdjacentDuplicateParagraphs(text: string): string {

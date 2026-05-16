@@ -497,6 +497,38 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertNotIn("安全兜底", response.answer)
         self.assertFalse(result.get("web_search_attempted", False))
 
+    def test_non_408_stable_question_uses_general_answer_route(self) -> None:
+        class CapturingAdapter:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def answer(self, **kwargs):
+                self.calls.append(kwargs)
+                return FinalResponse(
+                    answer="番茄炒蛋通常先炒鸡蛋，再炒番茄，最后合炒并按口味调味。",
+                    source_level=SourceLevel.MODEL,
+                    ui_payload={"answer_mode": "captured_general"},
+                )
+
+        adapter = CapturingAdapter()
+        result = build_graph(adapter=adapter).compile().invoke(
+            {
+                "run_id": "run-qa-general-answer",
+                "user_id": "u1",
+                "user_message": "怎么做番茄炒蛋？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(result["goal_route"], "out_of_scope")
+        self.assertEqual(adapter.calls[0]["question_type"], "general")
+        self.assertEqual(adapter.calls[0]["evidence"], [])
+        self.assertIn("番茄炒蛋", response.answer)
+        self.assertNotIn("不属于 408", response.answer)
+        self.assertEqual(response.ui_payload["answer_mode"], "out_of_scope_general_answer")
+        self.assertEqual(response.ui_payload["general_answer_route"], "out_of_scope_general_answer")
+
     def test_client_requested_web_with_empty_evidence_keeps_stable_concept_model_only(self) -> None:
         class EmptyWebToolExecutor:
             def __init__(self) -> None:

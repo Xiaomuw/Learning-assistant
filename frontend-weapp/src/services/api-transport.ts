@@ -2,6 +2,7 @@ import Taro from "@tarojs/taro";
 
 export const API_TRANSPORT = process.env.TARO_APP_API_TRANSPORT || "request";
 export const API_BASE = process.env.TARO_APP_API_BASE || "";
+export const CHAT_STREAM_API_BASE = process.env.TARO_APP_CHAT_STREAM_API_BASE || API_BASE;
 export const CLOUD_ENV = process.env.TARO_APP_CLOUD_ENV || "";
 export const CONTAINER_SERVICE = process.env.TARO_APP_CONTAINER_SERVICE || "";
 
