@@ -7,7 +7,12 @@ from uuid import uuid4
 
 from loguru import logger
 
-from app.application.chat.answer_cleaning import clean_display_answer, should_preserve_notebook_notice
+from app.application.chat.answer_cleaning import (
+    clean_display_answer,
+    clean_display_steps,
+    compose_display_answer,
+    should_preserve_notebook_notice,
+)
 from app.application.chat.messages import normalize_explanation_payload
 from app.infrastructure.llm.langsmith import trace_run
 from app.orchestration.graphs.orchestrator.graph import build_graph as build_orchestrator_graph
@@ -391,8 +396,16 @@ def _chat_state_from_orchestrator_result(
             str(explanation.get("final_answer") or ""),
             preserve_notebook_notice=preserve_notebook_notice,
         )
-    final_answer = clean_display_answer(
+    if explanation.get("steps") is not None:
+        explanation["steps"] = clean_display_steps(
+            explanation.get("steps"),
+            preserve_notebook_notice=preserve_notebook_notice,
+        )
+    resolved_question_type = str(envelope_sync.get("question_type") or question_type)
+    final_answer = compose_display_answer(
         str(envelope_sync.get("final_answer") or response.answer),
+        explanation,
+        question_type=resolved_question_type,
         preserve_notebook_notice=preserve_notebook_notice,
     )
     return {
@@ -400,7 +413,7 @@ def _chat_state_from_orchestrator_result(
         "message_id": str(initial_state.get("message_id") or initial_state.get("request_id") or ""),
         "request_id": str(initial_state.get("request_id") or initial_state.get("message_id") or ""),
         "client_request_id": str(initial_state.get("client_request_id") or ""),
-        "question_type": str(envelope_sync.get("question_type") or question_type),
+        "question_type": resolved_question_type,
         "route": str(envelope_sync.get("route") or route),
         "source_policy": str(graph_result.get("source_policy") or initial_state.get("source_policy") or ""),
         "explanation": explanation,
@@ -546,8 +559,11 @@ def _stream_chunk_from_orchestrator_update(
 def _final_answer_chunk(final_state: dict[str, Any], *, node: str, elapsed: float) -> dict[str, Any]:
     runtime = final_state.get("graph_runtime") if isinstance(final_state.get("graph_runtime"), dict) else {}
     latency_ms = int(runtime.get("latency_ms") or round(elapsed * 1000))
-    final_answer = clean_display_answer(
+    explanation = final_state.get("explanation") if isinstance(final_state.get("explanation"), dict) else {}
+    final_answer = compose_display_answer(
         str(final_state.get("final_answer") or ""),
+        explanation,
+        question_type=str(final_state.get("question_type") or ""),
         preserve_notebook_notice=should_preserve_notebook_notice(final_state),
     )
     state_update = {

@@ -18,7 +18,7 @@ ANSWER_STYLE_INSTRUCTIONS: dict[str, str] = {
         "- 默认给出 1 个贴合用户问题的具体例子或小场景，除非用户明确要求一句话/只要答案\n"
         "- 可以用直觉化、生活化语言解释，但不要让类比替代定义\n"
         "- 如果用户问的是对比类（A和B的区别），steps 先各自定义，再用表格式对比\n"
-        "- final_answer：直接总结概念本质和一个典型用途，不超过80字\n"
+        "- final_answer：给出 2-4 段/3-6 句手机端友好的完整讲解，包含定义、作用、基本工作方式和一个例子或易错点\n"
         "- similar：推荐 2-3 个能加深理解的「延伸概念」"
     ),
     "problem": (
@@ -197,11 +197,11 @@ answer_mode: {answer_mode}
 
 要求：
 1. topic 必须明确，反映当前问题类型
-2. thinking 用 1-2 句话讲清理解切入点（按上方策略执行）
-3. steps 按上方策略组织，长度和内容因问题类型而异
+2. thinking 只写安全的过程摘要，普通答案气泡不会展示它；不要写详细推理链
+3. steps 按上方策略组织，长度和内容因问题类型而异；steps 必须是可给用户看的讲解内容
 4. mistakes 按策略要求填写（smalltalk 可留空）
 5. similar 按策略推荐相关内容
-6. final_answer 按策略给出适合直接展示给用户的总结
+6. final_answer 按策略给出适合直接展示给用户的完整答案
 7. 模型的教学讲解是主线；Notebook 是辅助上下文，不是唯一知识来源
 8. 如果 notebook_required=false，即使 notebook 上下文为空，也不能因为 notebook 为空拒答普通概念问题
 9. 如果 source_policy=notebook 或实际使用了 notebook，必须说明“参考你的 notebook/资料”；如果资料不足，不要编造
@@ -212,6 +212,7 @@ answer_mode: {answer_mode}
 14. 如果用户问工具调用或联网情况，必须只根据运行记录回答；不要把“通常不需要搜索”当作是否搜索的事实依据
 15. 所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、表格、分隔线、|| 或引用符号
 16. 面向手机小屏展示：steps 每条尽量一两句话，避免长段堆叠；需要列点时用简短自然语言，不要嵌套列表
+17. 禁止在 final_answer 或 steps 中输出“用户想了解/用户想知道/需要从几个方面讲解/我将/我会/下面我来”等规划或思考过程文本
 """
 
 STRUCTURED_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
@@ -233,6 +234,7 @@ MANUAL_SCHEMA_PROMPT = ChatPromptTemplate.from_messages(
             "如果没有易错点，mistakes 必须输出空字符串，不要输出数组。\n"
             "所有字段必须是纯文本；不要使用 Markdown 标记，不要输出 ###、**、```、表格、分隔线、|| 或引用符号。\n"
             "面向手机小屏展示，steps 每条保持短句，不要长段堆叠或嵌套列表。\n"
+            "final_answer 和 steps 必须是直接给用户看的答案，禁止写“用户想了解/需要从几个方面讲解/我将/我会”等规划文本。\n"
             "不要输出任何额外说明。",
         ),
         MessagesPlaceholder("conversation"),

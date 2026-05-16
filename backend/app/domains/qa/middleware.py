@@ -188,6 +188,15 @@ def _wrap_plain_text_as_answer(raw_output: Any, question_type: str = "") -> Answ
     )
 
 
+def _final_answer_from_validated_answer(answer: AnswerSchema) -> str:
+    if answer.final_answer:
+        return answer.final_answer
+    step_answer = "\n\n".join(str(item).strip() for item in answer.steps[:3] if str(item).strip())
+    if step_answer:
+        return step_answer
+    return "这轮暂时没有生成完整答案，请换一种问法再试。"
+
+
 def postprocess_middleware(
     agent_result: AgentExecutionResult,
     model_profile: ModelProfile,
@@ -252,5 +261,5 @@ def postprocess_middleware(
         )
 
     agent_result.answer = validated
-    agent_result.final_answer = validated.final_answer or validated.thinking
+    agent_result.final_answer = _final_answer_from_validated_answer(validated)
     return agent_result

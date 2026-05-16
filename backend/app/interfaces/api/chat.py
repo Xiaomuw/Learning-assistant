@@ -33,7 +33,12 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-from app.application.chat.answer_cleaning import clean_display_answer, should_preserve_notebook_notice
+from app.application.chat.answer_cleaning import (
+    clean_display_answer,
+    clean_display_steps,
+    compose_display_answer,
+    should_preserve_notebook_notice,
+)
 from app.application.chat.service import (
     run_chat_once_with_state,
     stream_chat,
@@ -306,13 +311,20 @@ def _sanitize_chat_response(
     """Apply the same user-facing answer cleanup at every sync/job exit."""
 
     explanation = dict(response.explanation or {})
+    if explanation.get("steps") is not None:
+        explanation["steps"] = clean_display_steps(
+            explanation.get("steps"),
+            preserve_notebook_notice=preserve_notebook_notice,
+        )
     if explanation.get("final_answer") is not None:
         explanation["final_answer"] = clean_display_answer(
             str(explanation.get("final_answer") or ""),
             preserve_notebook_notice=preserve_notebook_notice,
         )
-    final_answer = clean_display_answer(
+    final_answer = compose_display_answer(
         response.final_answer,
+        explanation,
+        question_type=response.question_type,
         preserve_notebook_notice=preserve_notebook_notice,
     )
     return response.model_copy(

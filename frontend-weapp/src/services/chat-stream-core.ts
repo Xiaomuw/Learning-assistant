@@ -151,11 +151,11 @@ export interface DisplayAnswerExplanation {
 }
 
 export function stripMarkdownArtifacts(text: string): string {
-  return String(text || "")
+  return stripPlanningArtifacts(String(text || "")
     .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-zA-Z]*\n?/g, "").replace(/```/g, ""))
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
-    .trim();
+    .trim());
 }
 
 export function buildDisplayAnswerContent(
@@ -165,13 +165,11 @@ export function buildDisplayAnswerContent(
   const finalContent = stripMarkdownArtifacts(finalAnswer);
   const stepContent = (explanation?.steps || [])
     .map((item) => stripMarkdownArtifacts(item))
+    .filter((item) => !looksLikePlanningText(item))
     .filter(Boolean)
     .join("\n\n");
 
-  if (finalContent) {
-    if (shouldExpandShortFinalAnswer(finalContent, stepContent)) {
-      return dedupeDisplayAnswer(`${finalContent}\n\n${stepContent}`);
-    }
+  if (finalContent && !looksLikePlanningText(finalContent)) {
     return dedupeDisplayAnswer(finalContent);
   }
 
@@ -184,15 +182,27 @@ export function buildDisplayAnswerContent(
   return "讲解已经准备好了。";
 }
 
-function shouldExpandShortFinalAnswer(finalContent: string, stepContent: string): boolean {
-  if (!stepContent) return false;
-  const finalLength = compactTextLength(finalContent);
-  const stepLength = compactTextLength(stepContent);
-  return finalLength > 0 && finalLength <= 80 && stepLength >= finalLength * 1.5;
+function stripPlanningArtifacts(text: string): string {
+  let normalized = String(text || "");
+  const patterns = [
+    /(?:用户|你|您)(?:想|希望|需要|正在|是想)(?:了解|知道|询问|学习|掌握)[^。！？!?\n]{0,120}[。！？!?\n]?\s*/g,
+    /(?:我|我们|下面)(?:会|将|先|来|要|可以)[^。！？!?\n]{0,120}(?:讲解|说明|解释|回答|展开)[^。！？!?\n]{0,40}[。！？!?\n]?\s*/g,
+    /(?:需要|可以|应该|最好)?从[^。！？!?\n]{0,100}(?:方面|角度|维度)(?:来)?(?:讲解|说明|解释|展开)[^。！？!?\n]{0,40}[。！？!?\n]?\s*/g,
+    /(?:按|按照)[^。！？!?\n]{0,80}(?:结构|顺序)(?:讲解|说明|解释|展开)[^。！？!?\n]{0,40}[。！？!?\n]?\s*/g
+  ];
+  patterns.forEach((pattern) => {
+    normalized = normalized.replace(pattern, "");
+  });
+  return normalized
+    .replace(/\s+/g, " ")
+    .replace(/[，,]\s*([。！？!?])/g, "$1")
+    .replace(/[：:]\s*([。！？!?])/g, "$1")
+    .replace(/[，,：:]\s*$/, "。")
+    .trim();
 }
 
-function compactTextLength(value: string): number {
-  return String(value || "").replace(/\s+/g, "").length;
+function looksLikePlanningText(text: string): boolean {
+  return /用户想|用户希望|用户需要|需要从.*(?:方面|角度|维度).*讲解|我将|我会|下面我/.test(text);
 }
 
 function collapseAdjacentDuplicateParagraphs(text: string): string {

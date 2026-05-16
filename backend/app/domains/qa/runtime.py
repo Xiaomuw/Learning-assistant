@@ -695,16 +695,13 @@ def _compose_teaching_final_answer(explanation: dict[str, Any]) -> str:
     if explicit_final:
         return compact_answer_summary(explicit_final)
 
-    thinking = strip_markdown_artifacts(str(explanation.get("thinking") or "").strip())
     steps = [
         strip_markdown_artifacts(str(item).strip())
         for item in list(explanation.get("steps") or [])
         if str(item).strip()
     ]
-    if thinking:
-        return compact_answer_summary(thinking)
     if steps:
-        return compact_answer_summary(steps[0])
+        return compact_answer_summary(" ".join(steps[:3]), max_chars=420)
     return "我已经整理好这轮讲解，下面按结构给你拆开看。"
 
 

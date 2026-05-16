@@ -569,6 +569,89 @@ class ChatApiTest(unittest.TestCase):
         self.assertNotIn("递归", payload["final_answer"])
         self.assertNotIn("链表", payload["final_answer"])
 
+    def test_chat_sync_uses_steps_when_final_answer_is_planning_text(self) -> None:
+        def _planning_chat_once(**_kwargs):
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-planning",
+                question_type="concept",
+                route="explain",
+                final_answer="用户想了解 HTTP 的基本概念。",
+                explanation=ExplanationPayload(
+                    topic="HTTP",
+                    thinking="用户想了解 HTTP 的基本概念，需要从定义和作用几个方面讲解。",
+                    steps=[
+                        "HTTP 是互联网通信的基础协议，需要从定义、作用几个方面来讲解。",
+                        "客户端发送请求，服务器返回响应。",
+                        "客户端发送请求，服务器返回响应。",
+                    ],
+                    mistakes="不要把 HTTP 当成传输层协议。",
+                    similar=["HTTPS", "TCP"],
+                ),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_planning_chat_once):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-planning-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-planning",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("HTTP 是互联网通信的基础协议", payload["final_answer"])
+        self.assertIn("客户端发送请求，服务器返回响应", payload["final_answer"])
+        self.assertNotIn("用户想了解", payload["final_answer"])
+        self.assertNotIn("需要从", payload["final_answer"])
+        self.assertEqual(payload["final_answer"].count("客户端发送请求"), 1)
+
+    def test_chat_sync_empty_final_answer_does_not_fall_back_to_thinking(self) -> None:
+        def _empty_final_chat_once(**_kwargs):
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-empty-final",
+                question_type="concept",
+                route="explain",
+                final_answer="",
+                explanation=ExplanationPayload(
+                    topic="HTTP",
+                    thinking="用户想了解 HTTP 的基本概念。",
+                    steps=[
+                        "HTTP 是应用层协议。",
+                        "它使用请求-响应模型，在客户端和服务器之间传递消息。",
+                    ],
+                    mistakes="不要把 HTTP 当成传输层协议。",
+                    similar=["HTTPS", "TCP"],
+                ),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_empty_final_chat_once):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-empty-final-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-empty-final",
+                    "question": "什么是 HTTP？",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(
+            payload["final_answer"],
+            "HTTP 是应用层协议。\n\n它使用请求-响应模型，在客户端和服务器之间传递消息。",
+        )
+        self.assertNotIn("用户想了解", payload["final_answer"])
+
     def test_chat_job_poll_cleans_duplicate_completed_result(self) -> None:
         self.chat_jobs["dedupe-job-1"] = {
             "job_id": "dedupe-job-1",

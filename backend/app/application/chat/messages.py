@@ -4,7 +4,12 @@ import time
 import os
 from typing import Any
 
-from app.application.chat.answer_cleaning import clean_display_answer, should_preserve_notebook_notice
+from app.application.chat.answer_cleaning import (
+    clean_display_answer,
+    clean_display_steps,
+    compose_display_answer,
+    should_preserve_notebook_notice,
+)
 from app.domains.practice.service import normalize_quiz_item
 from app.shared.markdown_cleaning import strip_markdown_artifacts, strip_markdown_list
 from app.shared.schemas.contracts import ExplanationPayload
@@ -84,8 +89,15 @@ def build_assistant_message(final_state: dict[str, Any], *, include_process: boo
     explanation = explanation_payload.model_dump()
     quiz_items = [normalize_quiz_item(item).model_dump() for item in (final_state.get("quiz_items") or [])]
     preserve_notebook_notice = should_preserve_notebook_notice(final_state)
-    final_answer = clean_display_answer(
+    if explanation.get("steps") is not None:
+        explanation["steps"] = clean_display_steps(
+            explanation.get("steps"),
+            preserve_notebook_notice=preserve_notebook_notice,
+        )
+    final_answer = compose_display_answer(
         str(final_state.get("final_answer", "") or ""),
+        explanation,
+        question_type=str(final_state.get("question_type") or ""),
         preserve_notebook_notice=preserve_notebook_notice,
     )
     if explanation.get("final_answer"):

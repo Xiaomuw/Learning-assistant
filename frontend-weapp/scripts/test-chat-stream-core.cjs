@@ -150,12 +150,7 @@ try {
           ]
         }
       ),
-      [
-        "HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。",
-        "HTTP 的全称是 HyperText Transfer Protocol，中文叫超文本传输协议。",
-        "它规定客户端如何请求资源、服务器如何返回资源。",
-        "HTTP 采用请求-响应模型。"
-      ].join("\n\n")
+      "HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。"
     );
     assert.equal(
       buildDisplayAnswerContent("", {
@@ -163,6 +158,16 @@ try {
         steps: ["HTTP 是应用层协议。", "它使用请求-响应模型。"]
       }),
       "HTTP 是应用层协议。\n\n它使用请求-响应模型。"
+    );
+    assert.equal(
+      buildDisplayAnswerContent("用户想了解 HTTP 的基本概念。", {
+        topic: "HTTP",
+        steps: [
+          "HTTP 是互联网通信的基础协议，需要从定义和作用几个方面来讲解。",
+          "客户端发送请求，服务器返回响应。"
+        ]
+      }),
+      "HTTP 是互联网通信的基础协议。\n\n客户端发送请求，服务器返回响应。"
     );
     assert.equal(dedupeDisplayAnswer("1 + 1 = 2。 1 + 1 = 2。"), "1 + 1 = 2。");
     assert.equal(
