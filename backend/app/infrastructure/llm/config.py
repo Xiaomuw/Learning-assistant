@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_CHAT_MODEL = "deepseek-v4-flash"
+DEFAULT_CHAT_MODEL = "deepseek-v4-pro"
 DEFAULT_EMBEDDING_MODEL = "models/gemini-embedding-2"
 DEFAULT_OPENAI_COMPATIBLE_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_FALLBACK_CHAT_MODEL = "deepseek-v4-flash"
