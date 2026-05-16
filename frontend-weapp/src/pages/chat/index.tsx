@@ -3,7 +3,7 @@ import Taro, { useDidShow, useUnload } from "@tarojs/taro";
 import { Button, ScrollView, Text, Textarea, View } from "@tarojs/components";
 import { deleteSession, ensureAuthSession, fetchModelHealth, fetchNotebooks, fetchSessions } from "@/services/api";
 import { sendChatStream } from "@/services/chat-stream";
-import { dedupeDisplayAnswer } from "@/services/chat-stream-core";
+import { buildChatStreamPayload, dedupeDisplayAnswer } from "@/services/chat-stream-core";
 import { requireAuthUser } from "@/store/auth";
 import {
   clearChatDraft,
@@ -591,6 +591,22 @@ function statusStage(data: any): ChatProcessStage {
   };
 }
 
+function webSearchStageFromData(data: any): ChatProcessStage | undefined {
+  const hasWebSignal = data?.web_search_attempted !== undefined
+    || data?.web_search_used !== undefined
+    || Boolean(data?.web_search_error)
+    || Boolean(data?.web_search_diagnosis);
+  if (!hasWebSignal) return undefined;
+  const searchStatus = webSearchStatusText(data);
+  return {
+    key: "web_search",
+    label: "网络搜索",
+    detail: searchStatus || (data?.web_search_used ? "已联网参考资料整理。" : "未使用网络搜索。"),
+    status: data?.web_search_error || data?.status === "failed" ? "failed" : "completed",
+    ...(typeof data?.elapsed === "number" ? { elapsed: data.elapsed } : {})
+  };
+}
+
 function streamTransportLabel(transport?: string) {
   const normalized = safeText(transport);
   if (normalized === "chunked") return "chunked 流式";
@@ -631,6 +647,7 @@ export default function ChatPage() {
   });
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState(DEFAULT_NOTEBOOK_ID);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [sessionId, setSessionId] = useState("");
   // History drawer
   const [showHistory, setShowHistory] = useState(false);
@@ -1054,6 +1071,7 @@ export default function ChatPage() {
       const reasoningSummary = safeText(data?.reasoning_summary);
       const toolCalls = mergeToolCalls(data?.tool_calls, data?.external_tool_calls);
       const execution = buildExecutionInfo(data);
+      const webSearchStage = webSearchStageFromData(data);
       const toolDecisionRounds = Array.isArray(data?.tool_decision_rounds)
         ? data.tool_decision_rounds
         : [];
@@ -1064,6 +1082,9 @@ export default function ChatPage() {
         processMetaRef.current.reasoningSummary = reasoningSummary;
       }
       mergeCurrentToolCalls(toolCalls);
+      if (webSearchStage) {
+        upsertStage(webSearchStage);
+      }
       if (toolDecisionRounds.length > 0) {
         const usedToolCount = toolDecisionRounds.filter((item: any) => {
           const tool = safeText(item?.tool || item?.capability || item?.name);
@@ -1200,6 +1221,7 @@ export default function ChatPage() {
     setLearningStoreUser(user.id);
 
     const nextSessionId = sessionId || createSessionId();
+    const allowWebForRequest = webSearchEnabled;
     setSessionId(nextSessionId);
     setStoredSessionId(nextSessionId);
     resetStreamRefs();
@@ -1210,17 +1232,18 @@ export default function ChatPage() {
     ]);
     setInputValue("");
     setStreamText("");
-    setStatusText("正在接入模型");
+    setStatusText(allowWebForRequest ? "联网搜索已开启，正在接入模型" : "正在接入模型");
     setIsStreaming(true);
 
     streamTaskRef.current = sendChatStream(
-      {
+      buildChatStreamPayload({
         user_id: user.id,
         session_id: nextSessionId,
         question,
         subject_id: selectedNotebookId || DEFAULT_NOTEBOOK_ID,
-        thinking_mode: false
-      },
+        thinking_mode: false,
+        allow_web: allowWebForRequest
+      }),
       {
         onEvent: ({ event, data }) => handleStreamEvent(event, data),
         onDone: finalizeAfterReplay,
@@ -1231,6 +1254,11 @@ export default function ChatPage() {
 
   function handleSend() {
     void sendQuestion(inputValue);
+  }
+
+  function toggleWebSearch() {
+    if (isStreaming) return;
+    setWebSearchEnabled((current) => !current);
   }
 
   function handleNewChat() {
@@ -1613,6 +1641,14 @@ export default function ChatPage() {
       </ScrollView>
 
       <View className="composer card">
+        <Button
+          className={`button-secondary web-search-toggle ${webSearchEnabled ? "active" : ""}`}
+          disabled={isStreaming}
+          onClick={toggleWebSearch}
+        >
+          <Text className="web-search-toggle-icon">网</Text>
+          <Text className="web-search-toggle-label">{webSearchEnabled ? "联网开" : "联网"}</Text>
+        </Button>
         <Textarea
           className="composer-input"
           value={inputValue}

@@ -5,6 +5,26 @@ export interface ParsedSSEMessage {
   data: string;
 }
 
+export interface ChatStreamPayloadDraft {
+  user_id: string;
+  session_id: string;
+  question: string;
+  subject_id: string;
+  thinking_mode?: boolean;
+  allow_web?: boolean;
+}
+
+export function buildChatStreamPayload(draft: ChatStreamPayloadDraft): ChatStreamPayloadDraft {
+  return {
+    user_id: draft.user_id,
+    session_id: draft.session_id,
+    question: draft.question,
+    subject_id: draft.subject_id,
+    thinking_mode: Boolean(draft.thinking_mode),
+    allow_web: Boolean(draft.allow_web)
+  };
+}
+
 export function decodeUtf8(buffer: ArrayBuffer, decoder: TextDecoder | null): string {
   const bytes = new Uint8Array(buffer);
   if (decoder) {

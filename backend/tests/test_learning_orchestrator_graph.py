@@ -72,9 +72,10 @@ class LearningOrchestratorGraphTest(unittest.TestCase):
         self.assertEqual(result["intent_decision"]["intent"], OrchestratorIntent.QA.value)
         self.assertEqual(result["intent_decision"]["target_graph_type"], GraphType.QA.value)
         self.assertEqual(result["child_graph_result"]["task_type"], GraphType.QA.value)
-        self.assertEqual(result["child_graph_result"]["status"], "succeeded")
+        self.assertEqual(result["child_graph_result"]["status"], "degraded")
         self.assertEqual(result["child_graph_output"]["target_graph_type"], GraphType.QA.value)
         self.assertEqual(result["final_response"]["ui_payload"]["target_graph_type"], GraphType.QA.value)
+        self.assertEqual(result["final_response"]["ui_payload"]["answer_mode"], "hard_fallback")
         self.assertEqual(result["response_envelope"]["final"]["final_answer"], result["final_response"]["answer"])
         self.assertEqual(result["response_envelope"]["sync_payload"]["final_answer"], result["final_response"]["answer"])
 

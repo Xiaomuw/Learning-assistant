@@ -635,6 +635,7 @@ $shadow-md: 4px 6px 0px 0px $neo-ink;
 
 .composer-input {
   flex: 1;
+  min-width: 0;
   min-height: 76px;
   max-height: 220px;
   box-sizing: border-box;
@@ -652,6 +653,56 @@ $shadow-md: 4px 6px 0px 0px $neo-ink;
 .composer-button {
   width: 148px;
   margin: 0;
+}
+
+.web-search-toggle {
+  width: 132px;
+  height: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  background: $neo-white;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.web-search-toggle.active {
+  background: $neo-blue;
+}
+
+.web-search-toggle[disabled] {
+  opacity: 0.55;
+}
+
+.web-search-toggle-icon,
+.web-search-toggle-label {
+  display: block;
+  color: $neo-ink;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.web-search-toggle-icon {
+  width: 32px;
+  height: 32px;
+  border: 2px solid $neo-ink;
+  border-radius: 50%;
+  background: $neo-secondary;
+  font-size: 20px;
+  line-height: 30px;
+  text-align: center;
+}
+
+.web-search-toggle-label {
+  font-size: 19px;
+  white-space: nowrap;
 }
 
 /* ── History Drawer ── */

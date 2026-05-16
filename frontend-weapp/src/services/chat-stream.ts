@@ -3,6 +3,7 @@ import { clearAuthSession, getAccessToken } from "@/store/auth";
 import { API_BASE, refreshAuthSession } from "@/services/api";
 import { ApiTransportError, callApiTransport, isContainerTransportEnabled } from "@/services/api-transport";
 import {
+  buildChatStreamPayload,
   createSSEParser,
   dedupeDisplayAnswer,
   decodeUtf8,
@@ -19,6 +20,7 @@ export interface ChatStreamPayload {
   question: string;
   subject_id: string;
   thinking_mode?: boolean;
+  allow_web?: boolean;
 }
 
 export interface ChatStreamHandlers {
@@ -109,6 +111,7 @@ function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
 }
 
 export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamHandlers) {
+  const requestPayload = buildChatStreamPayload(payload);
   let completed = false;
   let activeTask: Taro.RequestTask<any> | null = null;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -214,7 +217,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         detail,
         status: "running",
         streaming_mode: "sync",
-        session_id: payload.session_id,
+        session_id: requestPayload.session_id,
         ...extra
       }
     });
@@ -236,7 +239,13 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         session_id: result.session_id,
         status: result.status,
         job_id: result.job_id,
-        request_id: result.request_id
+        request_id: result.request_id,
+        tool_calls: result.tool_calls,
+        external_tool_calls: result.external_tool_calls,
+        tool_invocation_trace: result.tool_invocation_trace,
+        web_search_attempted: result.web_search_attempted,
+        web_search_used: result.web_search_used,
+        web_search_error: result.web_search_error
       }
     });
     if (
@@ -253,7 +262,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
           quiz_generation_status: result.quiz_generation_status,
           final_answer: result.final_answer,
           session_id: result.session_id,
-          subject_id: payload.subject_id
+          subject_id: requestPayload.subject_id
         }
       });
     }
@@ -395,7 +404,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     try {
       const response = await callApiTransport<any>("/chat/sync", {
         method: "POST",
-        data: payload,
+        data: requestPayload,
         header: {
           "Content-Type": "application/json",
           ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {})
@@ -462,7 +471,7 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     activeTask = Taro.request({
       url: `${API_BASE}/chat`,
       method: "POST",
-      data: payload,
+      data: requestPayload,
       header: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",

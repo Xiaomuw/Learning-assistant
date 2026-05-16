@@ -12,8 +12,20 @@ class QAGraphState(BaseLearningState, total=False):
     question_boundary: dict[str, Any]
     previous_tool_invocation_trace: dict[str, Any] | None
     tool_invocation_trace: dict[str, Any]
+    qa_flow_version: str
+    goal_route: str
+    hard_fallback_reason: str
+    allow_web: bool
+    web_search_requested: bool
     has_web_search_tool: bool
     web_search_enabled: bool
+    web_retry_count: int
+    max_web_retry: int
+    rethink_retry_count: int
+    max_rethink_retry: int
+    generate_retry_count: int
+    max_generate_retry: int
+    quality_gate_decision: str
     context_dependency: dict[str, Any]
     intent_result: dict[str, Any]
     parent_intent_decision: dict[str, Any]
@@ -25,6 +37,10 @@ class QAGraphState(BaseLearningState, total=False):
     notebook_evidence: list[dict[str, Any]]
     web_evidence: list[dict[str, Any]]
     pending_web_evidence: list[dict[str, Any]]
+    web_query: str
+    web_filtered_sources: list[dict[str, Any]]
+    web_extracted_evidence: list[dict[str, Any]]
+    web_staging_notes: list[dict[str, Any]]
     evidence_judgement: dict[str, Any]
     evidence_confidence: dict[str, Any]
     external_evidence_judgement: dict[str, Any]

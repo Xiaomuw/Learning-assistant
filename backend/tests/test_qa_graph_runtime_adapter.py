@@ -20,7 +20,7 @@ from app.domains.qa.runtime import _stream_delta_to_text, _stream_reasoning_delt
 from app.domains.qa.schemas import AgentExecutionResult, AgentRequest, AnswerSchema
 from app.orchestration.graphs.qa.adapter import ProductionQARuntimeAdapter
 from app.orchestration.graphs.qa.graph import build_graph
-from app.shared.schemas.agent_graphs import FinalResponse, SourceLevel, SourcePolicy, ToolCapability, ToolStatus
+from app.shared.schemas.agent_graphs import EvidenceChunk, FinalResponse, SourceLevel, SourcePolicy, ToolCapability, ToolStatus
 from app.shared.schemas.model_profile import ModelProfile
 
 
@@ -89,12 +89,22 @@ def _runtime_request(runtime_context: dict | None = None) -> AgentRequest:
     )
 
 
+def _notebook_evidence() -> dict[str, Any]:
+    return EvidenceChunk(
+        id="nb-http-runtime",
+        source_type="notebook",
+        source_id="chunk-runtime",
+        text="HTTP 是应用层协议，采用请求和响应模型。",
+        score=0.9,
+    ).model_dump(mode="json")
+
+
 class QAGraphRuntimeAdapterTest(unittest.TestCase):
     def _invoke_with_runtime_result(
         self,
         runtime_result: AgentExecutionResult,
         *,
-        question: str = "调用工具查一下 HTTP 协议定义",
+        question: str = "什么是 HTTP？",
     ) -> dict:
         adapter = ProductionQARuntimeAdapter(
             model_name="test-model",
@@ -116,6 +126,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                     "user_message": question,
                     "question_type": "concept",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [_notebook_evidence()],
                 }
             )
 
@@ -168,9 +179,9 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         tool_result = result["tool_results"][0]
         event_types = {item["event_type"] for item in result["learning_events"]}
 
-        self.assertEqual(response.source_level, SourceLevel.MODEL)
-        self.assertEqual(response.evidence_refs, [])
-        self.assertEqual(result["evidence"], [])
+        self.assertEqual(response.source_level, SourceLevel.NOTEBOOK)
+        self.assertEqual(response.evidence_refs, ["nb-http-runtime"])
+        self.assertEqual(result["evidence"][0]["id"], "nb-http-runtime")
         self.assertEqual(tool_result["provider"], "web")
         self.assertEqual(tool_result["output"]["source"], "web")
         self.assertEqual(tool_result["capability"], ToolCapability.WEB_SEARCH.value)
@@ -436,8 +447,8 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
         )
 
         response = FinalResponse.model_validate(result["final_response"])
-        self.assertIn("缺少足够可靠的证据", response.answer)
-        self.assertEqual(response.ui_payload["answer_mode"], "clarification_required")
+        self.assertIn("参考你的资料", response.answer)
+        self.assertEqual(response.ui_payload["answer_mode"], "answer_repaired")
         self.assertIn("empty_answer", {item["code"] for item in result["errors"]})
 
     def test_runtime_exception_returns_safe_contract_error(self) -> None:
@@ -452,6 +463,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                     "user_id": "u1",
                     "user_message": "什么是 HTTP？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [_notebook_evidence()],
                 }
             )
 
@@ -493,6 +505,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                     "user_message": "什么是 HTTP？",
                     "question_type": "concept",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [_notebook_evidence()],
                 }
             )
 
@@ -502,8 +515,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
             result["knowledge_routes"][0]["metadata"]["concept_id"],
             "computer-network.application.http-https",
         )
-        self.assertEqual(result["retrieval_report"]["requested_count"], 1)
-        self.assertEqual(result["tool_requests"][0]["input"]["concept_id"], "computer-network.application.http-https")
+        self.assertEqual(result["retrieval_report"]["requested_count"], 0)
 
     def test_explicit_named_knowledge_base_routes_to_matching_canonical_subject(self) -> None:
         runtime_result = AgentExecutionResult(
@@ -540,6 +552,7 @@ class QAGraphRuntimeAdapterTest(unittest.TestCase):
                     "user_message": "根据计算机网络知识库解释 HTTP",
                     "question_type": "concept",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "evidence": [_notebook_evidence()],
                 }
             )
 

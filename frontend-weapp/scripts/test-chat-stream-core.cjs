@@ -24,6 +24,7 @@ function buildCoreModule() {
 }
 
 const {
+  buildChatStreamPayload,
   createSSEParser,
   dedupeDisplayAnswer,
   decodeUtf8,
@@ -32,6 +33,62 @@ const {
 } = buildCoreModule();
 
 try {
+  {
+    assert.deepEqual(
+      buildChatStreamPayload({
+        user_id: "u1",
+        session_id: "s1",
+        question: "HTTP/3 是什么？",
+        subject_id: "computer-network"
+      }),
+      {
+        user_id: "u1",
+        session_id: "s1",
+        question: "HTTP/3 是什么？",
+        subject_id: "computer-network",
+        thinking_mode: false,
+        allow_web: false
+      }
+    );
+    assert.equal(
+      buildChatStreamPayload({
+        user_id: "u1",
+        session_id: "s1",
+        question: "联网搜索 HTTP/3 现状",
+        subject_id: "computer-network",
+        allow_web: true
+      }).allow_web,
+      true
+    );
+    const sharedPayload = buildChatStreamPayload({
+      user_id: "u1",
+      session_id: "s1",
+      question: "今天有什么新标准？",
+      subject_id: "computer-network",
+      thinking_mode: false,
+      allow_web: true
+    });
+    assert.deepEqual(sharedPayload, {
+      user_id: "u1",
+      session_id: "s1",
+      question: "今天有什么新标准？",
+      subject_id: "computer-network",
+      thinking_mode: false,
+      allow_web: true
+    });
+    const chatStreamSource = fs.readFileSync(path.join(root, "src/services/chat-stream.ts"), "utf8");
+    assert.equal(
+      (chatStreamSource.match(/data: requestPayload/g) || []).length,
+      2,
+      "chunked and sync fallback transports should both send requestPayload"
+    );
+    assert.equal(
+      (chatStreamSource.match(/data: payload/g) || []).length,
+      0,
+      "chat transports should not bypass the normalized payload"
+    );
+  }
+
   {
     const messages = [];
     const parser = createSSEParser((message) => messages.push(message));

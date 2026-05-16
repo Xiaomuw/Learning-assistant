@@ -54,23 +54,25 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(
             set(build_graph().nodes),
             {
-                "input_normalize",
-                "qa_intent_classifier",
-                "context_resolver",
-                "concept_linker",
-                "knowledge_router",
-                "internal_retrieval",
-                "internal_evidence_judge",
-                "web_search_if_needed",
-                "external_evidence_judge",
-                "insufficient_evidence_response",
-                "evidence_merge",
-                "answer_generate",
-                "answer_quality_check",
-                "answer_repair",
-                "qa_clarification_response",
-                "qa_result_compose",
-                "compose_learning_events",
+                "normalize",
+                "goal_router",
+                "retrieve_core_408",
+                "grade_context",
+                "web_query_rewrite",
+                "web_search",
+                "web_source_filter",
+                "web_extract",
+                "web_knowledge_grade",
+                "web_to_408_note",
+                "upsert_web_staging",
+                "retrieve_augmented",
+                "generate_answer_or_question",
+                "quality_gate",
+                "rethink_and_revise",
+                "hard_fallback",
+                "clarify",
+                "out_of_scope",
+                "finalize",
             },
         )
 
@@ -128,11 +130,11 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         traces = list(result.get("trace_records") or [])
         stages = [item.get("stage") for item in traces]
-        self.assertIn("internal_retrieval", stages)
-        self.assertIn("internal_evidence_judge", stages)
-        self.assertIn("answer_quality_check", stages)
-        self.assertIn("final_response", stages)
-        evidence_trace = next(item for item in traces if item.get("stage") == "internal_evidence_judge")
+        self.assertIn("retrieve_core_408", stages)
+        self.assertIn("grade_context", stages)
+        self.assertIn("quality_gate", stages)
+        self.assertIn("finalize", stages)
+        evidence_trace = next(item for item in traces if item.get("stage") == "grade_context")
         self.assertTrue(evidence_trace["internal_evidence_confidence"]["sufficient"])
         final_trace = next(item for item in reversed(traces) if item.get("stage") == "final_response")
         self.assertEqual(final_trace["final_response_status"], "completed")
@@ -294,9 +296,12 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         self.assertEqual(result["normalized_question"], "什么是 HTTP？")
         self.assertEqual(result["intent_result"]["intent"], "concept_explain")
+        self.assertEqual(result["goal_route"], "answer_408")
+        self.assertEqual(result["qa_flow_version"], "408-flow-v1")
         self.assertIn("knowledge_routes", result)
         self.assertIn(result["evidence_judgement"]["status"], {"strong", "partial", "insufficient"})
-        self.assertEqual(result["answer_quality"]["status"], "pass")
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")
         self.assertEqual(result["source_usage"], "model")
 
     def test_meta_question_is_classified_as_meta(self) -> None:
@@ -357,8 +362,9 @@ class QAGraphAdapterTest(unittest.TestCase):
         )
 
         route_ids = [item["knowledge_base_id"] for item in result["knowledge_routes"]]
-        self.assertLessEqual(len(route_ids), 3)
-        self.assertIn("kb-http", route_ids)
+        self.assertLessEqual(len(route_ids), 4)
+        self.assertIn("computer-network", route_ids)
+        self.assertNotIn("kb-http", route_ids)
         self.assertNotIn("current-notebook", route_ids)
 
     def test_time_sensitive_question_runs_web_after_internal_evidence_judge_before_answer(self) -> None:
@@ -422,10 +428,11 @@ class QAGraphAdapterTest(unittest.TestCase):
         response = FinalResponse.model_validate(result["final_response"])
         self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
         self.assertTrue(result["web_search_attempted"])
-        self.assertEqual(result["evidence_judgement"]["web_count"], 0)
+        self.assertEqual(result["evidence_judgement"]["web_count"], 1)
         self.assertTrue(result["external_evidence_gate"]["sufficient"])
         self.assertEqual(result["external_evidence_judgement"]["status"], "strong")
         self.assertEqual([item["id"] for item in result["web_evidence"]], ["web-http3"])
+        self.assertEqual(len(result["web_staging_notes"]), 1)
         self.assertEqual(adapter.evidence_ids, ["web-http3"])
         self.assertEqual(result["source_usage"], "web")
         self.assertEqual(response.source_level, SourceLevel.WEB)
@@ -472,6 +479,48 @@ class QAGraphAdapterTest(unittest.TestCase):
             result.get("web_search_reason"),
             {"not_requested_before_evidence_judge", "no_external_search_signal"},
         )
+
+    def test_client_requested_web_search_forces_stable_concept_web_lookup(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-http",
+                            source_type="web",
+                            source_id="https://example.test/http",
+                            text="HTTP 是 Web 客户端和服务器之间交换请求与响应的应用层协议。",
+                            score=0.9,
+                        )
+                    ],
+                )
+
+        executor = FakeToolExecutor()
+        with patch.dict(os.environ, {"QA_WEB_SEARCH_EMPTY_CONCEPTS": ""}, clear=False):
+            result = build_graph(tool_executor=executor).compile().invoke(
+                {
+                    "run_id": "run-qa-client-requested-web",
+                    "user_id": "u1",
+                    "user_message": "什么是 HTTP？",
+                    "source_policy": SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
+                    "web_search_requested": True,
+                    "evidence": [],
+                }
+            )
+
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_requested"))
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result.get("web_search_reason"), "client_requested_web_search")
 
     def test_explicit_tool_lookup_forces_web_search_without_auto_empty_flag(self) -> None:
         class FakeToolExecutor:
@@ -646,10 +695,10 @@ class QAGraphAdapterTest(unittest.TestCase):
                     input_summary=request.input_summary,
                     evidence=[
                         EvidenceChunk(
-                            id="web-langgraph-platform",
+                            id="web-408-syllabus",
                             source_type="web",
-                            source_id="https://example.test/langgraph-platform",
-                            text="LangGraph Platform 提供部署、运行、监控和托管能力。",
+                            source_id="https://example.test/408-syllabus",
+                            text="408 考试大纲围绕数据结构、计算机网络、计算机组成原理和操作系统组织。",
                             score=0.9,
                         )
                     ],
@@ -661,14 +710,14 @@ class QAGraphAdapterTest(unittest.TestCase):
                 {
                     "run_id": "run-qa-auto-web",
                     "user_id": "u1",
-                    "user_message": "LangGraph Platform 托管能力有哪些？",
+                    "user_message": "408 最新考试大纲变化有哪些？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
                 }
             )
 
         self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
         self.assertTrue(result.get("web_search_attempted", False))
-        self.assertEqual(result.get("web_search_reason"), "no_sufficient_notebook_evidence")
+        self.assertEqual(result.get("web_search_reason"), "explicit_external_search_signal")
 
     def test_low_confidence_notebook_evidence_triggers_web_when_enabled(self) -> None:
         class FakeToolExecutor:
@@ -685,20 +734,20 @@ class QAGraphAdapterTest(unittest.TestCase):
                     input_summary=request.input_summary,
                     evidence=[
                         EvidenceChunk(
-                            id="web-langgraph-platform",
+                            id="web-os-scheduler",
                             source_type="web",
-                            source_id="https://example.test/langgraph-platform",
-                            text="LangGraph Platform 支持应用部署、托管运行和运维观测。",
+                            source_id="https://example.test/os-scheduler",
+                            text="操作系统进程调度需要结合时间片、优先级和调度队列理解。",
                             score=0.9,
                         )
                     ],
                 )
 
         low_evidence = EvidenceChunk(
-            id="nb-langgraph-platform-low",
+            id="nb-os-scheduler-low",
             source_type="notebook",
             source_id="chunk-low",
-            text="LangGraph Platform 和部署有关。",
+            text="进程调度和 CPU 分配有关。",
             score=0.56,
         )
         executor = FakeToolExecutor()
@@ -707,7 +756,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 {
                     "run_id": "run-qa-low-confidence-web",
                     "user_id": "u1",
-                    "user_message": "LangGraph Platform 托管能力有哪些？",
+                    "user_message": "操作系统最新调度机制怎么理解？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
                     "evidence": [low_evidence.model_dump(mode="json")],
                 }
@@ -715,8 +764,9 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
         self.assertTrue(result.get("web_search_attempted", False))
-        self.assertEqual(result["evidence_gate"]["reason"], "low_evidence_confidence")
-        self.assertFalse(result["evidence_confidence"]["sufficient"])
+        self.assertEqual(result["evidence_gate"]["reason"], "augmented_408_context")
+        self.assertTrue(result["evidence_confidence"]["sufficient"])
+        self.assertEqual(len(result["web_staging_notes"]), 1)
 
     def test_stable_knowledge_does_not_force_web_search_even_when_auto_enabled(self) -> None:
         class FakeToolExecutor:
@@ -1075,7 +1125,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(result["external_evidence_judgement"]["status"], "insufficient")
         self.assertNotIn("web-low-score", response.evidence_refs)
         self.assertEqual(response.source_level, SourceLevel.NONE)
-        self.assertEqual(response.ui_payload["answer_mode"], "insufficient_external_evidence")
+        self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")
 
     def test_retrieval_tool_exception_returns_error_result_and_learning_event(self) -> None:
         class FailingToolExecutor:
@@ -1195,11 +1245,10 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(result["repair_count"], 0)
         self.assertEqual(result["answer_repair_attempt_count"], 0)
         self.assertEqual(response.source_level, SourceLevel.NONE)
-        self.assertEqual(response.ui_payload["answer_mode"], "clarification_required")
+        self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")
         traces = list(result.get("trace_records") or [])
         self.assertNotIn("answer_repair", [item.get("stage") for item in traces])
-        final_trace = next(item for item in reversed(traces) if item.get("stage") == "final_response")
-        self.assertEqual(final_trace["final_response_status"], "clarification_required")
+        self.assertIn("hard_fallback", [item.get("stage") for item in traces])
 
     def test_answer_quality_failure_not_repairable_returns_clarification(self) -> None:
         class EmptyAnswerAdapter:
@@ -1217,12 +1266,12 @@ class QAGraphAdapterTest(unittest.TestCase):
         )
 
         response = FinalResponse.model_validate(result["final_response"])
-        self.assertEqual(result["repair_count"], 1)
+        self.assertEqual(result["repair_count"], 0)
         self.assertEqual(result["max_repair_count"], 1)
-        self.assertEqual(result["answer_repair_attempt_count"], 1)
+        self.assertEqual(result["answer_repair_attempt_count"], 0)
         self.assertEqual(response.source_level, SourceLevel.NONE)
-        self.assertEqual(response.ui_payload["answer_mode"], "clarification_required")
-        self.assertIn("缺少足够可靠的证据", response.answer)
+        self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")
+        self.assertIn("缺少足够可靠", response.answer)
 
     def test_parent_intent_is_recorded_but_not_used_for_cross_graph_routing(self) -> None:
         result = build_graph().compile().invoke(

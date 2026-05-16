@@ -40,19 +40,30 @@ from app.orchestration.graphs.shared.trace import append_trace_record
 from app.knowledge.concept_registry import get_concept_registry
 from app.services.tooling.executor import ToolExecutor
 from app.services.tooling.schemas import ToolExecutionRequest, ToolRiskLevel
-from app.shared.schemas.subject import DEFAULT_SUBJECTS
+from app.shared.schemas.subject import CANONICAL_SUBJECT_IDS, DEFAULT_SUBJECTS
 
 
 GRAPH_VERSION = "0.1.0"
+QA_FLOW_VERSION = "408-flow-v1"
 MIN_EVIDENCE_SCORE = 0.55
 PARTIAL_EVIDENCE_SCORE = 0.55
 STRONG_EVIDENCE_SCORE = 0.70
 DEFAULT_EVIDENCE_CONFIDENCE_THRESHOLD = 0.72
 DEFAULT_EVIDENCE_CONFIDENCE_HIGH = 0.82
 DEFAULT_EVIDENCE_CONFIDENCE_LOW = 0.45
-MAX_KNOWLEDGE_ROUTES = 3
+MAX_KNOWLEDGE_ROUTES = 4
 MAX_WEB_REPAIRS = 1
 MAX_ANSWER_REPAIR_ATTEMPTS = 1
+DEFAULT_MAX_WEB_RETRY = 1
+DEFAULT_MAX_RETHINK_RETRY = 1
+DEFAULT_MAX_GENERATE_RETRY = 1
+
+
+def _bounded_retry_count(value: Any, *, default: int) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def _max_repair_count(state: QAGraphState) -> int:
@@ -63,6 +74,34 @@ def _max_repair_count(state: QAGraphState) -> int:
         return max(0, int(raw_max))
     except (TypeError, ValueError):
         return MAX_ANSWER_REPAIR_ATTEMPTS
+
+
+def _max_web_retry(state: QAGraphState) -> int:
+    return _bounded_retry_count(state.get("max_web_retry"), default=DEFAULT_MAX_WEB_RETRY)
+
+
+def _max_rethink_retry(state: QAGraphState) -> int:
+    return _bounded_retry_count(state.get("max_rethink_retry"), default=DEFAULT_MAX_RETHINK_RETRY)
+
+
+def _max_generate_retry(state: QAGraphState) -> int:
+    return _bounded_retry_count(state.get("max_generate_retry"), default=DEFAULT_MAX_GENERATE_RETRY)
+
+
+def _can_retry_web(state: QAGraphState) -> bool:
+    return _bounded_retry_count(state.get("web_retry_count"), default=0) < _max_web_retry(state)
+
+
+def _can_retry_rethink(state: QAGraphState) -> bool:
+    repair_count = _bounded_retry_count(state.get("repair_count") or state.get("answer_repair_attempt_count"), default=0)
+    return (
+        _bounded_retry_count(state.get("rethink_retry_count"), default=0) < _max_rethink_retry(state)
+        and repair_count < _max_repair_count(state)
+    )
+
+
+def _can_retry_generate(state: QAGraphState) -> bool:
+    return _bounded_retry_count(state.get("generate_retry_count"), default=0) < _max_generate_retry(state)
 
 
 def input_normalize_node(
@@ -80,6 +119,7 @@ def input_normalize_node(
         normalized_question,
         current_date=runtime_time_context.get("currentDate"),
     ).as_dict()
+    web_search_requested = _web_search_requested_for_state(state)
     has_web_search_tool = _tool_executor_has_web_search(tool_executor)
     web_search_enabled = _web_search_enabled_for_state(
         {**state, "source_policy": source_policy, "user_message": normalized_question},
@@ -97,11 +137,14 @@ def input_normalize_node(
         "run_id": str(state.get("run_id") or uuid4()),
         "graph_type": GraphType.QA.value,
         "graph_version": str(state.get("graph_version") or GRAPH_VERSION),
+        "qa_flow_version": str(state.get("qa_flow_version") or QA_FLOW_VERSION),
         "source_policy": source_policy,
         "user_message": normalized_question,
         "normalized_question": normalized_question,
         "runtime_time_context": runtime_time_context,
         "question_boundary": question_boundary,
+        "allow_web": bool(state.get("allow_web", False)),
+        "web_search_requested": web_search_requested,
         "has_web_search_tool": has_web_search_tool,
         "web_search_enabled": web_search_enabled,
         "previous_tool_invocation_trace": _previous_assistant_tool_trace(messages),
@@ -116,6 +159,13 @@ def input_normalize_node(
         "repair_count": repair_count,
         "max_repair_count": max_repair_count,
         "answer_repair_attempt_count": repair_count,
+        "web_retry_count": _bounded_retry_count(state.get("web_retry_count"), default=0),
+        "max_web_retry": _bounded_retry_count(state.get("max_web_retry"), default=DEFAULT_MAX_WEB_RETRY),
+        "rethink_retry_count": _bounded_retry_count(state.get("rethink_retry_count"), default=0),
+        "max_rethink_retry": _bounded_retry_count(state.get("max_rethink_retry"), default=DEFAULT_MAX_RETHINK_RETRY),
+        "generate_retry_count": _bounded_retry_count(state.get("generate_retry_count"), default=0),
+        "max_generate_retry": _bounded_retry_count(state.get("max_generate_retry"), default=DEFAULT_MAX_GENERATE_RETRY),
+        "web_staging_notes": list(state.get("web_staging_notes") or []),
         "qa_request": {
             "question": normalized_question,
             "question_type": question_type,
@@ -124,6 +174,7 @@ def input_normalize_node(
             "notebook_id": state.get("notebook_id"),
             "course_id": state.get("course_id"),
             "source_policy": source_policy,
+            "web_search_requested": web_search_requested,
         },
     }
 
@@ -171,6 +222,115 @@ def intent_classifier_node(state: QAGraphState) -> dict[str, Any]:
     """Backward-compatible alias for the QA-local intent classifier."""
 
     return qa_intent_classifier_node(state)
+
+
+def normalize_node(
+    state: QAGraphState,
+    *,
+    tool_executor: ToolExecutor | None = None,
+) -> dict[str, Any]:
+    """Diagram-aligned wrapper for input normalization."""
+
+    return input_normalize_node(state, tool_executor=tool_executor)
+
+
+def goal_router_node(state: QAGraphState) -> dict[str, Any]:
+    """Route the QA-local 408 flow goal."""
+
+    classifier_update = qa_intent_classifier_node(state)
+    question = _normalized_question({**state, **classifier_update})
+    intent = str((classifier_update.get("intent_result") or {}).get("intent") or "")
+    context_dependency = dict(state.get("context_dependency") or {})
+    active_topic = _active_topic(state)
+    goal_route = "answer_408"
+    reason = "answer_408_default"
+    if not question:
+        goal_route = "clarify"
+        reason = "empty_question"
+    elif context_dependency.get("is_context_dependent") and not active_topic:
+        goal_route = "clarify"
+        reason = "context_dependent_without_topic"
+    elif intent in {"smalltalk", "simple_fact"}:
+        goal_route = "out_of_scope"
+        reason = f"{intent}_handled_outside_qagraph"
+    elif not (_looks_like_408_scope(question) or _looks_like_408_scope(active_topic)):
+        goal_route = "out_of_scope"
+        reason = "outside_408_scope"
+
+    qa_request = {
+        **dict((classifier_update.get("qa_request") or state.get("qa_request") or {})),
+        "question": question,
+        "goal_route": goal_route,
+        "goal_route_reason": reason,
+    }
+    return {
+        **classifier_update,
+        "goal_route": goal_route,
+        "trace_records": append_trace_record(
+            state,
+            "goal_router",
+            goal_route=goal_route,
+            reason=reason,
+            qa_flow_version=QA_FLOW_VERSION,
+        ),
+        "qa_request": qa_request,
+    }
+
+
+def route_after_goal_router(state: QAGraphState) -> str:
+    route = str(state.get("goal_route") or "answer_408")
+    if route == "clarify":
+        return "clarify"
+    if route == "out_of_scope":
+        return "out_of_scope"
+    return "retrieve_core_408"
+
+
+def clarify_node(state: QAGraphState) -> dict[str, Any]:
+    question = _normalized_question(state)
+    answer = (
+        "我需要再确认一下你的问题。请补充具体的 408 科目、知识点或题目上下文，"
+        "例如“数据结构里的二叉树遍历”或“计算机网络里的 TCP 拥塞控制”。"
+    )
+    if not question:
+        answer = "请先输入一个 408 相关问题，我再继续帮你解答。"
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        coach_actions=["ask_clarification"],
+        mastery_signals={"signal_strength": "none"},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": "clarify",
+            "goal_route": "clarify",
+            "qa_flow_version": QA_FLOW_VERSION,
+        },
+    )
+    return {
+        "trace_records": append_trace_record(state, "clarify", final_response_status="clarify"),
+        "final_response": response.model_dump(mode="json"),
+        "source_usage": "model",
+    }
+
+
+def out_of_scope_node(state: QAGraphState) -> dict[str, Any]:
+    response = FinalResponse(
+        answer="这个问题看起来不属于 408 计算机基础范围。我可以继续帮你解答数据结构、计算机网络、组成原理和操作系统相关问题。",
+        source_level=SourceLevel.NONE,
+        coach_actions=["redirect_to_408_scope"],
+        mastery_signals={"signal_strength": "none"},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": "out_of_scope",
+            "goal_route": "out_of_scope",
+            "qa_flow_version": QA_FLOW_VERSION,
+        },
+    )
+    return {
+        "trace_records": append_trace_record(state, "out_of_scope", final_response_status="out_of_scope"),
+        "final_response": response.model_dump(mode="json"),
+        "source_usage": "model",
+    }
 
 
 def context_resolver_node(state: QAGraphState) -> dict[str, Any]:
@@ -503,6 +663,41 @@ def retrieval_node(
     return internal_retrieval_node(state, tool_executor=tool_executor)
 
 
+def retrieve_core_408_node(
+    state: QAGraphState,
+    *,
+    tool_executor: ToolExecutor | None = None,
+) -> dict[str, Any]:
+    """Resolve context, route to canonical 408 knowledge bases, and retrieve core evidence."""
+
+    working: dict[str, Any] = dict(state)
+    updates: dict[str, Any] = {}
+    for node in (context_resolver_node, concept_linker_node, knowledge_router_node):
+        node_update = node(working)  # type: ignore[arg-type]
+        working.update(node_update)
+        updates.update(node_update)
+
+    routes = _core_408_routes(working)
+    working["knowledge_routes"] = routes
+    updates["knowledge_routes"] = routes
+    retrieval_update = internal_retrieval_node(working, tool_executor=tool_executor)  # type: ignore[arg-type]
+    updates.update(retrieval_update)
+    updates["retrieval_report"] = {
+        **dict(retrieval_update.get("retrieval_report") or {}),
+        "stage": "retrieve_core_408",
+        "core_408_subject_ids": list(CANONICAL_SUBJECT_IDS),
+        "route_count": len(routes),
+    }
+    updates["trace_records"] = append_trace_record(
+        {**working, **retrieval_update},
+        "retrieve_core_408",
+        route_count=len(routes),
+        subject_ids=[route.get("subject_id") for route in routes],
+        result_count=len(_collect_evidence({**working, **retrieval_update})),
+    )
+    return updates
+
+
 def web_search_if_needed_node(
     state: QAGraphState,
     *,
@@ -513,8 +708,11 @@ def web_search_if_needed_node(
     source_policy = _source_policy(state)
     gate = dict(state.get("evidence_gate") or {})
     question = _resolved_question(state)
+    web_search_requested = _web_search_requested_for_state(state)
     reason = str(gate.get("reason") or "evidence_judge_not_sufficient")
-    if _has_external_search_signal(question):
+    if web_search_requested:
+        reason = "client_requested_web_search"
+    elif _has_external_search_signal(question):
         reason = "explicit_external_search_signal"
     existing_requests = list(state.get("tool_requests") or [])
     existing_results = [item.model_dump(mode="json") for item in _collect_tool_results(state)]
@@ -526,7 +724,7 @@ def web_search_if_needed_node(
         blocked_reason = "internal_evidence_sufficient" if gate.get("sufficient") else "source_policy_disallows_web"
         if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
             blocked_reason = "source_policy_notebook_only"
-        elif not _has_external_search_signal(question):
+        elif not (web_search_requested or _has_external_search_signal(question)):
             blocked_reason = "no_external_search_signal"
         _emit_status(
             stream_stage="web_search_if_needed",
@@ -648,10 +846,336 @@ def web_search_if_needed_node(
     }
 
 
+def web_query_rewrite_node(state: QAGraphState) -> dict[str, Any]:
+    """Build a compact 408-focused web query for the enrichment branch."""
+
+    retry_count = _bounded_retry_count(state.get("web_retry_count"), default=0) + 1
+    question = _resolved_question(state)
+    concept = dict(state.get("concept_linking") or {})
+    subject_name = str(concept.get("subject_name") or "").strip()
+    concept_name = str(concept.get("concept_name") or "").strip()
+    query_parts = [question, concept_name, subject_name, "408 计算机考研"]
+    query = " ".join(part for part in query_parts if part).strip()
+    reason = _web_search_reason_for_state(state, question=question)
+    return {
+        "web_query": query,
+        "web_retry_count": retry_count,
+        "web_search_reason": reason,
+        "trace_records": append_trace_record(
+            state,
+            "web_query_rewrite",
+            web_retry_count=retry_count,
+            max_web_retry=_max_web_retry(state),
+            reason=reason,
+            query_preview=query[:120],
+        ),
+    }
+
+
+def web_search_node_408(
+    state: QAGraphState,
+    *,
+    tool_executor: ToolExecutor | None = None,
+) -> dict[str, Any]:
+    """Run the generic web_search capability with the rewritten 408 query."""
+
+    source_policy = _source_policy(state)
+    query = str(state.get("web_query") or _resolved_question(state)).strip()
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or not _web_search_enabled_for_state(state, has_web_search_tool=True):
+        return {
+            "web_search_attempted": False,
+            "web_search_reason": "source_policy_disallows_web",
+            "pending_web_evidence": [],
+            "trace_records": append_trace_record(state, "web_search", web_called=False, reason="source_policy_disallows_web"),
+        }
+
+    request = _tool_request(
+        {**state, "resolved_question": query},
+        capability=ToolCapability.WEB_SEARCH,
+        question=query,
+        route=None,
+        risk_level=ToolRiskLevel.MEDIUM,
+        source_policy=source_policy,
+    )
+    existing_requests = list(state.get("tool_requests") or [])
+    existing_results = [item.model_dump(mode="json") for item in _collect_tool_results(state)]
+    request_payload = request.model_dump(mode="json")
+    if tool_executor is None:
+        return {
+            "tool_requests": [*existing_requests, request_payload],
+            "pending_web_evidence": [],
+            "web_search_attempted": False,
+            "web_search_reason": "planned_without_executor",
+            "trace_records": append_trace_record(
+                state,
+                "web_search",
+                web_called=False,
+                web_planned=True,
+                reason="planned_without_executor",
+                web_retry_count=int(state.get("web_retry_count") or 0),
+            ),
+        }
+
+    new_errors: list[dict[str, Any]] = []
+    try:
+        result = tool_executor.execute(request)
+    except Exception as exc:  # noqa: BLE001
+        result = _tool_error_result(request, exc)
+        new_errors.append(
+            GraphError(
+                code="qa_web_search_failed",
+                message=exc.__class__.__name__,
+                node="web_search",
+                severity=GraphErrorSeverity.WARNING,
+                metadata={"capability": request.capability.value},
+            ).model_dump(mode="json")
+        )
+    tagged = _tag_tool_result_evidence(result, route=None, retrieval_source="web")
+    pending = [item for item in tagged.evidence if item.text.strip()]
+    return {
+        "tool_requests": [*existing_requests, request_payload],
+        "tool_results": [*existing_results, tagged.model_dump(mode="json")],
+        "pending_web_evidence": [item.model_dump(mode="json") for item in pending],
+        "errors": [*list(state.get("errors") or []), *new_errors],
+        "web_search_attempted": True,
+        "web_search_reason": _web_search_reason_for_state(state, question=query),
+        "web_search_iteration": int(state.get("web_search_iteration") or 0) + 1,
+        "retrieval_report": {
+            **dict(state.get("retrieval_report") or {}),
+            "web_requested_count": 1,
+            "web_result_count": len(pending),
+            "web_search_stage": "executed",
+            "web_query": query,
+        },
+        "trace_records": append_trace_record(
+            {**state, "tool_results": [*existing_results, tagged.model_dump(mode="json")]},
+            "web_search",
+            web_called=True,
+            web_planned=True,
+            web_result_count=len(pending),
+            web_success_count=1 if tagged.status == ToolStatus.SUCCESS else 0,
+            web_error_count=len(new_errors),
+            web_retry_count=int(state.get("web_retry_count") or 0),
+        ),
+    }
+
+
+def web_source_filter_node(state: QAGraphState) -> dict[str, Any]:
+    candidates = _parse_evidence_list(state.get("pending_web_evidence") or [])
+    filtered = [
+        item
+        for item in candidates
+        if item.text.strip()
+        and item.score >= 0.2
+        and not _is_low_quality_web_source(item)
+    ]
+    return {
+        "web_filtered_sources": [item.model_dump(mode="json") for item in filtered],
+        "trace_records": append_trace_record(
+            state,
+            "web_source_filter",
+            candidate_count=len(candidates),
+            filtered_count=len(filtered),
+        ),
+    }
+
+
+def web_extract_node(
+    state: QAGraphState,
+    *,
+    tool_executor: ToolExecutor | None = None,
+) -> dict[str, Any]:
+    filtered = _parse_evidence_list(state.get("web_filtered_sources") or [])
+    _ = tool_executor
+    # No default web_extract adapter is registered yet; keep search snippets as extracted text.
+    return {
+        "web_extracted_evidence": [item.model_dump(mode="json") for item in filtered],
+        "pending_web_evidence": [item.model_dump(mode="json") for item in filtered],
+        "retrieval_report": {
+            **dict(state.get("retrieval_report") or {}),
+            "web_extract_skipped_reason": "web_extract_adapter_unavailable",
+            "web_extracted_count": len(filtered),
+        },
+        "trace_records": append_trace_record(
+            state,
+            "web_extract",
+            extracted_count=len(filtered),
+            extract_skipped_reason="web_extract_adapter_unavailable",
+        ),
+    }
+
+
+def web_knowledge_grade_node(state: QAGraphState) -> dict[str, Any]:
+    update = external_evidence_judge_node({**state, "pending_web_evidence": list(state.get("web_extracted_evidence") or [])})
+    update["trace_records"] = append_trace_record(
+        {**state, **update},
+        "web_knowledge_grade",
+        web_knowledge_usable=bool((update.get("external_evidence_gate") or {}).get("sufficient")),
+        usable_evidence_count=len(update.get("web_evidence") or []),
+    )
+    return update
+
+
+def route_after_web_knowledge_grade(state: QAGraphState) -> str:
+    gate = dict(state.get("external_evidence_gate") or {})
+    if gate.get("sufficient"):
+        return "web_to_408_note"
+    if _can_retry_web(state):
+        return "web_query_rewrite"
+    return "hard_fallback"
+
+
+def web_to_408_note_node(state: QAGraphState) -> dict[str, Any]:
+    web_evidence = _parse_evidence_list(state.get("web_evidence") or [])
+    notes = []
+    for index, evidence in enumerate(web_evidence, start=1):
+        notes.append(
+            evidence.model_copy(
+                update={
+                    "id": evidence.id or f"web-staging-{index}",
+                    "metadata": {
+                        **dict(evidence.metadata),
+                        "staging_scope": "state",
+                        "knowledge_card_type": "web_to_408_note",
+                        "qa_flow_version": QA_FLOW_VERSION,
+                    },
+                }
+            )
+        )
+    return {
+        "web_staging_notes": [item.model_dump(mode="json") for item in notes],
+        "trace_records": append_trace_record(
+            state,
+            "web_to_408_note",
+            note_count=len(notes),
+            persisted=False,
+        ),
+    }
+
+
+def upsert_web_staging_node(state: QAGraphState) -> dict[str, Any]:
+    notes = _parse_evidence_list(state.get("web_staging_notes") or [])
+    return {
+        "web_staging_notes": [item.model_dump(mode="json") for item in notes],
+        "trace_records": append_trace_record(
+            state,
+            "upsert_web_staging",
+            note_count=len(notes),
+            persisted=False,
+            storage="state",
+        ),
+    }
+
+
+def retrieve_augmented_node(state: QAGraphState) -> dict[str, Any]:
+    notes = _parse_evidence_list(state.get("web_staging_notes") or [])
+    internal = _parse_evidence_list(state.get("notebook_evidence") or state.get("evidence") or [])
+    merged = _dedupe_evidence([*internal, *notes])
+    return {
+        "evidence": [item.model_dump(mode="json") for item in merged],
+        "web_evidence": [item.model_dump(mode="json") for item in notes],
+        "source_usage": _source_usage_from_evidence(merged),
+        "retrieval_report": {
+            **dict(state.get("retrieval_report") or {}),
+            "stage": "retrieve_augmented",
+            "web_staging_note_count": len(notes),
+            "augmented_evidence_count": len(merged),
+        },
+        "trace_records": append_trace_record(
+            state,
+            "retrieve_augmented",
+            web_staging_note_count=len(notes),
+            augmented_evidence_count=len(merged),
+        ),
+    }
+
+
 def internal_evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
     """Named wrapper for the internal evidence gate described by the QA subgraph."""
 
     return evidence_judge_node(state)
+
+
+def grade_context_node(state: QAGraphState) -> dict[str, Any]:
+    """Diagram-aligned context sufficiency gate for core and augmented evidence."""
+
+    staged = _parse_evidence_list(state.get("web_staging_notes") or [])
+    if not staged:
+        update = internal_evidence_judge_node(state)
+        update["trace_records"] = append_trace_record(
+            {**state, **update},
+            "grade_context",
+            context_sufficient=bool((update.get("evidence_gate") or {}).get("sufficient")),
+            internal_evidence_confidence=dict(update.get("evidence_confidence") or {}),
+            source="core_408",
+        )
+        return update
+
+    internal = _parse_evidence_list(state.get("notebook_evidence") or state.get("evidence") or [])
+    merged = _dedupe_evidence([*internal, *staged])
+    confidence = _evidence_confidence(
+        state,
+        question=_resolved_question(state),
+        evidence=merged,
+        source_policy=SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
+    )
+    sufficient = bool(confidence.get("sufficient") or staged)
+    gate = {
+        "sufficient": sufficient,
+        "insufficient": not sufficient,
+        "source_policy": _source_policy(state),
+        "usable_evidence_refs": [item.id for item in merged],
+        "usable_evidence_count": len(merged),
+        "missing_topic": _resolved_question(state),
+        "reason": "augmented_408_context" if sufficient else "augmented_context_insufficient",
+        "status": "augmented" if sufficient else "insufficient",
+        "evidence_confidence": confidence,
+    }
+    update = {
+        "evidence": [item.model_dump(mode="json") for item in merged],
+        "evidence_gate": gate,
+        "evidence_judgement": {
+            "status": gate["status"],
+            "verified_count": len(merged),
+            "notebook_count": len(internal),
+            "web_count": len(staged),
+            "evidence_confidence": confidence,
+        },
+        "evidence_confidence": confidence,
+        "source_usage": _source_usage_from_evidence(merged),
+        "grounding_report": {
+            **dict(state.get("grounding_report") or {}),
+            **gate,
+        },
+    }
+    update["trace_records"] = append_trace_record(
+        {**state, **update},
+        "grade_context",
+        context_sufficient=sufficient,
+        internal_evidence_confidence=confidence,
+        source="augmented_408",
+        web_staging_note_count=len(staged),
+    )
+    return update
+
+
+def route_after_grade_context(state: QAGraphState) -> str:
+    gate = dict(state.get("evidence_gate") or {})
+    source_policy = _source_policy(state)
+    question = _resolved_question(state)
+    boundary = _question_boundary(state, question)
+    question_type = str(state.get("question_type") or "")
+    if boundary.get("category") == QUESTION_META_TOOL_USAGE or question_type == "meta":
+        return "generate_answer_or_question"
+    if gate.get("sufficient") and not _should_run_web_retrieval(state, question, source_policy):
+        return "generate_answer_or_question"
+    if _should_run_web_retrieval(state, question, source_policy) and _can_retry_web(state):
+        return "web_query_rewrite"
+    if boundary.get("category") == QUESTION_REALTIME_OR_FRESH:
+        return "generate_answer_or_question"
+    if gate.get("sufficient"):
+        return "generate_answer_or_question"
+    return "hard_fallback"
 
 
 def evidence_judge_node(state: QAGraphState) -> dict[str, Any]:
@@ -992,6 +1516,28 @@ def answer_generate_node(
     return run_adapter(state, adapter=adapter)
 
 
+def generate_answer_or_question_node(
+    state: QAGraphState,
+    *,
+    adapter: QARuntimeAdapter | None = None,
+) -> dict[str, Any]:
+    """Generate the 408 answer candidate; question generation stays in its own graph."""
+
+    generate_retry_count = _bounded_retry_count(state.get("generate_retry_count"), default=0)
+    if str((state.get("quality_check") or {}).get("repair_action") or "") == "regenerate":
+        generate_retry_count += 1
+    update = answer_generate_node(state, adapter=adapter)
+    update["generate_retry_count"] = generate_retry_count
+    update["trace_records"] = append_trace_record(
+        {**state, **update},
+        "generate_answer_or_question",
+        goal_route=str(state.get("goal_route") or "answer_408"),
+        generate_retry_count=generate_retry_count,
+        max_generate_retry=_max_generate_retry(state),
+    )
+    return update
+
+
 def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
     """Check answer quality and decide whether to pass, repair, or clarify."""
 
@@ -1078,6 +1624,45 @@ def answer_quality_check_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
+def quality_gate_node(state: QAGraphState) -> dict[str, Any]:
+    update = answer_quality_check_node(state)
+    quality = dict(update.get("quality_check") or {})
+    issues = set(quality.get("issues") or [])
+    decision = "pass"
+    if not quality.get("passed"):
+        response = FinalResponse.model_validate(state.get("final_response") or {})
+        forced = str(response.ui_payload.get("quality_gate_decision") or "").strip()
+        if forced in {"rethink", "regenerate", "web_enrich", "fallback"}:
+            decision = forced
+        elif "time_sensitive_without_web" in issues and _can_retry_web({**state, **update}):
+            decision = "web_enrich"
+        elif "empty_answer" in issues or "evidence_ref_missing" in issues:
+            decision = "rethink"
+        elif str(state.get("question_type") or "") == "practice_generation":
+            decision = "regenerate"
+        else:
+            decision = "fallback"
+    update["quality_gate_decision"] = decision
+    update["answer_quality"] = {
+        **dict(update.get("answer_quality") or {}),
+        "quality_gate_decision": decision,
+        "web_retry_count": int(state.get("web_retry_count") or 0),
+        "max_web_retry": _max_web_retry(state),
+        "rethink_retry_count": int(state.get("rethink_retry_count") or 0),
+        "max_rethink_retry": _max_rethink_retry(state),
+        "generate_retry_count": int(state.get("generate_retry_count") or 0),
+        "max_generate_retry": _max_generate_retry(state),
+    }
+    update["trace_records"] = append_trace_record(
+        {**state, **update},
+        "quality_gate",
+        decision=decision,
+        issues=list(issues),
+        passed=bool(quality.get("passed")),
+    )
+    return update
+
+
 def route_after_answer_quality(state: QAGraphState) -> str:
     quality = dict(state.get("quality_check") or state.get("answer_quality") or {})
     if quality.get("passed") or str(quality.get("status") or "") == "pass":
@@ -1086,6 +1671,19 @@ def route_after_answer_quality(state: QAGraphState) -> str:
     if action == "rewrite_with_evidence":
         return "answer_repair"
     return "qa_clarification_response"
+
+
+def route_after_quality_gate(state: QAGraphState) -> str:
+    decision = str(state.get("quality_gate_decision") or "fallback")
+    if decision == "pass":
+        return "finalize"
+    if decision == "rethink" and _can_retry_rethink(state):
+        return "rethink_and_revise"
+    if decision == "regenerate" and _can_retry_generate(state):
+        return "generate_answer_or_question"
+    if decision == "web_enrich" and _can_retry_web(state):
+        return "web_query_rewrite"
+    return "hard_fallback"
 
 
 def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
@@ -1164,6 +1762,19 @@ def answer_repair_node(state: QAGraphState) -> dict[str, Any]:
     }
 
 
+def rethink_and_revise_node(state: QAGraphState) -> dict[str, Any]:
+    rethink_retry_count = _bounded_retry_count(state.get("rethink_retry_count"), default=0) + 1
+    update = answer_repair_node(state)
+    update["rethink_retry_count"] = rethink_retry_count
+    update["trace_records"] = append_trace_record(
+        {**state, **update},
+        "rethink_and_revise",
+        rethink_retry_count=rethink_retry_count,
+        max_rethink_retry=_max_rethink_retry(state),
+    )
+    return update
+
+
 def qa_clarification_response_node(state: QAGraphState) -> dict[str, Any]:
     """Return a safe clarification/degraded response when quality cannot be repaired."""
 
@@ -1211,6 +1822,117 @@ def qa_clarification_response_node(state: QAGraphState) -> dict[str, Any]:
 
 
 clarification_response_node = qa_clarification_response_node
+
+
+def hard_fallback_node(state: QAGraphState) -> dict[str, Any]:
+    reason = _hard_fallback_reason(state)
+    source_policy = _source_policy(state)
+    boundary = _question_boundary(state)
+    if boundary.get("category") == QUESTION_REALTIME_OR_FRESH and not bool(state.get("web_search_attempted")):
+        response = _realtime_without_web_response(
+            question=_resolved_question(state),
+            boundary=boundary,
+            trace=_build_tool_invocation_trace(state),
+        )
+        response = response.model_copy(
+            update={
+                "ui_payload": {
+                    **dict(response.ui_payload),
+                    "goal_route": str(state.get("goal_route") or "answer_408"),
+                    "qa_flow_version": QA_FLOW_VERSION,
+                    "hard_fallback_reason": reason,
+                }
+            }
+        )
+    else:
+        if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+            answer = "当前 408 核心资料不足，且本轮要求只使用内部资料，因此我不能编造答案。请补充资料或关闭 notebook_only 后再试。"
+        elif bool(state.get("web_search_attempted")):
+            answer = "内部资料和联网补充都没有通过证据质量检查，我不能给出确定答案。你可以换一个更具体的 408 问题后重试。"
+        else:
+            answer = "当前缺少足够可靠的 408 资料支撑这个回答，我先安全兜底，不编造结论。"
+        response = FinalResponse(
+            answer=answer,
+            source_level=SourceLevel.NONE,
+            coach_actions=["request_more_evidence"],
+            mastery_signals={"signal_strength": "none"},
+            ui_payload={
+                "target_graph_type": GraphType.QA.value,
+                "answer_mode": "hard_fallback",
+                "goal_route": str(state.get("goal_route") or "answer_408"),
+                "qa_flow_version": QA_FLOW_VERSION,
+                "hard_fallback_reason": reason,
+                "source_policy": source_policy,
+            },
+        )
+    error = GraphError(
+        code="qa_hard_fallback",
+        message=reason,
+        node="hard_fallback",
+        severity=GraphErrorSeverity.WARNING,
+        metadata={"source_policy": source_policy},
+    )
+    return {
+        "trace_records": append_trace_record(
+            state,
+            "hard_fallback",
+            hard_fallback_reason=reason,
+            web_retry_count=int(state.get("web_retry_count") or 0),
+            rethink_retry_count=int(state.get("rethink_retry_count") or 0),
+            generate_retry_count=int(state.get("generate_retry_count") or 0),
+        ),
+        "final_response": response.model_dump(mode="json"),
+        "hard_fallback_reason": reason,
+        "source_usage": "model",
+        "evidence_gate": {
+            **dict(state.get("evidence_gate") or {}),
+            "sufficient": False,
+            "insufficient": True,
+            "reason": reason,
+            "status": "hard_fallback",
+        },
+        "errors": [*list(state.get("errors") or []), error.model_dump(mode="json")],
+    }
+
+
+def finalize_node(state: QAGraphState) -> dict[str, Any]:
+    """Compose final QA response metadata and learning events in one diagram node."""
+
+    compose_update = qa_result_compose_node(state)
+    working = {**state, **compose_update}
+    event_update = compose_learning_events(working) if working.get("final_response") else {}
+    final_response = FinalResponse.model_validate(working.get("final_response") or {})
+    final_payload = {
+        **dict(final_response.ui_payload),
+        "qa_flow_version": QA_FLOW_VERSION,
+        "goal_route": str(state.get("goal_route") or final_response.ui_payload.get("goal_route") or "answer_408"),
+        "web_retry_count": int(state.get("web_retry_count") or 0),
+        "max_web_retry": _max_web_retry(state),
+        "rethink_retry_count": int(state.get("rethink_retry_count") or 0),
+        "max_rethink_retry": _max_rethink_retry(state),
+        "generate_retry_count": int(state.get("generate_retry_count") or 0),
+        "max_generate_retry": _max_generate_retry(state),
+        "web_staging_note_count": len(state.get("web_staging_notes") or []),
+        "source_usage": str(working.get("source_usage") or state.get("source_usage") or ""),
+    }
+    hard_reason = str(state.get("hard_fallback_reason") or "")
+    if hard_reason:
+        final_payload["hard_fallback_reason"] = hard_reason
+    response = final_response.model_copy(update={"ui_payload": final_payload})
+    return {
+        **compose_update,
+        **event_update,
+        "final_response": response.model_dump(mode="json"),
+        "trace_records": append_trace_record(
+            {**working, **event_update, "final_response": response.model_dump(mode="json")},
+            "finalize",
+            goal_route=final_payload["goal_route"],
+            qa_flow_version=QA_FLOW_VERSION,
+            web_staging_note_count=final_payload["web_staging_note_count"],
+            source_usage=final_payload["source_usage"],
+            hard_fallback_reason=hard_reason,
+        ),
+    }
 
 
 def should_run_web_search(state: QAGraphState) -> str:
@@ -1335,6 +2057,8 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
     ui_payload = {
         **dict(response.ui_payload),
         "chat_question_graph_version": "v2",
+        "qa_flow_version": str(state.get("qa_flow_version") or QA_FLOW_VERSION),
+        "goal_route": str(state.get("goal_route") or "answer_408"),
         "question_boundary": _question_boundary(state),
         "intent_result": dict(state.get("intent_result") or {}),
         "knowledge_routes": list(state.get("knowledge_routes") or []),
@@ -1349,6 +2073,14 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
         "repair_count": int(state.get("repair_count") or state.get("answer_repair_attempt_count") or 0),
         "max_repair_count": _max_repair_count(state),
         "answer_repair_attempt_count": int(state.get("answer_repair_attempt_count") or 0),
+        "web_retry_count": int(state.get("web_retry_count") or 0),
+        "max_web_retry": _max_web_retry(state),
+        "rethink_retry_count": int(state.get("rethink_retry_count") or 0),
+        "max_rethink_retry": _max_rethink_retry(state),
+        "generate_retry_count": int(state.get("generate_retry_count") or 0),
+        "max_generate_retry": _max_generate_retry(state),
+        "web_staging_note_count": len(state.get("web_staging_notes") or []),
+        "hard_fallback_reason": str(state.get("hard_fallback_reason") or ""),
         "source_usage": source_usage,
         "web_search_attempted": bool(state.get("web_search_attempted")),
         "tool_invocation_trace": tool_invocation_trace,
@@ -1455,15 +2187,20 @@ def tool_planner(state: QAGraphState) -> dict[str, Any]:
 
     source_policy = _source_policy(state)
     question = _question(state)
+    web_search_requested = _web_search_requested_for_state(state)
     capabilities: list[ToolCapability] = []
     if source_policy in {SourcePolicy.NOTEBOOK_ONLY.value, SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value}:
         capabilities.append(ToolCapability.NOTEBOOK_RETRIEVE)
     elif _has_notebook_signal(question):
         capabilities.append(ToolCapability.NOTEBOOK_RETRIEVE)
 
-    if source_policy == SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value and _has_external_search_signal(question):
+    if source_policy == SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value and (
+        web_search_requested or _has_external_search_signal(question)
+    ):
         capabilities.append(ToolCapability.WEB_SEARCH)
-    elif source_policy == SourcePolicy.OPEN_TOOLS.value and _has_external_search_signal(question):
+    elif source_policy == SourcePolicy.OPEN_TOOLS.value and (
+        web_search_requested or _has_external_search_signal(question)
+    ):
         capabilities.append(ToolCapability.WEB_SEARCH)
 
     if not capabilities:
@@ -1555,6 +2292,7 @@ def run_adapter(
         update: dict[str, Any] = {
             "final_response": contract_result.final_response.model_dump(mode="json"),
             "runtime_summary": dict(contract_result.runtime_summary),
+            "source_usage": _source_usage_from_evidence(evidence),
             "tool_invocation_trace": trace,
         }
         if contract_result.evidence:
@@ -1609,6 +2347,7 @@ def run_adapter(
     )
     return {
         "final_response": response.model_dump(mode="json"),
+        "source_usage": _source_usage_from_evidence(evidence),
         "tool_invocation_trace": trace,
     }
 
@@ -2042,6 +2781,15 @@ def _tool_executor_has_web_search(tool_executor: ToolExecutor | None) -> bool:
         return True
 
 
+def _web_search_requested_for_state(state: QAGraphState | dict[str, Any]) -> bool:
+    if bool(state.get("web_search_requested") or state.get("allow_web")):
+        return True
+    runtime_context = state.get("chat_runtime_context") or state.get("runtime_context") or {}
+    if isinstance(runtime_context, dict):
+        return bool(runtime_context.get("web_search_requested") or runtime_context.get("allow_web"))
+    return False
+
+
 def _web_search_enabled_for_state(state: QAGraphState | dict[str, Any], *, has_web_search_tool: bool) -> bool:
     if not has_web_search_tool:
         return False
@@ -2054,6 +2802,20 @@ def _web_search_enabled_for_state(state: QAGraphState | dict[str, Any], *, has_w
         if guard.get("allow_search") is False or runtime_context.get("allow_search") is False:
             return False
     return source_policy in {SourcePolicy.OPEN_TOOLS.value, SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value}
+
+
+def _web_search_reason_for_state(state: QAGraphState | dict[str, Any], *, question: str) -> str:
+    existing = str(state.get("web_search_reason") or "").strip()
+    if existing and existing != "not_requested_before_evidence_judge":
+        return existing
+    if _web_search_requested_for_state(state):
+        return "client_requested_web_search"
+    if _has_external_search_signal(question):
+        return "explicit_external_search_signal"
+    gate = dict(state.get("evidence_gate") or {})
+    if gate.get("reason"):
+        return str(gate.get("reason"))
+    return "no_sufficient_notebook_evidence"
 
 
 def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
@@ -2204,6 +2966,53 @@ def _qa_scoped_intent(intent: str) -> str:
     if intent in {"question_generation", "learning_diagnosis"}:
         return "unknown"
     return intent
+
+
+def _looks_like_408_scope(question: str) -> bool:
+    normalized = question.lower()
+    if _has_meta_signal(question) or _has_external_search_signal(question):
+        return True
+    terms = (
+        "408",
+        "数据结构",
+        "算法",
+        "递归",
+        "动态规划",
+        "线性表",
+        "链表",
+        "栈",
+        "队列",
+        "树",
+        "二叉树",
+        "图",
+        "排序",
+        "查找",
+        "计算机网络",
+        "网络",
+        "tcp",
+        "udp",
+        "ip",
+        "http",
+        "dns",
+        "路由",
+        "拥塞",
+        "计算机组成",
+        "组成原理",
+        "cpu",
+        "指令",
+        "Cache".lower(),
+        "缓存",
+        "存储器",
+        "操作系统",
+        "进程",
+        "线程",
+        "内存",
+        "虚拟内存",
+        "文件系统",
+        "死锁",
+        "调度",
+    )
+    return any(term in question or term in normalized for term in terms)
 
 
 def _question_type_from_intent(intent: str, question: str) -> str:
@@ -2402,6 +3211,31 @@ def _has_external_search_signal(question: str) -> bool:
     return any(term in question or term in lowered for term in source_terms) and not _has_notebook_signal(question)
 
 
+def _is_low_quality_web_source(evidence: EvidenceChunk) -> bool:
+    source = f"{evidence.source_id} {evidence.metadata.get('url', '')} {evidence.metadata.get('source', '')}".lower()
+    low_quality_markers = ("zhihu.com", "csdn.net", "blog.csdn", "tieba", "baijiahao", "weibo.com")
+    return any(marker in source for marker in low_quality_markers)
+
+
+def _hard_fallback_reason(state: QAGraphState) -> str:
+    quality = dict(state.get("quality_check") or state.get("answer_quality") or {})
+    external_gate = dict(state.get("external_evidence_gate") or {})
+    gate = dict(state.get("evidence_gate") or {})
+    if quality.get("reason"):
+        return str(quality.get("reason"))
+    if external_gate.get("reason"):
+        return str(external_gate.get("reason"))
+    if gate.get("reason"):
+        return str(gate.get("reason"))
+    if not _can_retry_web(state):
+        return "web_retry_exhausted"
+    if not _can_retry_rethink(state):
+        return "rethink_retry_exhausted"
+    if not _can_retry_generate(state):
+        return "generate_retry_exhausted"
+    return "qa_flow_hard_fallback"
+
+
 def _is_simple_arithmetic_question(question: str) -> bool:
     compact = re.sub(r"\s+", "", question.strip().lower())
     if not compact:
@@ -2569,6 +3403,63 @@ def _route_with_metadata(route: dict[str, Any], metadata: dict[str, Any]) -> dic
     return merged
 
 
+def _core_408_routes(state: QAGraphState | dict[str, Any]) -> list[dict[str, Any]]:
+    existing = list(state.get("knowledge_routes") or [])
+    canonical_existing = [
+        route
+        for route in existing
+        if str(route.get("subject_id") or route.get("knowledge_base_id") or "") in CANONICAL_SUBJECT_IDS
+    ]
+    concept_linking = dict(state.get("concept_linking") or {})
+    metadata = {
+        "concept_id": concept_linking.get("concept_id") or "",
+        "concept_name": concept_linking.get("concept_name") or "",
+        "topic_id": concept_linking.get("topic_id") or "",
+        "confidence": concept_linking.get("confidence") or 0.0,
+        "status": concept_linking.get("status") or "",
+    }
+    routes: list[dict[str, Any]] = [_route_with_metadata(route, metadata) for route in canonical_existing]
+    if routes:
+        return _dedupe_routes(routes)[:MAX_KNOWLEDGE_ROUTES]
+
+    linked_subject_id = str(concept_linking.get("subject_id") or "").strip()
+    if linked_subject_id in CANONICAL_SUBJECT_IDS:
+        return [
+            _knowledge_route(
+                knowledge_base_id=linked_subject_id,
+                subject_id=linked_subject_id,
+                source_reason="core_408_priority",
+                priority=8,
+                metadata=metadata,
+            )
+        ]
+
+    for subject_id in (str(state.get("notebook_id") or "").strip(), str(state.get("course_id") or "").strip()):
+        if subject_id in CANONICAL_SUBJECT_IDS:
+            routes.append(
+                _knowledge_route(
+                    knowledge_base_id=subject_id,
+                    subject_id=subject_id,
+                    source_reason="core_408_priority",
+                    priority=8,
+                    metadata=metadata,
+                )
+            )
+    if routes:
+        return _dedupe_routes(routes)[:MAX_KNOWLEDGE_ROUTES]
+    for index, subject_id in enumerate(CANONICAL_SUBJECT_IDS, start=1):
+        routes.append(
+            _knowledge_route(
+                knowledge_base_id=subject_id,
+                subject_id=subject_id,
+                source_reason="core_408_canonical",
+                priority=50 + index,
+                metadata=metadata,
+            )
+        )
+    return _dedupe_routes(routes)[:MAX_KNOWLEDGE_ROUTES]
+
+
 def _available_knowledge_bases(state: QAGraphState) -> list[dict[str, Any]]:
     raw = state.get("available_knowledge_bases") or state.get("knowledge_bases") or []
     if not isinstance(raw, list):
@@ -2668,6 +3559,8 @@ def _retrieval_skipped_reason(
         return f"concept_registry_{concept_linking.get('status')}"
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or _has_notebook_signal(question):
         return "no_matching_knowledge_base"
+    if _web_search_requested_for_state(state):
+        return "client_requested_web_search"
     if intent == "concept_explain" or question_type == "concept":
         return "stable_concept_model_first"
     if _has_external_search_signal(question):
@@ -2690,6 +3583,8 @@ def _should_run_web_retrieval(
         SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
     }:
         return False
+    if _web_search_requested_for_state(state):
+        return True
     if _has_external_search_signal(question):
         return True
     if boundary.get("category") == QUESTION_STABLE_KNOWLEDGE:

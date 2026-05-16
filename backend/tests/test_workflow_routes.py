@@ -18,6 +18,7 @@ os.environ.setdefault(
 from app.application.chat.orchestrator_runtime import run_orchestrator_chat
 from app.orchestration.graphs.orchestrator.graph import build_graph
 from app.orchestration.graphs.orchestrator.router import (
+    DIRECT_RESPONSE_NODE,
     FALLBACK_NODE,
     MASTERY_EVALUATION_NODE,
     QA_NODE,
@@ -54,6 +55,7 @@ class OrchestratorWorkflowRoutesTest(unittest.TestCase):
                 QA_NODE,
                 QUESTION_GENERATION_NODE,
                 MASTERY_EVALUATION_NODE,
+                DIRECT_RESPONSE_NODE,
                 FALLBACK_NODE,
                 "persist_learning_events",
                 "response_composer",

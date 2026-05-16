@@ -6,26 +6,29 @@ from langgraph.graph import END, StateGraph
 
 from app.orchestration.graphs.qa.adapter import QARuntimeAdapter
 from app.orchestration.graphs.qa.nodes import (
-    answer_generate_node,
-    answer_quality_check_node,
-    answer_repair_node,
-    compose_learning_events,
-    concept_linker_node,
-    context_resolver_node,
-    evidence_merge_node,
-    external_evidence_judge_node,
-    insufficient_evidence_response_node,
-    internal_evidence_judge_node,
-    internal_retrieval_node,
-    input_normalize_node,
-    knowledge_router_node,
-    qa_clarification_response_node,
-    qa_intent_classifier_node,
-    qa_result_compose_node,
-    route_after_answer_quality,
-    route_after_evidence_judge,
-    route_after_external_evidence_judge,
-    web_search_if_needed_node,
+    clarify_node,
+    finalize_node,
+    generate_answer_or_question_node,
+    goal_router_node,
+    grade_context_node,
+    hard_fallback_node,
+    normalize_node,
+    out_of_scope_node,
+    quality_gate_node,
+    rethink_and_revise_node,
+    retrieve_augmented_node,
+    retrieve_core_408_node,
+    route_after_goal_router,
+    route_after_grade_context,
+    route_after_quality_gate,
+    route_after_web_knowledge_grade,
+    upsert_web_staging_node,
+    web_extract_node,
+    web_knowledge_grade_node,
+    web_query_rewrite_node,
+    web_search_node_408,
+    web_source_filter_node,
+    web_to_408_note_node,
 )
 from app.orchestration.graphs.qa.state import QAGraphState
 from app.persistence.interfaces import LearningEventRepository
@@ -40,65 +43,80 @@ def build_graph(
 ) -> StateGraph:
     _ = learning_event_repository
     graph = StateGraph(QAGraphState)
-    graph.add_node("input_normalize", lambda state: input_normalize_node(state, tool_executor=tool_executor))
-    graph.add_node("qa_intent_classifier", qa_intent_classifier_node)
-    graph.add_node("context_resolver", context_resolver_node)
-    graph.add_node("concept_linker", concept_linker_node)
-    graph.add_node("knowledge_router", knowledge_router_node)
-    graph.add_node("internal_retrieval", lambda state: internal_retrieval_node(state, tool_executor=tool_executor))
-    graph.add_node("internal_evidence_judge", internal_evidence_judge_node)
-    graph.add_node("web_search_if_needed", lambda state: web_search_if_needed_node(state, tool_executor=tool_executor))
-    graph.add_node("external_evidence_judge", external_evidence_judge_node)
-    graph.add_node("insufficient_evidence_response", insufficient_evidence_response_node)
-    graph.add_node("evidence_merge", evidence_merge_node)
-    graph.add_node("answer_generate", lambda state: answer_generate_node(state, adapter=adapter))
-    graph.add_node("answer_quality_check", answer_quality_check_node)
-    graph.add_node("answer_repair", answer_repair_node)
-    graph.add_node("qa_clarification_response", qa_clarification_response_node)
-    graph.add_node("qa_result_compose", qa_result_compose_node)
-    graph.add_node("compose_learning_events", compose_learning_events)
+    graph.add_node("normalize", lambda state: normalize_node(state, tool_executor=tool_executor))
+    graph.add_node("goal_router", goal_router_node)
+    graph.add_node("retrieve_core_408", lambda state: retrieve_core_408_node(state, tool_executor=tool_executor))
+    graph.add_node("grade_context", grade_context_node)
+    graph.add_node("web_query_rewrite", web_query_rewrite_node)
+    graph.add_node("web_search", lambda state: web_search_node_408(state, tool_executor=tool_executor))
+    graph.add_node("web_source_filter", web_source_filter_node)
+    graph.add_node("web_extract", lambda state: web_extract_node(state, tool_executor=tool_executor))
+    graph.add_node("web_knowledge_grade", web_knowledge_grade_node)
+    graph.add_node("web_to_408_note", web_to_408_note_node)
+    graph.add_node("upsert_web_staging", upsert_web_staging_node)
+    graph.add_node("retrieve_augmented", retrieve_augmented_node)
+    graph.add_node("generate_answer_or_question", lambda state: generate_answer_or_question_node(state, adapter=adapter))
+    graph.add_node("quality_gate", quality_gate_node)
+    graph.add_node("rethink_and_revise", rethink_and_revise_node)
+    graph.add_node("hard_fallback", hard_fallback_node)
+    graph.add_node("clarify", clarify_node)
+    graph.add_node("out_of_scope", out_of_scope_node)
+    graph.add_node("finalize", finalize_node)
 
-    graph.set_entry_point("input_normalize")
-    graph.add_edge("input_normalize", "qa_intent_classifier")
-    graph.add_edge("qa_intent_classifier", "context_resolver")
-    graph.add_edge("context_resolver", "concept_linker")
-    graph.add_edge("concept_linker", "knowledge_router")
-    graph.add_edge("knowledge_router", "internal_retrieval")
-    graph.add_edge("internal_retrieval", "internal_evidence_judge")
+    graph.set_entry_point("normalize")
+    graph.add_edge("normalize", "goal_router")
     graph.add_conditional_edges(
-        source="internal_evidence_judge",
-        path=route_after_evidence_judge,
+        source="goal_router",
+        path=route_after_goal_router,
         path_map={
-            "web_search_if_needed": "web_search_if_needed",
-            "evidence_merge": "evidence_merge",
-            "insufficient_evidence_response": "insufficient_evidence_response",
+            "retrieve_core_408": "retrieve_core_408",
+            "clarify": "clarify",
+            "out_of_scope": "out_of_scope",
         },
     )
-    graph.add_edge("web_search_if_needed", "external_evidence_judge")
+    graph.add_edge("retrieve_core_408", "grade_context")
     graph.add_conditional_edges(
-        source="external_evidence_judge",
-        path=route_after_external_evidence_judge,
+        source="grade_context",
+        path=route_after_grade_context,
         path_map={
-            "evidence_merge": "evidence_merge",
-            "insufficient_evidence_response": "insufficient_evidence_response",
+            "generate_answer_or_question": "generate_answer_or_question",
+            "web_query_rewrite": "web_query_rewrite",
+            "hard_fallback": "hard_fallback",
         },
     )
-    graph.add_edge("evidence_merge", "answer_generate")
-    graph.add_edge("answer_generate", "answer_quality_check")
+    graph.add_edge("web_query_rewrite", "web_search")
+    graph.add_edge("web_search", "web_source_filter")
+    graph.add_edge("web_source_filter", "web_extract")
+    graph.add_edge("web_extract", "web_knowledge_grade")
     graph.add_conditional_edges(
-        source="answer_quality_check",
-        path=route_after_answer_quality,
+        source="web_knowledge_grade",
+        path=route_after_web_knowledge_grade,
         path_map={
-            "qa_result_compose": "qa_result_compose",
-            "answer_repair": "answer_repair",
-            "qa_clarification_response": "qa_clarification_response",
+            "web_to_408_note": "web_to_408_note",
+            "web_query_rewrite": "web_query_rewrite",
+            "hard_fallback": "hard_fallback",
         },
     )
-    graph.add_edge("answer_repair", "answer_quality_check")
-    graph.add_edge("insufficient_evidence_response", "qa_result_compose")
-    graph.add_edge("qa_result_compose", "compose_learning_events")
-    graph.add_edge("qa_clarification_response", "compose_learning_events")
-    graph.add_edge("compose_learning_events", END)
+    graph.add_edge("web_to_408_note", "upsert_web_staging")
+    graph.add_edge("upsert_web_staging", "retrieve_augmented")
+    graph.add_edge("retrieve_augmented", "grade_context")
+    graph.add_edge("generate_answer_or_question", "quality_gate")
+    graph.add_conditional_edges(
+        source="quality_gate",
+        path=route_after_quality_gate,
+        path_map={
+            "finalize": "finalize",
+            "rethink_and_revise": "rethink_and_revise",
+            "generate_answer_or_question": "generate_answer_or_question",
+            "web_query_rewrite": "web_query_rewrite",
+            "hard_fallback": "hard_fallback",
+        },
+    )
+    graph.add_edge("rethink_and_revise", "quality_gate")
+    graph.add_edge("clarify", "finalize")
+    graph.add_edge("out_of_scope", "finalize")
+    graph.add_edge("hard_fallback", "finalize")
+    graph.add_edge("finalize", END)
     return graph
 
 
