@@ -35,6 +35,7 @@ _MIN_TEACHING_ANSWER_CHARS = 36
 _MAX_CONCEPT_PARAGRAPH_CHARS = 180
 _ANALOGY_LEAD_MARKERS = (
     "想象",
+    "例如",
     "比如",
     "举个例子",
     "打个比方",
@@ -44,6 +45,7 @@ _ANALOGY_LEAD_MARKERS = (
     "可以把",
     "你可以把",
     "假设",
+    "当你",
 )
 _ANALOGY_SCENE_MARKERS = (
     "餐厅",
@@ -65,6 +67,31 @@ _SECTION_HEADING_RE = re.compile(
     r"主要作用|作用|特点|易错点))"
     r"\s*[：:]"
     r")"
+)
+_DEFINITION_SENTENCE_RE = re.compile(
+    r"(?P<sentence>"
+    r"(?:[A-Za-z][A-Za-z0-9/+\-.#]{1,32}|[\u4e00-\u9fff]{2,12})"
+    r"(?:\s*[（(][^）)]{1,80}[）)])?"
+    r"\s*(?:全称是|是一种|是一个|是一套|是|指|属于|就是)"
+    r"[^。！？!?\n]{8,220}[。！？!?]?"
+    r")"
+)
+_PREFERRED_DEFINITION_TERMS = (
+    "http",
+    "https",
+    "tcp",
+    "udp",
+    "ip",
+    "dns",
+    "递归",
+    "进程",
+    "线程",
+    "缓存",
+    "队列",
+    "栈",
+    "链表",
+    "二叉树",
+    "虚拟内存",
 )
 
 
@@ -308,8 +335,16 @@ def _postprocess_display_answer(value: str, *, question_type: str) -> str:
 
 def _prioritize_definition_section(value: str) -> str:
     text = str(value or "").strip()
-    if not text or not _starts_with_why_needed(text):
+    if not text:
         return text
+    if _starts_with_why_needed(text):
+        text = _move_definition_heading_first(text)
+    if _starts_with_analogy(text):
+        text = _move_definition_sentence_first(text)
+    return text
+
+
+def _move_definition_heading_first(text: str) -> str:
     matches = list(_SECTION_HEADING_RE.finditer(text))
     if len(matches) < 2:
         return text
@@ -339,6 +374,48 @@ def _prioritize_definition_section(value: str) -> str:
     if prefix:
         paragraphs.append(prefix)
     return "\n\n".join(_tidy_display_text(paragraph) for paragraph in paragraphs if paragraph.strip()).strip()
+
+
+def _move_definition_sentence_first(text: str) -> str:
+    matches = list(_DEFINITION_SENTENCE_RE.finditer(text))
+    if not matches:
+        return text
+
+    selected = max(matches, key=_definition_sentence_score)
+    if selected.start() <= 0:
+        return text
+    if _definition_sentence_score(selected) <= 0:
+        return text
+
+    definition = _tidy_display_text(selected.group("sentence"))
+    before = text[: selected.start()].strip()
+    after = text[selected.end() :].strip()
+    remainder = " ".join(part for part in (before, after) if part)
+    remainder = _tidy_display_text(remainder)
+    if not definition or not remainder:
+        return text
+    return f"{definition}\n\n{remainder}".strip()
+
+
+def _definition_sentence_score(match: re.Match[str]) -> int:
+    sentence = str(match.group("sentence") or "")
+    prefix = re.split(r"\s*(?:全称是|是一种|是一个|是一套|是|指|属于|就是)", sentence, maxsplit=1)[0]
+    lowered_sentence = sentence.lower()
+    lowered_prefix = prefix.lower()
+    score = 0
+    if any(term in lowered_sentence for term in _PREFERRED_DEFINITION_TERMS):
+        score += 6
+    if re.search(r"\b[A-Z][A-Za-z0-9/+\-.#]{1,}\b", prefix):
+        score += 4
+    if any(marker in sentence for marker in _ANALOGY_SCENE_MARKERS):
+        score -= 3
+    if len(re.sub(r"\s+", "", prefix)) > 18:
+        score -= 2
+    if any(term in lowered_prefix for term in ("厨房", "服务员", "顾客", "浏览器", "服务器")) and not any(
+        term in lowered_prefix for term in _PREFERRED_DEFINITION_TERMS
+    ):
+        score -= 4
+    return score
 
 
 def _starts_with_why_needed(value: str) -> bool:
@@ -378,6 +455,7 @@ def _tidy_display_text(value: str) -> str:
     normalized = str(value or "")
     normalized = re.sub(r"[ \t\r\f\v]+", " ", normalized)
     normalized = "\n".join(line.strip() for line in normalized.split("\n"))
+    normalized = re.sub(r"(?<=[。！？!?])[ \t]+(?=[\u4e00-\u9fffA-Za-z0-9])", "", normalized)
     normalized = re.sub(r"[，,]\s*([。！？!?])", r"\1", normalized)
     normalized = re.sub(r"[：:]\s*([。！？!?])", r"\1", normalized)
     normalized = normalized.strip()

@@ -692,6 +692,40 @@ class ChatApiTest(unittest.TestCase):
         self.assertIn("应用层协议", payload["final_answer"])
         self.assertIn("请求，服务器返回响应", payload["final_answer"])
 
+    def test_chat_sync_reorders_concept_answer_when_example_sentence_comes_first(self) -> None:
+        def _example_first_chat_once(**_kwargs):
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-example-first",
+                question_type="concept",
+                route="explain",
+                final_answer=(
+                    "当你在浏览器输入网址时，浏览器会向服务器请求页面。"
+                    "HTTP 是 Web 中客户端和服务器之间通信的应用层协议。"
+                    "服务器再按照 HTTP 返回状态码、响应头和响应体。"
+                ),
+                explanation=ExplanationPayload(topic="HTTP"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_example_first_chat_once):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-example-first-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-example-first",
+                    "question": "http是什么",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["final_answer"].startswith("HTTP 是 Web 中客户端和服务器之间通信的应用层协议"))
+        self.assertLess(payload["final_answer"].find("HTTP 是"), payload["final_answer"].find("当你在浏览器"))
+        self.assertIn("状态码、响应头和响应体", payload["final_answer"])
+
     def test_chat_sync_empty_final_answer_does_not_fall_back_to_thinking(self) -> None:
         def _empty_final_chat_once(**_kwargs):
             return _chat_result_with_state(ChatExecutionResult(

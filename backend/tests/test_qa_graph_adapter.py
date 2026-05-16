@@ -497,6 +497,42 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertNotIn("安全兜底", response.answer)
         self.assertFalse(result.get("web_search_attempted", False))
 
+    def test_suffix_stable_408_concept_without_rag_uses_model_only_fallback(self) -> None:
+        for index, question in enumerate(("http是什么", "HTTP 是什么", "HTTP 是什么协议"), start=1):
+            with self.subTest(question=question):
+                result = build_graph().compile().invoke(
+                    {
+                        "run_id": f"run-qa-suffix-concept-{index}",
+                        "user_id": "u1",
+                        "user_message": question,
+                        "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                        "evidence": [],
+                    }
+                )
+
+                response = FinalResponse.model_validate(result["final_response"])
+                self.assertEqual(result["question_type"], "concept")
+                self.assertEqual(response.source_level, SourceLevel.MODEL)
+                self.assertEqual(response.ui_payload["answer_mode"], "model_only")
+                self.assertNotIn("安全兜底", response.answer)
+
+    def test_suffix_concept_notebook_only_still_refuses_without_evidence(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-suffix-concept-notebook-only",
+                "user_id": "u1",
+                "user_message": "http是什么",
+                "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                "evidence": [],
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(result["question_type"], "concept")
+        self.assertEqual(response.source_level, SourceLevel.NONE)
+        self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")
+        self.assertIn("资料不足", response.answer)
+
     def test_non_408_stable_question_uses_general_answer_route(self) -> None:
         class CapturingAdapter:
             def __init__(self) -> None:

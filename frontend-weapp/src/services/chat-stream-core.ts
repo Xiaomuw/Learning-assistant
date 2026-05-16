@@ -163,6 +163,7 @@ const SHORT_FINAL_ANSWER_MAX_CHARS = 80;
 const LONG_SINGLE_PARAGRAPH_MAX_CHARS = 220;
 const ANALOGY_LEAD_MARKERS = [
   "想象",
+  "例如",
   "比如",
   "举个例子",
   "打个比方",
@@ -171,7 +172,8 @@ const ANALOGY_LEAD_MARKERS = [
   "类似",
   "可以把",
   "你可以把",
-  "假设"
+  "假设",
+  "当你"
 ];
 const ANALOGY_SCENE_MARKERS = [
   "餐厅",
@@ -188,6 +190,24 @@ const ANALOGY_SCENE_MARKERS = [
   "邮局"
 ];
 const SECTION_HEADING_PATTERN = /((?:为什么(?:需要|要)\s*[\w\u4e00-\u9fff/+\-.#]{0,32}|[\w\u4e00-\u9fff/+\-.#]{0,32}\s*(?:是\s*什么|是什么|如何工作|怎么工作|工作方式|主要作用|作用|特点|易错点))\s*[：:])/g;
+const DEFINITION_SENTENCE_PATTERN = /((?:[A-Za-z][A-Za-z0-9/+\-.#]{1,32}|[\u4e00-\u9fff]{2,12})(?:\s*[（(][^）)]{1,80}[）)])?\s*(?:全称是|是一种|是一个|是一套|是|指|属于|就是)[^。！？!?\n]{8,220}[。！？!?]?)/g;
+const PREFERRED_DEFINITION_TERMS = [
+  "http",
+  "https",
+  "tcp",
+  "udp",
+  "ip",
+  "dns",
+  "递归",
+  "进程",
+  "线程",
+  "缓存",
+  "队列",
+  "栈",
+  "链表",
+  "二叉树",
+  "虚拟内存"
+];
 
 export function stripMarkdownArtifacts(text: string): string {
   return stripPlanningArtifacts(String(text || "")
@@ -252,9 +272,18 @@ function looksLikePlanningText(text: string): boolean {
 }
 
 function prioritizeDefinitionSection(text: string): string {
-  const normalized = String(text || "").trim();
-  if (!startsWithWhyNeeded(normalized)) return normalized;
+  let normalized = String(text || "").trim();
+  if (!normalized) return normalized;
+  if (startsWithWhyNeeded(normalized)) {
+    normalized = moveDefinitionHeadingFirst(normalized);
+  }
+  if (startsWithAnalogy(normalized)) {
+    normalized = moveDefinitionSentenceFirst(normalized);
+  }
+  return normalized;
+}
 
+function moveDefinitionHeadingFirst(normalized: string): string {
   const matches: Array<{ heading: string; index: number }> = [];
   let match: RegExpExecArray | null;
   SECTION_HEADING_PATTERN.lastIndex = 0;
@@ -284,6 +313,40 @@ function prioritizeDefinitionSection(text: string): string {
     ...segments.slice(definitionIndex + 1)
   ];
   return ordered.map((item) => item.text).join("\n\n").trim();
+}
+
+function moveDefinitionSentenceFirst(text: string): string {
+  const matches: Array<{ text: string; index: number; score: number }> = [];
+  let match: RegExpExecArray | null;
+  DEFINITION_SENTENCE_PATTERN.lastIndex = 0;
+  while ((match = DEFINITION_SENTENCE_PATTERN.exec(text)) !== null) {
+    const sentence = String(match[1] || "");
+    matches.push({ text: sentence, index: match.index, score: definitionSentenceScore(sentence) });
+  }
+  DEFINITION_SENTENCE_PATTERN.lastIndex = 0;
+  const selected = matches.sort((left, right) => right.score - left.score)[0];
+  if (!selected || selected.index <= 0 || selected.score <= 0) return text;
+  const before = text.slice(0, selected.index).trim();
+  const after = text.slice(selected.index + selected.text.length).trim();
+  const remainder = tidyDisplayText([before, after].filter(Boolean).join(" "));
+  if (!remainder.trim()) return text;
+  return `${tidyDisplayText(selected.text)}\n\n${remainder}`.trim();
+}
+
+function definitionSentenceScore(sentence: string): number {
+  const prefix = sentence.split(/\s*(?:全称是|是一种|是一个|是一套|是|指|属于|就是)/, 1)[0] || "";
+  const loweredSentence = sentence.toLowerCase();
+  const loweredPrefix = prefix.toLowerCase();
+  let score = 0;
+  if (PREFERRED_DEFINITION_TERMS.some((term) => loweredSentence.includes(term))) score += 6;
+  if (/\b[A-Z][A-Za-z0-9/+\-.#]{1,}\b/.test(prefix)) score += 4;
+  if (ANALOGY_SCENE_MARKERS.some((marker) => sentence.includes(marker))) score -= 3;
+  if (compactTextLength(prefix) > 18) score -= 2;
+  if (["厨房", "服务员", "顾客", "浏览器", "服务器"].some((term) => loweredPrefix.includes(term))
+    && !PREFERRED_DEFINITION_TERMS.some((term) => loweredPrefix.includes(term))) {
+    score -= 4;
+  }
+  return score;
 }
 
 function startsWithWhyNeeded(text: string): boolean {
@@ -321,6 +384,19 @@ function isSingleLongParagraph(text: string, maxCompactLength: number): boolean 
 
 function compactTextLength(text: string): number {
   return String(text || "").replace(/\s+/g, "").length;
+}
+
+function tidyDisplayText(text: string): string {
+  const normalized = String(text || "")
+    .replace(/[ \t\r\f\v]+/g, " ")
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .replace(/([。！？!?])[ \t]+(?=[\u4e00-\u9fffA-Za-z0-9])/g, "$1")
+    .replace(/[，,]\s*([。！？!?])/g, "$1")
+    .replace(/[：:]\s*([。！？!?])/g, "$1")
+    .trim();
+  return normalized.replace(/[，,：:]\s*$/, "。");
 }
 
 function collapseAdjacentDuplicateParagraphs(text: string): string {

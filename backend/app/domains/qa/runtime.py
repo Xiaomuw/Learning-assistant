@@ -890,9 +890,9 @@ def _streaming_answer_messages(
     if str(request.question_type or "").strip() == "concept":
         stream_instruction += (
             "\n## 概念题输出顺序\n"
-            "- 如果用户问“什么是/什么叫/解释 X”，第一句必须直接回答“X 是……”。\n"
-            "- 不要以“为什么需要 X”、生活类比或使用场景开头；这些内容只能放在定义之后。\n"
-            "- 推荐顺序：定义 → 所属层级/位置 → 工作方式 → 作用或易错点。\n"
+            "- 如果用户问“什么是/什么叫/解释 X”或“X 是什么/X 是啥/X 什么意思”，第一句必须直接回答“X 是……”。\n"
+            "- 不要以“为什么需要 X”、生活类比、例子或使用场景开头；这些内容只能放在定义和机制之后。\n"
+            "- 推荐顺序：定义 → 所属层级/位置 → 工作方式 → 例子 → 作用或易错点。\n"
         )
     if conversation:
         return [
@@ -998,6 +998,21 @@ def _topic_from_streamed_answer(request: AgentRequest) -> str:
         if topic.lower().startswith(prefix):
             topic = topic[len(prefix) :].strip(" ：:，,")
             break
+    topic = re.sub(
+        r"\s*(?:是\s*什么|是什么|是啥|是啥子|叫\s*什么|叫什么)"
+        r"(?:协议|概念|意思|东西|机制|原理)?"
+        r"(?:呢|呀|啊)?\s*$",
+        "",
+        topic,
+        flags=re.IGNORECASE,
+    )
+    topic = re.sub(
+        r"\s*(?:什么意思|啥意思|指什么|表示什么|怎么理解)(?:呢|呀|啊)?\s*$",
+        "",
+        topic,
+        flags=re.IGNORECASE,
+    )
+    topic = re.sub(r"\s+(?:meaning|definition)\s*$", "", topic, flags=re.IGNORECASE)
     return _truncate_stream_text(topic or "当前问题", 120)
 
 

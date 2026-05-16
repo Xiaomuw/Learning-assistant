@@ -190,6 +190,13 @@ try {
       "HTTP是什么：HTTP 全称是超文本传输协议，是 Web 中客户端和服务器之间通信的应用层协议。\n\n为什么需要HTTP：浏览器和服务器之间需要一种共同规则来交换网页资源。HTTP就是这种规则。\n\nHTTP如何工作：客户端发送请求，服务器返回响应。"
     );
     assert.equal(
+      buildDisplayAnswerContent(
+        "当你在浏览器输入网址时，浏览器会向服务器请求页面。HTTP 是 Web 中客户端和服务器之间通信的应用层协议。服务器再按照 HTTP 返回状态码、响应头和响应体。",
+        { topic: "HTTP", steps: [] }
+      ),
+      "HTTP 是 Web 中客户端和服务器之间通信的应用层协议。\n\n当你在浏览器输入网址时，浏览器会向服务器请求页面。服务器再按照 HTTP 返回状态码、响应头和响应体。"
+    );
+    assert.equal(
       buildDisplayAnswerContent("", {
         topic: "HTTP",
         steps: ["HTTP 是应用层协议。", "它使用请求-响应模型。"]

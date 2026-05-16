@@ -533,6 +533,27 @@ class QARuntimeTest(unittest.TestCase):
         self.assertNotIn("> ", combined)
         self.assertNotIn("- 所有", combined)
 
+    def test_suffix_concept_topic_and_stable_concept_heuristic(self) -> None:
+        request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="computer-network",
+            subject_name="计算机网络",
+            subject_description="",
+            question="HTTP 是什么协议？",
+            question_type="concept",
+            model_name="test-model",
+        )
+
+        answer = qa_runtime_module._streamed_answer_schema(
+            "HTTP 是 Web 中客户端和服务器之间通信的应用层协议。",
+            request,
+        )
+
+        self.assertEqual(answer.topic, "HTTP")
+        self.assertTrue(explainer_module.is_general_concept_question("HTTP 是什么协议？"))
+        self.assertTrue(explainer_module.is_general_concept_question("进程是什么"))
+
     def test_invoke_with_schema_parses_plain_json_fallback(self) -> None:
         from langchain_core.messages import AIMessage
         from langchain_core.prompts import ChatPromptTemplate

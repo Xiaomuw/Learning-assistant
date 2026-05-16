@@ -110,6 +110,9 @@ def _looks_like_stable_definition_question(text: str, lowered: str) -> bool:
         return True
     if any(term in lowered for term in ("what is", "define ", "explain ")):
         return True
+    compact = re.sub(r"[\s？?。.!！；;，,：:、]+", "", text)
+    if _STABLE_DEFINITION_SUFFIX_RE.search(lowered) or _STABLE_DEFINITION_SUFFIX_RE.search(compact):
+        return True
     return False
 
 
@@ -208,4 +211,17 @@ _STABLE_KNOWLEDGE_TERMS = (
     "JavaScript Promise",
     "什么是 promise",
     "什么是 Promise",
+)
+
+_STABLE_DEFINITION_SUFFIX_RE = re.compile(
+    r"(?:"
+    r"(?:是\s*什么|是什么|是啥|是啥子|叫\s*什么|叫什么)"
+    r"(?:协议|概念|意思|东西|机制|原理)?"
+    r"|"
+    r"(?:什么意思|啥意思|指什么|表示什么|怎么理解)"
+    r"(?:呢|呀|啊)?"
+    r"|"
+    r".+\s+(?:meaning|definition)"
+    r")$",
+    re.IGNORECASE,
 )

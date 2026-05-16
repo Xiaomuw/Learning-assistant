@@ -3041,16 +3041,44 @@ def _normalize_tool_invocation_trace(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_CONCEPT_PREFIX_MARKERS = ("什么是", "什么叫", "解释", "概念")
+_CONCEPT_SUFFIX_RE = re.compile(
+    r"(?:"
+    r"(?:是\s*什么|是什么|是啥|是啥子|叫\s*什么|叫什么)"
+    r"(?:协议|概念|意思|东西|机制|原理)?"
+    r"|"
+    r"(?:什么意思|啥意思|指什么|表示什么|怎么理解)"
+    r"(?:呢|呀|啊)?"
+    r"|"
+    r"(?:what\s+is|define|explain)\s+.+"
+    r"|"
+    r".+\s+(?:meaning|definition)"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_concept_question(question: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(question or "").strip().lower())
+    compact = re.sub(r"[\s？?。.!！；;，,：:、]+", "", str(question or "").strip())
+    if not normalized and not compact:
+        return False
+    if any(token in question for token in _CONCEPT_PREFIX_MARKERS):
+        return True
+    if any(token in normalized for token in ("what is", "define", "explain")):
+        return True
+    if _CONCEPT_SUFFIX_RE.search(normalized) or _CONCEPT_SUFFIX_RE.search(compact):
+        return True
+    return False
+
+
 def _infer_question_type(question: str) -> str:
     lightweight_intent = classify_lightweight_answer_intent(question)
     if lightweight_intent == "simple_fact":
         return "simple_fact"
     if lightweight_intent == "practice_generation":
         return "practice_generation"
-    normalized = question.lower()
-    if any(token in question for token in ("什么是", "什么叫", "解释", "概念")):
-        return "concept"
-    if any(token in normalized for token in ("what is", "define", "explain")):
+    if _looks_like_concept_question(question):
         return "concept"
     return "qa"
 

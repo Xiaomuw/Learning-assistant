@@ -6,7 +6,7 @@ QA fallback 讲解 — 完整实现
   以"苏格拉底式助教"角色生成结构化分层讲解。
 
   不同 question_type 采用不同讲解风格：
-    - concept  → 侧重直觉理解，多用类比
+    - concept  → 先给定义和机制，再用例子辅助理解
     - problem  → 侧重解题思路，不直接给答案，前两步只给方向
     - practice → 更简洁，直接给步骤
     - review   → 结合 memory.weak_points 重点强调易错点
@@ -106,10 +106,10 @@ def _coerce_string_list(value: Any, *, fallback: list[str]) -> list[str]:
 STYLE_INSTRUCTIONS: dict[str, str] = {
     "concept": (
         "【讲解风格：概念理解】\n"
-        "- 用直觉化、生活化的语言解释概念\n"
-        "- 多使用类比和比喻帮助学生建立直观理解\n"
-        "- steps 从「为什么需要这个概念」出发，逐步深入到定义和性质\n"
-        "- 避免上来就列公式，先让学生'感受'到概念的意义"
+        "- 第一段必须直接给出概念定义，不要先写生活类比或使用场景\n"
+        "- steps 按「定义 → 所属层级/位置 → 工作机制/用途 → 例子或易错点」组织\n"
+        "- 例子和类比只能放在定义、机制之后，最多 1-2 句，不能替代正式定义\n"
+        "- 避免整块长段落，手机端用短自然段或简短要点输出"
     ),
     "problem": (
         "【讲解风格：解题辅导 — 苏格拉底式引导】\n"
@@ -158,19 +158,59 @@ _GENERAL_CONCEPT_MARKERS = (
     "define",
     "what is",
 )
+_GENERAL_CONCEPT_SUFFIX_RE = re.compile(
+    r"(?:"
+    r"(?:是\s*什么|是什么|是啥|是啥子|叫\s*什么|叫什么)"
+    r"(?:协议|概念|意思|东西|机制|原理)?"
+    r"|"
+    r"(?:什么意思|啥意思|指什么|表示什么|怎么理解)"
+    r"(?:呢|呀|啊)?"
+    r"|"
+    r"(?:what\s+is|define|explain)\s+.+"
+    r"|"
+    r".+\s+(?:meaning|definition)"
+    r")$",
+    re.IGNORECASE,
+)
+_KNOWN_STABLE_CONCEPT_TERMS = (
+    "http",
+    "https",
+    "tcp",
+    "udp",
+    "ip",
+    "dns",
+    "tcp/ip",
+    "rag",
+    "递归",
+    "数据库索引",
+    "进程",
+    "线程",
+    "死锁",
+    "虚拟内存",
+    "缓存",
+    "队列",
+    "栈",
+    "链表",
+    "二叉树",
+)
+
+
+def _has_general_concept_marker(question: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(question or "").strip().lower())
+    compact = re.sub(r"[\s？?。.!！；;，,：:、]+", "", str(question or "").strip())
+    return (
+        any(marker in question for marker in _GENERAL_CONCEPT_MARKERS)
+        or any(marker in normalized for marker in _GENERAL_CONCEPT_MARKERS)
+        or bool(_GENERAL_CONCEPT_SUFFIX_RE.search(normalized))
+        or bool(_GENERAL_CONCEPT_SUFFIX_RE.search(compact))
+    )
 
 
 def _is_general_concept_question(question: str) -> bool:
     normalized = question.lower()
     return (
-        "http" in normalized
-        or "tcp" in normalized
-        or "递归" in question
-        or "数据库索引" in question
-        or "tcp/ip" in normalized
-        or "rag" in normalized
-        or any(marker in question for marker in _GENERAL_CONCEPT_MARKERS)
-        or any(marker in normalized for marker in _GENERAL_CONCEPT_MARKERS)
+        any(term in normalized or term in question for term in _KNOWN_STABLE_CONCEPT_TERMS)
+        or _has_general_concept_marker(question)
     )
 
 
