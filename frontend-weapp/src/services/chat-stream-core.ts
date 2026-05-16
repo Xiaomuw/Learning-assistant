@@ -112,3 +112,87 @@ export function recordStreamEventDiagnostics(
   }
   return { force };
 }
+
+export function dedupeDisplayAnswer(text: string): string {
+  const normalized = String(text || "").trim();
+  if (!normalized) return "";
+
+  return collapseAdjacentDuplicateSentences(
+    collapseAdjacentDuplicateParagraphs(normalized)
+  )
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function collapseAdjacentDuplicateParagraphs(text: string): string {
+  const paragraphs = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+  if (paragraphs.length <= 1) return text.trim();
+
+  const result: string[] = [];
+  let previousKey = "";
+  paragraphs.forEach((paragraph) => {
+    const key = dedupeKey(paragraph);
+    if (key && key === previousKey) return;
+    result.push(paragraph);
+    previousKey = key;
+  });
+  return result.join("\n\n");
+}
+
+function collapseAdjacentDuplicateSentences(text: string): string {
+  const parts = splitSentencesWithSeparators(text);
+  if (parts.length <= 1) return text.trim();
+
+  const result: string[] = [];
+  let previousKey = "";
+  parts.forEach((part) => {
+    const stripped = part.sentence.trim();
+    const key = dedupeKey(stripped);
+    if (stripped && key && key === previousKey) {
+      return;
+    }
+    result.push(part.sentence + part.separator);
+    if (stripped) previousKey = key;
+  });
+  return result.join("").trim();
+}
+
+function splitSentencesWithSeparators(text: string): Array<{ sentence: string; separator: string }> {
+  const parts: Array<{ sentence: string; separator: string }> = [];
+  let sentence = "";
+  let separator = "";
+  let afterSentenceEnd = false;
+  const sentenceEndings = "。！？!?";
+
+  for (const char of text) {
+    if (afterSentenceEnd && /\s/.test(char)) {
+      separator += char;
+      continue;
+    }
+    if (afterSentenceEnd) {
+      parts.push({ sentence, separator });
+      sentence = "";
+      separator = "";
+      afterSentenceEnd = false;
+    }
+    sentence += char;
+    if (sentenceEndings.includes(char)) {
+      afterSentenceEnd = true;
+    }
+  }
+
+  if (sentence || separator) {
+    parts.push({ sentence, separator });
+  }
+  return parts;
+}
+
+function dedupeKey(value: string): string {
+  return String(value || "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, "")
+    .replace(/[：:，,。！？!?；;]/g, "")
+    .trim();
+}

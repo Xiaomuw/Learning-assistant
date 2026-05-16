@@ -526,6 +526,69 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(job_payload["status"], "completed")
         self.assertEqual(job_payload["response"]["final_answer"], "HTTP 是应用层协议。")
 
+    def test_chat_sync_cleans_duplicate_final_answer(self) -> None:
+        def _duplicated_chat_once(**_kwargs):
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-dedupe",
+                question_type="simple_fact",
+                route="direct",
+                final_answer="1 + 1 = 2。 1 + 1 = 2。",
+                explanation=ExplanationPayload(topic="简单计算"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_duplicated_chat_once):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-dedupe-1"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-dedupe",
+                    "question": "1+1等于多少",
+                    "subject_id": "general",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["final_answer"], "1 + 1 = 2。")
+        self.assertNotIn("递归", payload["final_answer"])
+        self.assertNotIn("链表", payload["final_answer"])
+
+    def test_chat_job_poll_cleans_duplicate_completed_result(self) -> None:
+        self.chat_jobs["dedupe-job-1"] = {
+            "job_id": "dedupe-job-1",
+            "user_id": "default_user",
+            "session_id": "session-1",
+            "request_id": "dedupe-request-1",
+            "status": "completed",
+            "result_json": {
+                "session_id": "session-1",
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": "HTTP 是应用层协议。 HTTP 是应用层协议。",
+                "explanation": {
+                    "topic": "HTTP",
+                    "final_answer": "HTTP 是应用层协议。 HTTP 是应用层协议。",
+                },
+                "quiz_items": [],
+                "memory": {},
+                "status": "completed",
+                "job_id": "dedupe-job-1",
+                "request_id": "dedupe-request-1",
+            },
+            "error_json": None,
+        }
+
+        response = self.client.post("/api/chat/jobs/dedupe-job-1/poll")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["response"]["final_answer"], "HTTP 是应用层协议。")
+        self.assertEqual(payload["response"]["explanation"]["final_answer"], "HTTP 是应用层协议。")
+
     def test_chat_sync_returns_completed_when_finished_during_grace(self) -> None:
         def _nearly_slow_chat_once(**_kwargs):
             time.sleep(0.03)

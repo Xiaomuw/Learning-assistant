@@ -25,6 +25,7 @@ function buildCoreModule() {
 
 const {
   createSSEParser,
+  dedupeDisplayAnswer,
   decodeUtf8,
   recordStreamChunkDiagnostics,
   recordStreamEventDiagnostics
@@ -76,6 +77,18 @@ try {
       streaming_mode: "token",
       is_synthetic_delta: false
     });
+  }
+
+  {
+    assert.equal(dedupeDisplayAnswer("1 + 1 = 2。 1 + 1 = 2。"), "1 + 1 = 2。");
+    assert.equal(
+      dedupeDisplayAnswer("HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。 HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。"),
+      "HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。"
+    );
+    assert.equal(
+      dedupeDisplayAnswer("第一段。\n\n第一段。\n\n第二段。"),
+      "第一段。\n\n第二段。"
+    );
   }
 
   {

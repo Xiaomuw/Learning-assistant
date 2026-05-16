@@ -4,6 +4,7 @@ import { API_BASE, refreshAuthSession } from "@/services/api";
 import { ApiTransportError, callApiTransport, isContainerTransportEnabled } from "@/services/api-transport";
 import {
   createSSEParser,
+  dedupeDisplayAnswer,
   decodeUtf8,
   recordStreamChunkDiagnostics,
   recordStreamEventDiagnostics
@@ -92,14 +93,14 @@ function stripMarkdownArtifacts(text: string) {
 
 function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
   if (finalAnswer.trim()) {
-    return stripMarkdownArtifacts(finalAnswer);
+    return dedupeDisplayAnswer(stripMarkdownArtifacts(finalAnswer));
   }
   const stepContent = (explanation?.steps || [])
     .map((item) => item.trim())
     .filter(Boolean)
     .join("\n\n");
   if (stepContent) {
-    return stripMarkdownArtifacts(stepContent);
+    return dedupeDisplayAnswer(stripMarkdownArtifacts(stepContent));
   }
   if (explanation?.topic?.trim()) {
     return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
@@ -232,7 +233,10 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
         explanation,
         question_type: result.question_type,
         route: result.route,
-        session_id: result.session_id
+        session_id: result.session_id,
+        status: result.status,
+        job_id: result.job_id,
+        request_id: result.request_id
       }
     });
     if (

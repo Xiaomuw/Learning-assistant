@@ -3,6 +3,7 @@ import Taro, { useDidShow, useUnload } from "@tarojs/taro";
 import { Button, ScrollView, Text, Textarea, View } from "@tarojs/components";
 import { deleteSession, ensureAuthSession, fetchModelHealth, fetchNotebooks, fetchSessions } from "@/services/api";
 import { sendChatStream } from "@/services/chat-stream";
+import { dedupeDisplayAnswer } from "@/services/chat-stream-core";
 import { requireAuthUser } from "@/store/auth";
 import {
   clearChatDraft,
@@ -268,7 +269,7 @@ function normalizeAnswerLine(line: string) {
 }
 
 function sanitizeAnswerText(text: string) {
-  return stripMarkdownArtifacts(text)
+  const normalized = stripMarkdownArtifacts(text)
     .replace(/\r\n/g, "\n")
     .replace(/^#{1,6}\s*/gm, "")
     .replace(/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/gm, "\n")
@@ -283,6 +284,7 @@ function sanitizeAnswerText(text: string) {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+  return dedupeDisplayAnswer(normalized);
 }
 
 function flushParagraph(lines: string[], blocks: AnswerBlock[]) {
@@ -340,14 +342,14 @@ function answerBlocks(text: string): AnswerBlock[] {
 
 function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
   if (finalAnswer.trim()) {
-    return stripMarkdownArtifacts(finalAnswer);
+    return dedupeDisplayAnswer(stripMarkdownArtifacts(finalAnswer));
   }
   const stepContent = (explanation?.steps || [])
     .map((item) => item.trim())
     .filter(Boolean)
     .join("\n\n");
   if (stepContent) {
-    return stripMarkdownArtifacts(stepContent);
+    return dedupeDisplayAnswer(stripMarkdownArtifacts(stepContent));
   }
   if (explanation?.topic?.trim()) {
     return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
@@ -356,16 +358,16 @@ function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
 }
 
 function chooseDisplayAnswer(currentAnswer: string, finalAnswer: string, data: any) {
-  if (!finalAnswer.trim()) return currentAnswer;
-  if (!currentAnswer.trim()) return finalAnswer;
+  if (!finalAnswer.trim()) return dedupeDisplayAnswer(currentAnswer);
+  if (!currentAnswer.trim()) return dedupeDisplayAnswer(finalAnswer);
   const streamingMode = safeText(data?.streaming_mode || data?.streamingMode);
   const tokenCount = safeCount(data?.streaming_token_count ?? data?.streamingTokenCount) || 0;
   const currentClean = sanitizeAnswerText(currentAnswer);
   const finalClean = sanitizeAnswerText(finalAnswer);
   if ((streamingMode === "token" || tokenCount > 0) && finalClean.length < currentClean.length * 0.8) {
-    return currentAnswer;
+    return dedupeDisplayAnswer(currentAnswer);
   }
-  return finalAnswer;
+  return dedupeDisplayAnswer(finalAnswer);
 }
 
 function splitNodeReplayChunks(text: string) {
@@ -642,6 +644,7 @@ export default function ChatPage() {
   const nodeReplayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nodeReplayQueueRef = useRef<string[]>([]);
   const pendingFinalizeRef = useRef(false);
+  const completedAnswerEventKeyRef = useRef("");
   const hasRealTokenDeltaRef = useRef(false);
   const streamPresentationRef = useRef<StreamPresentation>({
     deltaCount: 0,
@@ -834,6 +837,7 @@ export default function ChatPage() {
     clearNodeReplayTimer();
     nodeReplayQueueRef.current = [];
     pendingFinalizeRef.current = false;
+    completedAnswerEventKeyRef.current = "";
     hasRealTokenDeltaRef.current = false;
     streamPresentationRef.current = { deltaCount: 0, synthetic: false, active: false };
     answerRef.current = "";
@@ -930,7 +934,7 @@ export default function ChatPage() {
       : quizClarificationRef.current
         ? "我可以帮你出题，但需要先确定练习方向。"
         : "本轮没有返回内容，请稍后重试。";
-    const text = content.trim() || fallback;
+    const text = dedupeDisplayAnswer(content).trim() || fallback;
     const process = buildProcessSnapshot();
     setMessages((current) => [
       ...current,
@@ -1041,6 +1045,12 @@ export default function ChatPage() {
     if (eventName === "explanation" || eventName === "final") {
       const explanation = data?.explanation as Explanation | undefined;
       const finalAnswer = buildAnswerContent(data?.final_answer || "", explanation);
+      const completedAnswerKey = [safeText(data?.job_id), safeText(data?.request_id)]
+        .filter(Boolean)
+        .join("|");
+      if (finalAnswer && completedAnswerKey && completedAnswerEventKeyRef.current === completedAnswerKey) {
+        return;
+      }
       const reasoningSummary = safeText(data?.reasoning_summary);
       const toolCalls = mergeToolCalls(data?.tool_calls, data?.external_tool_calls);
       const execution = buildExecutionInfo(data);
@@ -1102,6 +1112,9 @@ export default function ChatPage() {
         });
       }
       if (finalAnswer) {
+        if (completedAnswerKey) {
+          completedAnswerEventKeyRef.current = completedAnswerKey;
+        }
         if (hasRealTokenDeltaRef.current) {
           const displayAnswer = chooseDisplayAnswer(answerRef.current, finalAnswer, data);
           answerRef.current = displayAnswer;
@@ -1144,8 +1157,8 @@ export default function ChatPage() {
         setStatusText(addedCount > 0 ? `已新增 ${addedCount} 道练习题` : "这组练习题已在队列中");
       }
       if (finalAnswer) {
-        answerRef.current = finalAnswer;
-        setStreamText(finalAnswer);
+        answerRef.current = dedupeDisplayAnswer(finalAnswer);
+        setStreamText(answerRef.current);
       } else if (quizClarification) {
         answerRef.current = "我可以帮你出题，但需要先确定练习方向。";
         setStreamText(answerRef.current);

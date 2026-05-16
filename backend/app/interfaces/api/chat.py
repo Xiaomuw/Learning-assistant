@@ -33,6 +33,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from app.application.chat.answer_cleaning import clean_display_answer, should_preserve_notebook_notice
 from app.application.chat.service import (
     run_chat_once_with_state,
     stream_chat,
@@ -201,7 +202,7 @@ def _chat_response_from_result(
     final_state: dict[str, Any] | None = None,
 ) -> ChatResponse:
     state = final_state if isinstance(final_state, dict) else {}
-    return ChatResponse(
+    response = ChatResponse(
         session_id=body.session_id,
         question_type=result.question_type,
         route=result.route,
@@ -221,6 +222,10 @@ def _chat_response_from_result(
         web_search_used=_web_search_used(state),
         web_search_error=_web_search_error(state),
         trace_records=_safe_trace_records(state.get("trace_records")),
+    )
+    return _sanitize_chat_response(
+        response,
+        preserve_notebook_notice=should_preserve_notebook_notice(state),
     )
 
 
@@ -274,7 +279,32 @@ def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str
 
 
 def _chat_response_to_job_result(response: ChatResponse) -> dict[str, Any]:
-    return response.model_dump(mode="json")
+    return _sanitize_chat_response(response).model_dump(mode="json")
+
+
+def _sanitize_chat_response(
+    response: ChatResponse,
+    *,
+    preserve_notebook_notice: bool = False,
+) -> ChatResponse:
+    """Apply the same user-facing answer cleanup at every sync/job exit."""
+
+    explanation = dict(response.explanation or {})
+    if explanation.get("final_answer") is not None:
+        explanation["final_answer"] = clean_display_answer(
+            str(explanation.get("final_answer") or ""),
+            preserve_notebook_notice=preserve_notebook_notice,
+        )
+    final_answer = clean_display_answer(
+        response.final_answer,
+        preserve_notebook_notice=preserve_notebook_notice,
+    )
+    return response.model_copy(
+        update={
+            "final_answer": final_answer,
+            "explanation": explanation,
+        }
+    )
 
 
 def _normalize_client_request_id(value: str | None) -> str:
@@ -494,7 +524,7 @@ def _chat_sync_terminal_response_from_job(
         )
         return JSONResponse(status_code=410, content=error_payload)
     if status == "completed" and job.get("result_json"):
-        response = ChatResponse.model_validate(job["result_json"])
+        response = _sanitize_chat_response(ChatResponse.model_validate(job["result_json"]))
         logger.info(
             "✅ [同步] {}: request_id={} job_id={} status=completed",
             log_context,
@@ -888,7 +918,7 @@ def _chat_job_response_from_row(*, job_id: str, job: dict[str, Any]) -> ChatJobR
         )
 
     if status == "completed" and job.get("result_json"):
-        response = ChatResponse.model_validate(job["result_json"])
+        response = _sanitize_chat_response(ChatResponse.model_validate(job["result_json"]))
         return ChatJobResponse(
             status="completed",
             job_id=job_id,
