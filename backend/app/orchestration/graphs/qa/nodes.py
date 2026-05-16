@@ -932,12 +932,15 @@ def web_search_node_408(
         )
     tagged = _tag_tool_result_evidence(result, route=None, retrieval_source="web")
     pending = [item for item in tagged.evidence if item.text.strip()]
+    provider_attempts = _tool_provider_attempts(tagged)
+    web_search_error = _web_search_error_from_result(tagged)
     return {
         "tool_requests": [*existing_requests, request_payload],
         "tool_results": [*existing_results, tagged.model_dump(mode="json")],
         "pending_web_evidence": [item.model_dump(mode="json") for item in pending],
         "errors": [*list(state.get("errors") or []), *new_errors],
         "web_search_attempted": True,
+        "web_search_error": web_search_error,
         "web_search_reason": _web_search_reason_for_state(state, question=query),
         "web_search_iteration": int(state.get("web_search_iteration") or 0) + 1,
         "retrieval_report": {
@@ -946,6 +949,10 @@ def web_search_node_408(
             "web_result_count": len(pending),
             "web_search_stage": "executed",
             "web_query": query,
+            "web_provider": tagged.provider,
+            "web_tool_status": tagged.status.value,
+            "web_tool_error": web_search_error,
+            "web_provider_attempts": provider_attempts,
         },
         "trace_records": append_trace_record(
             {**state, "tool_results": [*existing_results, tagged.model_dump(mode="json")]},
@@ -955,6 +962,10 @@ def web_search_node_408(
             web_result_count=len(pending),
             web_success_count=1 if tagged.status == ToolStatus.SUCCESS else 0,
             web_error_count=len(new_errors),
+            web_provider=tagged.provider,
+            web_tool_status=tagged.status.value,
+            web_tool_error=web_search_error,
+            web_provider_attempts=provider_attempts,
             web_retry_count=int(state.get("web_retry_count") or 0),
         ),
     }
@@ -1022,6 +1033,8 @@ def route_after_web_knowledge_grade(state: QAGraphState) -> str:
         return "web_to_408_note"
     if _can_retry_web(state):
         return "web_query_rewrite"
+    if _can_use_stable_concept_model_fallback(state):
+        return "generate_answer_or_question"
     return "hard_fallback"
 
 
@@ -1174,6 +1187,8 @@ def route_after_grade_context(state: QAGraphState) -> str:
     if boundary.get("category") == QUESTION_REALTIME_OR_FRESH:
         return "generate_answer_or_question"
     if gate.get("sufficient"):
+        return "generate_answer_or_question"
+    if _can_use_stable_concept_model_fallback(state):
         return "generate_answer_or_question"
     return "hard_fallback"
 
@@ -2818,6 +2833,31 @@ def _web_search_reason_for_state(state: QAGraphState | dict[str, Any], *, questi
     return "no_sufficient_notebook_evidence"
 
 
+def _web_search_error_from_result(result: ToolResult) -> str:
+    if result.status == ToolStatus.SUCCESS:
+        return ""
+    return str(result.error or result.status.value or "web_search_unavailable").strip()
+
+
+def _tool_provider_attempts(result: ToolResult) -> list[dict[str, Any]]:
+    attempts = (result.output or {}).get("provider_attempts")
+    if not isinstance(attempts, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in attempts:
+        if not isinstance(item, dict):
+            continue
+        normalized.append(
+            {
+                "tool_id": str(item.get("tool_id") or ""),
+                "provider": str(item.get("provider") or ""),
+                "status": str(item.get("status") or ""),
+                "error": str(item.get("error") or ""),
+            }
+        )
+    return normalized
+
+
 def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
     time_context = _runtime_time_context(state)
     has_web_search_tool = bool(state.get("has_web_search_tool"))
@@ -2831,6 +2871,9 @@ def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
                 "name": name,
                 "type": _public_source_from_capability(result.capability),
                 "status": status,
+                "provider": result.provider,
+                "error": result.error,
+                "evidence_count": len(result.evidence),
             }
         )
     for raw in list(state.get("external_tool_calls") or []):
@@ -2851,8 +2894,9 @@ def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
         call.get("type") == "web"
         and ("search" in str(call.get("name") or "").lower() or str(call.get("name") or "") == ToolCapability.WEB_SEARCH.value)
         and str(call.get("status") or "") == ToolStatus.SUCCESS.value
+        and int(call.get("evidence_count") or 0) > 0
         for call in calls
-    ) or bool(state.get("web_search_used"))
+    ) and bool(state.get("web_evidence") or state.get("web_staging_notes"))
     return {
         "currentDate": time_context.get("currentDate"),
         "timezone": time_context.get("timezone"),
@@ -3566,6 +3610,63 @@ def _retrieval_skipped_reason(
     if _has_external_search_signal(question):
         return "external_search_retrieval_stage"
     return "no_explicit_knowledge_base_signal"
+
+
+def _can_use_stable_concept_model_fallback(state: QAGraphState) -> bool:
+    source_policy = _source_policy(state)
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        return False
+
+    question = _resolved_question(state)
+    if not question:
+        return False
+
+    gate = dict(state.get("evidence_gate") or {})
+    if gate.get("notebook_required") or _has_strict_notebook_signal(question) or _has_notebook_signal(question):
+        return False
+
+    boundary = _question_boundary(state, question)
+    if boundary.get("category") != QUESTION_STABLE_KNOWLEDGE:
+        return False
+    if _requires_verified_evidence_for_model_fallback(question):
+        return False
+
+    question_type = str(state.get("question_type") or _infer_question_type(question))
+    if question_type != "concept":
+        return False
+    return _looks_like_408_scope(question)
+
+
+def _requires_verified_evidence_for_model_fallback(question: str) -> bool:
+    boundary = classify_question_boundary(question)
+    if boundary.category == QUESTION_REALTIME_OR_FRESH:
+        return True
+    lowered = question.lower()
+    strict_terms = (
+        "最新",
+        "今天",
+        "现在",
+        "官网",
+        "官方",
+        "官方文档",
+        "来源",
+        "资料来源",
+        "引用",
+        "参考资料",
+        "浏览器支持",
+        "价格",
+        "政策",
+        "mdn",
+        "2025",
+        "2026",
+        "latest",
+        "current",
+        "official",
+        "source",
+        "citation",
+        "browser support",
+    )
+    return any(term in question or term in lowered for term in strict_terms)
 
 
 def _should_run_web_retrieval(

@@ -228,6 +228,15 @@ class ToolingContractsTest(unittest.TestCase):
         }
 
         with (
+            patch.dict(
+                os.environ,
+                {
+                    "MCP_ENABLED": "true",
+                    "MCP_TRANSPORT": "streamableHttp",
+                    "MCP_WEB_SERVER_URL": "https://example.com/mcp",
+                },
+                clear=False,
+            ),
             patch("app.services.tools.mcp_tools.mcp_search_available", return_value=True),
             patch("app.services.tools.mcp_tools.mcp_web_search", return_value=payload),
             patch("app.services.tools.tavily_tool.tavily_web_search", side_effect=AssertionError("should not call tavily")),
@@ -276,6 +285,43 @@ class ToolingContractsTest(unittest.TestCase):
         self.assertEqual(result.status, ToolStatus.SUCCESS)
         self.assertEqual(result.provider, "tavily")
         self.assertEqual(result.evidence[0].source_type, "web")
+
+    def test_executor_reports_provider_attempts_when_all_web_providers_fail(self) -> None:
+        executor = ToolExecutor(
+            registry=build_default_tool_registry(),
+            policy_resolver=ToolPolicyResolver(),
+        )
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "MCP_ENABLED": "true",
+                    "MCP_TRANSPORT": "streamableHttp",
+                    "MCP_WEB_SERVER_URL": "https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp",
+                    "DASHSCOPE_API_KEY": "",
+                },
+                clear=False,
+            ),
+            patch(
+                "app.services.tools.tavily_tool.tavily_web_search",
+                side_effect=RuntimeError("TAVILY_API_KEY 未配置，无法使用网络搜索功能。"),
+            ),
+        ):
+            result = executor.execute(
+                ToolExecutionRequest(
+                    capability=ToolCapability.WEB_SEARCH,
+                    input={"query": "HTTP", "max_results": 3},
+                    input_summary="HTTP",
+                    source_policy=SourcePolicy.OPEN_TOOLS.value,
+                )
+            )
+
+        attempts = result.output.get("provider_attempts") or []
+        self.assertEqual(result.status, ToolStatus.ERROR)
+        self.assertEqual([item["provider"] for item in attempts], ["mcp", "tavily"])
+        self.assertEqual(attempts[0]["error"], "dashscope_api_key_missing")
+        self.assertIn("TAVILY_API_KEY", attempts[1]["error"])
 
 
 if __name__ == "__main__":

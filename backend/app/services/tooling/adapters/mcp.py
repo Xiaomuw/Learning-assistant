@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 
 from app.services.tooling.schemas import ToolExecutionRequest, ToolRegistration, ToolRiskLevel
@@ -46,7 +47,16 @@ class MCPWebSearchAdapter:
                     },
                 )
 
+            from app.infrastructure.mcp import get_mcp_settings
             from app.services.tools.mcp_tools import mcp_search_available, mcp_web_search
+
+            settings = get_mcp_settings()
+            if not settings.enabled:
+                raise RuntimeError("mcp_disabled_or_unconfigured")
+            if "dashscope.aliyuncs.com" in str(settings.server_url or "") and not (
+                os.getenv("DASHSCOPE_API_KEY") or ""
+            ).strip():
+                raise RuntimeError("dashscope_api_key_missing")
 
             if not mcp_search_available(agent_request):
                 raise RuntimeError("mcp_web_search_unavailable")
@@ -69,7 +79,7 @@ class MCPWebSearchAdapter:
             payload = {}
             evidence = []
             status = ToolStatus.ERROR
-            error = type(exc).__name__
+            error = _safe_error_code(exc)
         latency_ms = int((time.perf_counter() - started) * 1000)
         return ToolResult(
             tool_id=self.registration.tool_id,
@@ -82,3 +92,8 @@ class MCPWebSearchAdapter:
             latency_ms=latency_ms,
             error=error,
         )
+
+
+def _safe_error_code(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message[:160] if message else type(exc).__name__

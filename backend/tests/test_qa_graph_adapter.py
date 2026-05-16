@@ -301,7 +301,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn("knowledge_routes", result)
         self.assertIn(result["evidence_judgement"]["status"], {"strong", "partial", "insufficient"})
         response = FinalResponse.model_validate(result["final_response"])
-        self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")
+        self.assertEqual(response.ui_payload["answer_mode"], "model_only")
         self.assertEqual(result["source_usage"], "model")
 
     def test_meta_question_is_classified_as_meta(self) -> None:
@@ -479,6 +479,61 @@ class QAGraphAdapterTest(unittest.TestCase):
             result.get("web_search_reason"),
             {"not_requested_before_evidence_judge", "no_external_search_signal"},
         )
+
+    def test_stable_408_concept_without_rag_uses_model_only_fallback(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-stable-concept-model-only",
+                "user_id": "u1",
+                "user_message": "什么是 HTTP？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "evidence": [],
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(response.source_level, SourceLevel.MODEL)
+        self.assertEqual(response.ui_payload["answer_mode"], "model_only")
+        self.assertNotIn("安全兜底", response.answer)
+        self.assertFalse(result.get("web_search_attempted", False))
+
+    def test_client_requested_web_with_empty_evidence_keeps_stable_concept_model_only(self) -> None:
+        class EmptyWebToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        executor = EmptyWebToolExecutor()
+        result = build_graph(tool_executor=executor).compile().invoke(
+            {
+                "run_id": "run-qa-client-web-empty-model-only",
+                "user_id": "u1",
+                "user_message": "什么是 HTTP？",
+                "source_policy": SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
+                "web_search_requested": True,
+                "allow_web": True,
+                "evidence": [],
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertFalse(result.get("web_search_used", False))
+        self.assertFalse(result["external_evidence_gate"]["sufficient"])
+        self.assertEqual(response.source_level, SourceLevel.MODEL)
+        self.assertEqual(response.ui_payload["answer_mode"], "model_only")
+        self.assertEqual(response.evidence_refs, [])
 
     def test_client_requested_web_search_forces_stable_concept_web_lookup(self) -> None:
         class FakeToolExecutor:
@@ -1262,12 +1317,13 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "thread_id": "t1",
                 "user_message": "什么是递归？",
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "max_repair_count": 0,
             }
         )
 
         response = FinalResponse.model_validate(result["final_response"])
         self.assertEqual(result["repair_count"], 0)
-        self.assertEqual(result["max_repair_count"], 1)
+        self.assertEqual(result["max_repair_count"], 0)
         self.assertEqual(result["answer_repair_attempt_count"], 0)
         self.assertEqual(response.source_level, SourceLevel.NONE)
         self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")

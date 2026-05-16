@@ -36,6 +36,7 @@ class ToolExecutor:
             )
 
         last_error: ToolResult | None = None
+        provider_attempts: list[dict[str, str]] = []
         for tool in candidates:
             decision = self.policy_resolver.resolve(
                 source_policy=request.source_policy,
@@ -56,14 +57,22 @@ class ToolExecutor:
                 )
 
             result = tool.adapter.invoke(request)
+            provider_attempts.append(
+                {
+                    "tool_id": result.tool_id,
+                    "provider": result.provider,
+                    "status": result.status.value,
+                    "error": result.error,
+                }
+            )
             if result.status != ToolStatus.ERROR:
-                return result
+                return _with_provider_attempts(result, provider_attempts)
             last_error = result
             if provider:
                 break
 
         if last_error is not None:
-            return last_error
+            return _with_provider_attempts(last_error, provider_attempts)
         return ToolResult(
             tool_id=f"{request.capability.value}:unavailable",
             provider=provider or "",
@@ -72,3 +81,16 @@ class ToolExecutor:
             input_summary=request.input_summary,
             error="tool_execution_failed",
         )
+
+
+def _with_provider_attempts(result: ToolResult, attempts: list[dict[str, str]]) -> ToolResult:
+    if not attempts:
+        return result
+    return result.model_copy(
+        update={
+            "output": {
+                **dict(result.output or {}),
+                "provider_attempts": list(attempts),
+            }
+        }
+    )

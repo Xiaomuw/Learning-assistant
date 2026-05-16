@@ -66,7 +66,7 @@ class TavilyWebSearchAdapter:
             payload = {}
             evidence = []
             status = ToolStatus.ERROR
-            error = type(exc).__name__
+            error = _safe_error_code(exc)
         latency_ms = int((time.perf_counter() - started) * 1000)
         return ToolResult(
             tool_id=self.registration.tool_id,
@@ -79,3 +79,8 @@ class TavilyWebSearchAdapter:
             latency_ms=latency_ms,
             error=error,
         )
+
+
+def _safe_error_code(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message[:160] if message else type(exc).__name__

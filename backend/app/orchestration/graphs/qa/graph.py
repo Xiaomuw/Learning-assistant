@@ -94,6 +94,7 @@ def build_graph(
         path_map={
             "web_to_408_note": "web_to_408_note",
             "web_query_rewrite": "web_query_rewrite",
+            "generate_answer_or_question": "generate_answer_or_question",
             "hard_fallback": "hard_fallback",
         },
     )
