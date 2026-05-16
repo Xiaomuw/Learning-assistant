@@ -145,6 +145,56 @@ export function dedupeDisplayAnswer(text: string): string {
     .trim();
 }
 
+export interface DisplayAnswerExplanation {
+  topic?: string;
+  steps?: string[];
+}
+
+export function stripMarkdownArtifacts(text: string): string {
+  return String(text || "")
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-zA-Z]*\n?/g, "").replace(/```/g, ""))
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
+export function buildDisplayAnswerContent(
+  finalAnswer: string,
+  explanation?: DisplayAnswerExplanation
+): string {
+  const finalContent = stripMarkdownArtifacts(finalAnswer);
+  const stepContent = (explanation?.steps || [])
+    .map((item) => stripMarkdownArtifacts(item))
+    .filter(Boolean)
+    .join("\n\n");
+
+  if (finalContent) {
+    if (shouldExpandShortFinalAnswer(finalContent, stepContent)) {
+      return dedupeDisplayAnswer(`${finalContent}\n\n${stepContent}`);
+    }
+    return dedupeDisplayAnswer(finalContent);
+  }
+
+  if (stepContent) {
+    return dedupeDisplayAnswer(stepContent);
+  }
+  if (explanation?.topic?.trim()) {
+    return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
+  }
+  return "讲解已经准备好了。";
+}
+
+function shouldExpandShortFinalAnswer(finalContent: string, stepContent: string): boolean {
+  if (!stepContent) return false;
+  const finalLength = compactTextLength(finalContent);
+  const stepLength = compactTextLength(stepContent);
+  return finalLength > 0 && finalLength <= 80 && stepLength >= finalLength * 1.5;
+}
+
+function compactTextLength(value: string): number {
+  return String(value || "").replace(/\s+/g, "").length;
+}
+
 function collapseAdjacentDuplicateParagraphs(text: string): string {
   const paragraphs = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
   if (paragraphs.length <= 1) return text.trim();

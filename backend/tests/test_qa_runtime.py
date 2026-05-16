@@ -28,6 +28,7 @@ from app.domains.qa import runtime as qa_runtime_module
 from app.domains.qa.runtime import QARuntimeAgent
 from app.domains.qa.tracing import build_qa_trace_outputs
 from app.domains.practice.common import format_user_style_instruction as format_practice_user_style_instruction
+from app.infrastructure.llm.config import is_chat_sync_fast_concept_fallback_enabled
 from app.infrastructure.llm.provider import get_model_profile
 from app.infrastructure.llm.structured import invoke_with_schema
 from app.shared.schemas.model_profile import ModelProfile
@@ -428,6 +429,56 @@ class QARuntimeTest(unittest.TestCase):
         self.assertEqual(result.answer.topic, "HTTP")
         self.assertIn("同步模式命中稳定概念快速回答", result.reasoning_summary)
         self.assertIn("应用层", result.final_answer)
+
+    def test_sync_fast_concept_fallback_is_opt_in(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CHAT_SYNC_FAST_CONCEPT_FALLBACK", None)
+            self.assertFalse(is_chat_sync_fast_concept_fallback_enabled())
+
+        with patch.dict(os.environ, {"CHAT_SYNC_FAST_CONCEPT_FALLBACK": "true"}, clear=False):
+            self.assertTrue(is_chat_sync_fast_concept_fallback_enabled())
+
+    def test_sync_stable_concept_defaults_to_llm_generation(self) -> None:
+        profile = ModelProfile(
+            model_id="deepseek-v4-pro",
+            provider="DeepSeek",
+            family="V4",
+            supports_tool_calling=True,
+            supports_structured_output=False,
+            context_window=1_000_000,
+            supported_modalities=("text",),
+            max_output_tokens=384_000,
+        )
+        request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="network",
+            subject_name="计算机网络",
+            subject_description="",
+            question="什么是 HTTP？",
+            question_type="concept",
+            runtime_context={
+                "request_id": "req-normal-http",
+                "sync_fast_concept_fallback": False,
+                "notebook_policy": "optional",
+                "search_policy": "forbidden",
+            },
+        )
+        generated = AnswerSchema(
+            topic="HTTP",
+            thinking="模型正在按概念、作用、流程和易错点组织回答。",
+            steps=["HTTP 是应用层协议。", "它使用请求-响应模型。"],
+            mistakes="不要把 HTTP 当成传输层协议。",
+            similar=["HTTPS", "TCP"],
+            final_answer="这是模型生成的 HTTP 详细讲解。",
+        )
+
+        with patch("app.domains.qa.runtime.generate_plain_answer", return_value=generated) as generate_answer:
+            result = QARuntimeAgent(request=request, state={}, model_profile=profile).run()
+
+        generate_answer.assert_called_once()
+        self.assertEqual(result.final_answer, "这是模型生成的 HTTP 详细讲解。")
+        self.assertNotIn("同步模式命中稳定概念快速回答", result.reasoning_summary)
 
     def test_stream_delta_filters_reasoning_content_blocks(self) -> None:
         chunk = type(

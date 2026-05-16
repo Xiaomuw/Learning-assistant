@@ -222,6 +222,22 @@ def _chat_response_from_result(
         web_search_used=_web_search_used(state),
         web_search_error=_web_search_error(state),
         trace_records=_safe_trace_records(state.get("trace_records")),
+        execution_mode=str(state.get("execution_mode") or "") or None,
+        reasoning_summary=str(state.get("reasoning_summary") or "") or None,
+        source_usage=str(state.get("source_usage") or "") or None,
+        selected_model_profile=state.get("selected_model_profile")
+        if isinstance(state.get("selected_model_profile"), dict)
+        else None,
+        primary_model_id=str(state.get("primary_model_id") or "") or None,
+        fallback_model_id=str(state.get("fallback_model_id") or "") or None,
+        fallback_used=bool(state.get("fallback_used", False)),
+        fallback_reason=str(state.get("fallback_reason") or "") or None,
+        model_attempts=list(state.get("model_attempts") or []) if isinstance(state.get("model_attempts"), list) else None,
+        model_latency_ms=int(state.get("model_latency_ms") or 0) if state.get("model_latency_ms") else None,
+        streaming_mode=str(state.get("streaming_mode") or "") or None,
+        streaming_token_count=int(state.get("streaming_token_count") or 0),
+        streaming_degraded_reason=str(state.get("streaming_degraded_reason") or "") or None,
+        degraded=bool(state.get("degraded", False)),
     )
     return _sanitize_chat_response(
         response,
@@ -861,6 +877,20 @@ class ChatResponse(BaseModel):
     web_search_used: bool | None = None
     web_search_error: str | None = None
     trace_records: list[dict[str, Any]] | None = None
+    execution_mode: str | None = None
+    reasoning_summary: str | None = None
+    source_usage: str | None = None
+    selected_model_profile: dict[str, Any] | None = None
+    primary_model_id: str | None = None
+    fallback_model_id: str | None = None
+    fallback_used: bool | None = None
+    fallback_reason: str | None = None
+    model_attempts: list[dict[str, Any]] | None = None
+    model_latency_ms: int | None = None
+    streaming_mode: str | None = None
+    streaming_token_count: int | None = None
+    streaming_degraded_reason: str | None = None
+    degraded: bool | None = None
 
 
 class ChatJobResponse(BaseModel):

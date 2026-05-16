@@ -393,6 +393,13 @@ class ChatApiTest(unittest.TestCase):
                         "args": {"query": "不应暴露原始查询"},
                     }
                 ],
+                "execution_mode": "direct_answer",
+                "reasoning_summary": "模型直接回答。",
+                "source_usage": "model",
+                "selected_model_profile": {"model_id": "deepseek-v4-pro", "family": "V4"},
+                "primary_model_id": "deepseek-v4-pro",
+                "model_attempts": [{"model_id": "deepseek-v4-pro", "role": "primary", "status": "ok"}],
+                "model_latency_ms": 1234,
             }
         )
         with patch("app.interfaces.api.chat.run_chat_once_with_state", return_value=(final_state, state)):
@@ -413,6 +420,12 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(payload["external_tool_calls"][0]["doc_count"], 3)
         self.assertNotIn("provider", payload["external_tool_calls"][0])
         self.assertNotIn("args", payload["external_tool_calls"][0])
+        self.assertEqual(payload["execution_mode"], "direct_answer")
+        self.assertEqual(payload["reasoning_summary"], "模型直接回答。")
+        self.assertEqual(payload["source_usage"], "model")
+        self.assertEqual(payload["selected_model_profile"]["model_id"], "deepseek-v4-pro")
+        self.assertEqual(payload["model_attempts"][0]["status"], "ok")
+        self.assertEqual(payload["model_latency_ms"], 1234)
 
     def test_chat_sync_reuses_request_id_header(self) -> None:
         final_state = ChatExecutionResult(

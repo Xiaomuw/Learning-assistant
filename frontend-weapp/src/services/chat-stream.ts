@@ -3,9 +3,9 @@ import { clearAuthSession, getAccessToken } from "@/store/auth";
 import { API_BASE, refreshAuthSession } from "@/services/api";
 import { ApiTransportError, callApiTransport, isContainerTransportEnabled } from "@/services/api-transport";
 import {
+  buildDisplayAnswerContent,
   buildChatStreamPayload,
   createSSEParser,
-  dedupeDisplayAnswer,
   decodeUtf8,
   recordStreamChunkDiagnostics,
   recordStreamEventDiagnostics
@@ -83,31 +83,6 @@ function friendlyChatErrorFromData(data: any, statusCode: number) {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function stripMarkdownArtifacts(text: string) {
-  return text
-    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-zA-Z]*\n?/g, "").replace(/```/g, ""))
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .trim();
-}
-
-function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
-  if (finalAnswer.trim()) {
-    return dedupeDisplayAnswer(stripMarkdownArtifacts(finalAnswer));
-  }
-  const stepContent = (explanation?.steps || [])
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .join("\n\n");
-  if (stepContent) {
-    return dedupeDisplayAnswer(stripMarkdownArtifacts(stepContent));
-  }
-  if (explanation?.topic?.trim()) {
-    return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
-  }
-  return "讲解已经准备好了。";
 }
 
 export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamHandlers) {
@@ -232,10 +207,24 @@ export function sendChatStream(payload: ChatStreamPayload, handlers: ChatStreamH
     handlers.onEvent({
       event: "explanation",
       data: {
-        final_answer: buildAnswerContent(result.final_answer || "", explanation),
+        final_answer: buildDisplayAnswerContent(result.final_answer || "", explanation),
         explanation,
         question_type: result.question_type,
         route: result.route,
+        execution_mode: result.execution_mode,
+        reasoning_summary: result.reasoning_summary,
+        source_usage: result.source_usage,
+        selected_model_profile: result.selected_model_profile,
+        primary_model_id: result.primary_model_id,
+        fallback_model_id: result.fallback_model_id,
+        fallback_used: result.fallback_used,
+        fallback_reason: result.fallback_reason,
+        model_attempts: result.model_attempts,
+        model_latency_ms: result.model_latency_ms,
+        streaming_mode: result.streaming_mode,
+        streaming_token_count: result.streaming_token_count,
+        streaming_degraded_reason: result.streaming_degraded_reason,
+        degraded: result.degraded,
         session_id: result.session_id,
         status: result.status,
         job_id: result.job_id,

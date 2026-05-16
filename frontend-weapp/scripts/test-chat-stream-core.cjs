@@ -24,6 +24,7 @@ function buildCoreModule() {
 }
 
 const {
+  buildDisplayAnswerContent,
   buildChatStreamPayload,
   createSSEParser,
   dedupeDisplayAnswer,
@@ -137,6 +138,32 @@ try {
   }
 
   {
+    assert.equal(
+      buildDisplayAnswerContent(
+        "HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。",
+        {
+          topic: "HTTP",
+          steps: [
+            "HTTP 的全称是 HyperText Transfer Protocol，中文叫超文本传输协议。",
+            "它规定客户端如何请求资源、服务器如何返回资源。",
+            "HTTP 采用请求-响应模型。"
+          ]
+        }
+      ),
+      [
+        "HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。",
+        "HTTP 的全称是 HyperText Transfer Protocol，中文叫超文本传输协议。",
+        "它规定客户端如何请求资源、服务器如何返回资源。",
+        "HTTP 采用请求-响应模型。"
+      ].join("\n\n")
+    );
+    assert.equal(
+      buildDisplayAnswerContent("", {
+        topic: "HTTP",
+        steps: ["HTTP 是应用层协议。", "它使用请求-响应模型。"]
+      }),
+      "HTTP 是应用层协议。\n\n它使用请求-响应模型。"
+    );
     assert.equal(dedupeDisplayAnswer("1 + 1 = 2。 1 + 1 = 2。"), "1 + 1 = 2。");
     assert.equal(
       dedupeDisplayAnswer("HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。 HTTP 是 Web 中客户端和服务器之间通信的一套应用层规则。"),

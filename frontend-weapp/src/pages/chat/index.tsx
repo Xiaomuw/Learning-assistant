@@ -3,7 +3,7 @@ import Taro, { useDidShow, useUnload } from "@tarojs/taro";
 import { Button, ScrollView, Text, Textarea, View } from "@tarojs/components";
 import { deleteSession, ensureAuthSession, fetchModelHealth, fetchNotebooks, fetchSessions } from "@/services/api";
 import { sendChatStream } from "@/services/chat-stream";
-import { buildChatStreamPayload, dedupeDisplayAnswer } from "@/services/chat-stream-core";
+import { buildChatStreamPayload, buildDisplayAnswerContent, dedupeDisplayAnswer } from "@/services/chat-stream-core";
 import { requireAuthUser } from "@/store/auth";
 import {
   clearChatDraft,
@@ -341,20 +341,8 @@ function answerBlocks(text: string): AnswerBlock[] {
 }
 
 function buildAnswerContent(finalAnswer: string, explanation?: Explanation) {
-  if (finalAnswer.trim()) {
-    return dedupeDisplayAnswer(stripMarkdownArtifacts(finalAnswer));
-  }
-  const stepContent = (explanation?.steps || [])
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .join("\n\n");
-  if (stepContent) {
-    return dedupeDisplayAnswer(stripMarkdownArtifacts(stepContent));
-  }
-  if (explanation?.topic?.trim()) {
-    return `我已经围绕「${stripMarkdownArtifacts(explanation.topic)}」整理好讲解了。`;
-  }
-  return "";
+  const content = buildDisplayAnswerContent(finalAnswer, explanation);
+  return content === "讲解已经准备好了。" ? "" : content;
 }
 
 function chooseDisplayAnswer(currentAnswer: string, finalAnswer: string, data: any) {
