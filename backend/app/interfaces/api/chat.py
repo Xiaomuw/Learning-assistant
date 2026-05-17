@@ -183,7 +183,7 @@ def _chat_sync_timeout_response(*, session_id: str) -> ChatResponse:
             "steps": [
                 "后端服务仍在线，但模型或外部工具响应较慢。",
                 "系统已停止等待本轮长响应，避免小程序 callContainer 先超时。",
-                "稍后重试时会继续优先使用知识库与联网搜索补充回答。",
+                "稍后重试时会继续使用知识库、模型生成等流程补充回答。",
             ],
             "mistakes": "",
             "similar": [],
@@ -250,21 +250,33 @@ def _chat_response_from_result(
     )
 
 
-def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str) -> ChatResponse:
+def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str, allow_web: bool) -> ChatResponse:
     retry_after_ms = get_chat_sync_poll_retry_after_ms()
+    if allow_web:
+        final_answer = "我正在联网搜索并整理答案，稍等一下就好。"
+        thinking = "本轮需要联网搜索或较长模型生成，已转入后台继续处理。"
+        steps = [
+            "先返回 pending，避免手机端 callContainer 超时。",
+            "后台会继续完成知识库检索、联网搜索和答案整理。",
+            "小程序会自动轮询，完成后替换为最终回答。",
+        ]
+    else:
+        final_answer = "我正在整理答案，稍等一下就好。"
+        thinking = "本轮需要较长模型生成或知识库处理，已转入后台继续处理。"
+        steps = [
+            "先返回 pending，避免手机端 callContainer 超时。",
+            "后台会继续完成必要的知识库检索、模型生成和答案整理。",
+            "小程序会自动轮询，完成后替换为最终回答。",
+        ]
     return ChatResponse(
         session_id=session_id,
         question_type="concept",
         route="explain",
-        final_answer="我正在联网搜索并整理答案，稍等一下就好。",
+        final_answer=final_answer,
         explanation={
             "topic": "正在整理答案",
-            "thinking": "本轮需要联网搜索或较长模型生成，已转入后台继续处理。",
-            "steps": [
-                "先返回 pending，避免手机端 callContainer 超时。",
-                "后台会继续完成知识库检索、联网搜索和答案整理。",
-                "小程序会自动轮询，完成后替换为最终回答。",
-            ],
+            "thinking": thinking,
+            "steps": steps,
             "mistakes": "",
             "similar": [],
         },
@@ -283,6 +295,7 @@ def _chat_sync_pending_response(*, session_id: str, job_id: str, request_id: str
             {
                 "toolCallCount": 0,
                 "toolCalls": [],
+                "didAttemptWebSearch": False,
                 "didUseWebSearch": False,
                 "didUseAnyTool": False,
             }
@@ -416,6 +429,7 @@ def _safe_tool_invocation_trace(raw: Any) -> dict[str, Any] | None:
         "webSearchEnabled": bool(raw.get("webSearchEnabled")),
         "toolCallCount": tool_call_count,
         "toolCalls": safe_calls,
+        "didAttemptWebSearch": bool(raw.get("didAttemptWebSearch") or _tool_trace_has_web_search_call({"toolCalls": safe_calls})),
         "didUseWebSearch": bool(raw.get("didUseWebSearch")),
         "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0 or safe_calls),
     }
@@ -489,6 +503,8 @@ def _public_tool_source(*, capability: str, provider: str = "") -> str:
 
 
 def _web_search_attempted(final_state: dict[str, Any]) -> bool:
+    if _tool_trace_attempted_web(final_state.get("tool_invocation_trace")):
+        return True
     if "web_search_attempted" in final_state:
         return bool(final_state.get("web_search_attempted"))
     calls = [
@@ -499,6 +515,9 @@ def _web_search_attempted(final_state: dict[str, Any]) -> bool:
 
 
 def _web_search_used(final_state: dict[str, Any]) -> bool:
+    trace = final_state.get("tool_invocation_trace")
+    if isinstance(trace, dict) and trace.get("didUseWebSearch") is True:
+        return True
     if "web_search_used" in final_state:
         return bool(final_state.get("web_search_used"))
     calls = [
@@ -511,6 +530,24 @@ def _web_search_used(final_state: dict[str, Any]) -> bool:
         if str(call.get("status") or "") == "success":
             return True
         if _safe_int(call.get("doc_count")) > 0:
+            return True
+    return False
+
+
+def _tool_trace_attempted_web(raw: Any) -> bool:
+    if not isinstance(raw, dict):
+        return False
+    return bool(raw.get("didAttemptWebSearch") or _tool_trace_has_web_search_call(raw))
+
+
+def _tool_trace_has_web_search_call(raw: dict[str, Any]) -> bool:
+    calls = raw.get("toolCalls") if isinstance(raw.get("toolCalls"), list) else []
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        name = str(call.get("name") or call.get("capability") or "").strip().lower()
+        source = str(call.get("type") or call.get("source") or "").strip().lower()
+        if source == "web" or name == "web_search" or "web_search" in name:
             return True
     return False
 
@@ -1332,7 +1369,12 @@ async def chat_sync(
             grace_seconds,
             elapsed_ms,
         )
-        return _chat_sync_pending_response(session_id=body.session_id, job_id=job_id, request_id=request_id)
+        return _chat_sync_pending_response(
+            session_id=body.session_id,
+            job_id=job_id,
+            request_id=request_id,
+            allow_web=body.allow_web,
+        )
 
     except Exception as e:
         error_message = _safe_chat_error_message(e)

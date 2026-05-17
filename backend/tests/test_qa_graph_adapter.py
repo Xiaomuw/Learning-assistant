@@ -70,11 +70,50 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "quality_gate",
                 "rethink_and_revise",
                 "hard_fallback",
+                "direct_answer",
                 "clarify",
                 "out_of_scope",
                 "finalize",
             },
         )
+
+    def test_simple_fact_direct_qagraph_entry_never_retrieves_or_searches(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        executor = FakeToolExecutor()
+        result = build_graph(tool_executor=executor).compile().invoke(
+            {
+                "run_id": "run-qa-simple-fact-direct",
+                "user_id": "u1",
+                "user_message": "1+1等于几",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": True,
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        stages = [item.get("stage") for item in result.get("trace_records") or []]
+        self.assertEqual(response.answer, "1 + 1 = 2。")
+        self.assertEqual(result["goal_route"], "direct_answer")
+        self.assertEqual(response.ui_payload["answer_mode"], "simple_fact_direct")
+        self.assertEqual(executor.capabilities, [])
+        self.assertNotIn("retrieve_core_408", stages)
+        self.assertNotIn("web_search", stages)
+        self.assertFalse(result.get("web_search_attempted", False))
+        self.assertFalse(result["tool_invocation_trace"]["didAttemptWebSearch"])
 
     def test_compile_and_return_grounded_final_response(self) -> None:
         evidence = EvidenceChunk(
@@ -191,6 +230,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "user_id": "u1",
                 "user_message": "HTTP/3 最新浏览器支持情况？",
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": True,
                 "evidence": [],
             }
         )
@@ -422,6 +462,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "user_id": "u1",
                 "user_message": "HTTP/3 现在浏览器支持怎么样？",
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": True,
             }
         )
 
@@ -691,6 +732,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                     "user_message": "什么是 HTTP？",
                     "source_policy": SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
                     "web_search_requested": True,
+                    "allow_web": True,
                     "evidence": [],
                 }
             )
@@ -735,6 +777,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                     "user_id": "u1",
                     "user_message": "调用工具查一下什么是 HTTP",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "allow_web": True,
                     "evidence": [],
                 }
             )
@@ -807,6 +850,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                     "user_id": "u1",
                     "user_message": "查看官方文档说明 HTTP",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "allow_web": True,
                     "evidence": [],
                 }
             )
@@ -890,6 +934,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                     "user_id": "u1",
                     "user_message": "408 最新考试大纲变化有哪些？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "allow_web": True,
                 }
             )
 
@@ -936,6 +981,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                     "user_id": "u1",
                     "user_message": "操作系统最新调度机制怎么理解？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "allow_web": True,
                     "evidence": [low_evidence.model_dump(mode="json")],
                 }
             )
@@ -1095,6 +1141,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "user_id": "u1",
                 "user_message": "今年的 GPT 发布到哪个版本了",
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": True,
                 "runtime_time_context": {
                     "currentDate": "2026-05-14",
                     "timezone": "Asia/Shanghai",
@@ -1110,6 +1157,82 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(response.source_level, SourceLevel.WEB)
         self.assertIn("官方", response.answer)
         self.assertEqual(adapter.evidence_ids, ["web-openai-models"])
+
+    def test_direct_qagraph_allow_web_false_never_calls_web_tool(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        executor = FakeToolExecutor()
+        result = build_graph(tool_executor=executor).compile().invoke(
+            {
+                "run_id": "run-qa-web-hard-deny",
+                "user_id": "u1",
+                "user_message": "联网搜索一下 HTTP/3 最新浏览器支持情况",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": False,
+                "runtime_time_context": {
+                    "currentDate": "2026-05-14",
+                    "timezone": "Asia/Shanghai",
+                    "knowledgeCutoff": "2024-06",
+                },
+            }
+        )
+
+        self.assertNotIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertFalse(result.get("web_search_attempted", False))
+        self.assertFalse(result["tool_invocation_trace"]["didAttemptWebSearch"])
+        self.assertFalse(result["web_search_enabled"])
+
+    def test_web_tool_called_with_zero_evidence_counts_as_attempted_not_used(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id=f"fake:{request.capability.value}",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        executor = FakeToolExecutor()
+        result = build_graph(tool_executor=executor).compile().invoke(
+            {
+                "run_id": "run-qa-web-zero-evidence",
+                "user_id": "u1",
+                "user_message": "联网搜索一下 HTTP/3 最新浏览器支持情况",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": True,
+                "runtime_time_context": {
+                    "currentDate": "2026-05-14",
+                    "timezone": "Asia/Shanghai",
+                    "knowledgeCutoff": "2024-06",
+                },
+            }
+        )
+
+        trace = result["tool_invocation_trace"]
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertTrue(trace["didAttemptWebSearch"])
+        self.assertFalse(trace["didUseWebSearch"])
+        self.assertFalse(result.get("web_search_used", False))
 
     def test_relative_year_without_current_date_does_not_bind_year(self) -> None:
         result = build_graph().compile().invoke(
@@ -1219,6 +1342,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                     "user_id": "u1",
                     "user_message": "调用工具查一下什么是 HTTP",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "allow_web": True,
                     "evidence": [evidence.model_dump(mode="json")],
                 }
             )
@@ -1294,6 +1418,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                 "user_id": "u1",
                 "user_message": "HTTP/3 现在浏览器支持怎么样？",
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": True,
             }
         )
 

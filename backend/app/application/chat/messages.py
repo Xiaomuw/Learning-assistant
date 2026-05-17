@@ -173,9 +173,19 @@ def _safe_tool_invocation_trace(raw: dict[str, Any]) -> dict[str, Any]:
         "webSearchEnabled": bool(raw.get("webSearchEnabled")),
         "toolCallCount": tool_call_count,
         "toolCalls": safe_calls,
+        "didAttemptWebSearch": bool(raw.get("didAttemptWebSearch") or _tool_trace_has_web_search_call(safe_calls)),
         "didUseWebSearch": bool(raw.get("didUseWebSearch")),
         "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0 or safe_calls),
     }
+
+
+def _tool_trace_has_web_search_call(calls: list[dict[str, Any]]) -> bool:
+    for call in calls:
+        name = str(call.get("name") or call.get("capability") or "").strip().lower()
+        source = str(call.get("type") or call.get("source") or "").strip().lower()
+        if source == "web" or name == "web_search" or "web_search" in name:
+            return True
+    return False
 
 
 def build_message_process(final_state: dict[str, Any]) -> dict[str, Any] | None:

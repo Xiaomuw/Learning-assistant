@@ -158,6 +158,7 @@ def build_current_tool_trace(state: OrchestratorState, policy: RoutePolicy | Non
         "webSearchEnabled": policy.allow_web,
         "toolCallCount": 0,
         "toolCalls": [],
+        "didAttemptWebSearch": False,
         "didUseWebSearch": False,
         "didUseAnyTool": False,
     }
@@ -186,11 +187,13 @@ def extract_previous_tool_trace(messages: list[dict[str, Any]]) -> dict[str, Any
             status = str(raw.get("status") or "").strip() or "unknown"
             calls.append({"name": name, "type": "web" if "search" in name.lower() else "tool", "status": status})
         if calls:
+            did_attempt_web = any(call["type"] == "web" for call in calls)
             did_use_web = any(call["type"] == "web" and call["status"] == ToolStatus.SUCCESS.value for call in calls)
             return normalize_tool_trace(
                 {
                     "toolCallCount": len(calls),
                     "toolCalls": calls,
+                    "didAttemptWebSearch": did_attempt_web,
                     "didUseWebSearch": did_use_web,
                     "didUseAnyTool": True,
                 }
@@ -210,6 +213,10 @@ def normalize_tool_trace(raw: dict[str, Any]) -> dict[str, Any]:
         "webSearchEnabled": bool(raw.get("webSearchEnabled")),
         "toolCallCount": tool_call_count,
         "toolCalls": safe_calls,
+        "didAttemptWebSearch": bool(
+            raw.get("didAttemptWebSearch")
+            or any(str(call.get("type") or "").lower() == "web" for call in safe_calls)
+        ),
         "didUseWebSearch": bool(raw.get("didUseWebSearch")),
         "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0),
     }

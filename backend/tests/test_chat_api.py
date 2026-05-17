@@ -484,6 +484,21 @@ class ChatApiTest(unittest.TestCase):
         self.assertNotIn("APITimeoutError", payload["error"])
         self.assertNotIn("Request timed out", payload["error"])
 
+    def test_web_attempted_uses_tool_trace_even_when_evidence_unused(self) -> None:
+        state = {
+            "web_search_attempted": False,
+            "web_search_used": False,
+            "tool_invocation_trace": {
+                "toolCallCount": 1,
+                "toolCalls": [{"name": "web_search", "type": "web", "status": "success", "evidence_count": 0}],
+                "didAttemptWebSearch": True,
+                "didUseWebSearch": False,
+            },
+        }
+
+        self.assertTrue(chat_module._web_search_attempted(state))
+        self.assertFalse(chat_module._web_search_used(state))
+
     def test_chat_sync_returns_pending_when_inline_budget_exceeded(self) -> None:
         def _slow_chat_once(**_kwargs):
             time.sleep(0.05)
@@ -521,6 +536,8 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(payload["job_id"], "weapp-pending-1")
         self.assertEqual(payload["retry_after_ms"], 1000)
         self.assertIn("后台继续处理", payload["explanation"]["thinking"])
+        self.assertNotIn("联网搜索", payload["final_answer"])
+        self.assertNotIn("联网搜索", " ".join(payload["explanation"]["steps"]))
         self.assertEqual(payload["trace_records"][0]["stage"], "mobile_sync_delivery")
         self.assertEqual(payload["trace_records"][0]["final_response_status"], "pending")
 
@@ -542,6 +559,44 @@ class ChatApiTest(unittest.TestCase):
         job_payload = job_response.json()
         self.assertEqual(job_payload["status"], "completed")
         self.assertEqual(job_payload["response"]["final_answer"], "HTTP 是应用层协议。")
+
+    def test_chat_sync_pending_mentions_web_only_when_allow_web_enabled(self) -> None:
+        def _slow_chat_once(**_kwargs):
+            time.sleep(0.05)
+            return _chat_result_with_state(ChatExecutionResult(
+                session_id="session-web-pending",
+                question_type="concept",
+                route="explain",
+                final_answer="HTTP/3 支持情况需要外部资料。",
+                explanation=ExplanationPayload(topic="HTTP/3"),
+                quiz_items=[],
+                memory=UserMemoryRecord(),
+            ))
+
+        with (
+            patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_slow_chat_once),
+            patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.01),
+            patch("app.interfaces.api.chat.get_chat_sync_poll_retry_after_ms", return_value=1000),
+        ):
+            response = self.client.post(
+                "/api/chat/sync",
+                headers={"X-Request-ID": "weapp-pending-web"},
+                json={
+                    "user_id": "default_user",
+                    "session_id": "session-web-pending",
+                    "question": "联网搜索一下 HTTP/3 现状",
+                    "subject_id": "general",
+                    "allow_web": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "pending")
+        self.assertIn("联网搜索", payload["final_answer"])
+        self.assertIn("联网搜索", " ".join(payload["explanation"]["steps"]))
+        self.assertFalse(payload["tool_invocation_trace"]["didAttemptWebSearch"])
 
     def test_chat_sync_cleans_duplicate_final_answer(self) -> None:
         def _duplicated_chat_once(**_kwargs):

@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from loguru import logger
 
-from app.domains.qa.lightweight_intent import classify_lightweight_answer_intent
+from app.domains.qa.lightweight_intent import build_lightweight_answer_schema, classify_lightweight_answer_intent
 from app.orchestration.graphs.qa.adapter import DeterministicQARuntimeAdapter, QARuntimeAdapter
 from app.orchestration.graphs.qa.fact_boundary import (
     QUESTION_META_TOOL_USAGE,
@@ -251,7 +251,10 @@ def goal_router_node(state: QAGraphState) -> dict[str, Any]:
     elif context_dependency.get("is_context_dependent") and not active_topic:
         goal_route = "clarify"
         reason = "context_dependent_without_topic"
-    elif intent in {"smalltalk", "simple_fact"}:
+    elif intent == "simple_fact":
+        goal_route = "direct_answer"
+        reason = "simple_fact_direct_guard"
+    elif intent == "smalltalk":
         goal_route = "out_of_scope"
         reason = f"{intent}_handled_outside_qagraph"
     elif (
@@ -287,11 +290,66 @@ def goal_router_node(state: QAGraphState) -> dict[str, Any]:
 
 def route_after_goal_router(state: QAGraphState) -> str:
     route = str(state.get("goal_route") or "answer_408")
+    if route == "direct_answer":
+        return "direct_answer"
     if route == "clarify":
         return "clarify"
     if route == "out_of_scope":
         return "out_of_scope"
     return "retrieve_core_408"
+
+
+def direct_answer_node(state: QAGraphState) -> dict[str, Any]:
+    """Hard guard for deterministic facts that must never enter retrieval/model chains."""
+
+    question = _normalized_question(state)
+    answer_schema = build_lightweight_answer_schema(question)
+    answer = str(answer_schema.final_answer if answer_schema is not None else "").strip()
+    if not answer:
+        answer = "这类简单问题可以直接回答，但我没有解析出稳定结果。请换一种写法再试。"
+    response = FinalResponse(
+        answer=answer,
+        source_level=SourceLevel.NONE,
+        coach_actions=["direct_answer"],
+        mastery_signals={"signal_strength": "none"},
+        ui_payload={
+            "target_graph_type": GraphType.QA.value,
+            "answer_mode": "simple_fact_direct",
+            "goal_route": "direct_answer",
+            "qa_flow_version": QA_FLOW_VERSION,
+            "source_usage": "none",
+            "web_search_attempted": False,
+            "web_search_used": False,
+        },
+    )
+    return {
+        "trace_records": append_trace_record(
+            state,
+            "direct_answer",
+            final_response_status="completed",
+            reason="simple_fact_direct_guard",
+            web_called=False,
+            rag_called=False,
+        ),
+        "final_response": response.model_dump(mode="json"),
+        "source_usage": "none",
+        "web_search_attempted": False,
+        "web_search_used": False,
+        "web_search_reason": "simple_fact_direct_guard",
+        "tool_invocation_trace": _build_tool_invocation_trace(
+            {**state, "tool_results": [], "external_tool_calls": [], "web_search_attempted": False}
+        ),
+        "evidence_gate": {
+            "sufficient": True,
+            "insufficient": False,
+            "source_policy": _source_policy(state),
+            "usable_evidence_refs": [],
+            "usable_evidence_count": 0,
+            "missing_topic": question,
+            "reason": "simple_fact_direct_guard",
+            "status": "direct_answer",
+        },
+    }
 
 
 def clarify_node(state: QAGraphState) -> dict[str, Any]:
@@ -790,10 +848,10 @@ def web_search_if_needed_node(
     question = _resolved_question(state)
     web_search_requested = _web_search_requested_for_state(state)
     reason = str(gate.get("reason") or "evidence_judge_not_sufficient")
-    if web_search_requested:
-        reason = "client_requested_web_search"
-    elif _has_external_search_signal(question):
+    if _has_external_search_signal(question):
         reason = "explicit_external_search_signal"
+    elif web_search_requested:
+        reason = "client_requested_web_search"
     existing_requests = list(state.get("tool_requests") or [])
     existing_results = [item.model_dump(mode="json") for item in _collect_tool_results(state)]
     retrieval_report = dict(state.get("retrieval_report") or {})
@@ -804,6 +862,8 @@ def web_search_if_needed_node(
         blocked_reason = "internal_evidence_sufficient" if gate.get("sufficient") else "source_policy_disallows_web"
         if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
             blocked_reason = "source_policy_notebook_only"
+        elif not _web_search_requested_for_state(state):
+            blocked_reason = "allow_web_false"
         elif not (web_search_requested or _has_external_search_signal(question)):
             blocked_reason = "no_external_search_signal"
         _emit_status(
@@ -962,11 +1022,14 @@ def web_search_node_408(
     source_policy = _source_policy(state)
     query = str(state.get("web_query") or _resolved_question(state)).strip()
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or not _web_search_enabled_for_state(state, has_web_search_tool=True):
+        blocked_reason = "source_policy_notebook_only" if source_policy == SourcePolicy.NOTEBOOK_ONLY.value else "source_policy_disallows_web"
+        if blocked_reason != "source_policy_notebook_only" and not _web_search_requested_for_state(state):
+            blocked_reason = "allow_web_false"
         return {
             "web_search_attempted": False,
-            "web_search_reason": "source_policy_disallows_web",
+            "web_search_reason": blocked_reason,
             "pending_web_evidence": [],
-            "trace_records": append_trace_record(state, "web_search", web_called=False, reason="source_policy_disallows_web"),
+            "trace_records": append_trace_record(state, "web_search", web_called=False, reason=blocked_reason),
         }
 
     request = _tool_request(
@@ -2043,10 +2106,13 @@ def web_search_node(
     """Legacy node kept for old callers; production web search now runs in retrieval_node."""
 
     source_policy = _source_policy(state)
-    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or not _web_search_enabled_for_state(state, has_web_search_tool=True):
+        blocked_reason = "source_policy_notebook_only" if source_policy == SourcePolicy.NOTEBOOK_ONLY.value else "source_policy_disallows_web"
+        if blocked_reason != "source_policy_notebook_only" and not _web_search_requested_for_state(state):
+            blocked_reason = "allow_web_false"
         return {
             "web_search_attempted": False,
-            "web_search_reason": "source_policy_notebook_only",
+            "web_search_reason": blocked_reason,
             "web_search_iteration": int(state.get("web_search_iteration") or 0),
         }
 
@@ -2124,6 +2190,7 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
     evidence_refs = [item.id for item in evidence]
     answer = response.answer
     tool_invocation_trace = _build_tool_invocation_trace(state)
+    web_search_attempted = bool(state.get("web_search_attempted") or tool_invocation_trace.get("didAttemptWebSearch"))
 
     if not answer.strip() and evidence:
         lead = evidence[0].text.strip().replace("\n", " ")
@@ -2177,7 +2244,7 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
         "web_staging_note_count": len(state.get("web_staging_notes") or []),
         "hard_fallback_reason": str(state.get("hard_fallback_reason") or ""),
         "source_usage": source_usage,
-        "web_search_attempted": bool(state.get("web_search_attempted")),
+        "web_search_attempted": web_search_attempted,
         "tool_invocation_trace": tool_invocation_trace,
         "concept_linking": dict(state.get("concept_linking") or {}),
     }
@@ -2216,6 +2283,7 @@ def qa_result_compose_node(state: QAGraphState) -> dict[str, Any]:
         "errors": update_errors,
         "tool_invocation_trace": tool_invocation_trace,
         "web_search_used": bool(tool_invocation_trace.get("didUseWebSearch")),
+        "web_search_attempted": web_search_attempted,
     }
 
 
@@ -2886,6 +2954,8 @@ def _web_search_requested_for_state(state: QAGraphState | dict[str, Any]) -> boo
 
 
 def _web_search_enabled_for_state(state: QAGraphState | dict[str, Any], *, has_web_search_tool: bool) -> bool:
+    if not _web_search_requested_for_state(state):
+        return False
     if not has_web_search_tool:
         return False
     source_policy = _source_policy(state)  # type: ignore[arg-type]
@@ -2903,10 +2973,10 @@ def _web_search_reason_for_state(state: QAGraphState | dict[str, Any], *, questi
     existing = str(state.get("web_search_reason") or "").strip()
     if existing and existing != "not_requested_before_evidence_judge":
         return existing
-    if _web_search_requested_for_state(state):
-        return "client_requested_web_search"
     if _has_external_search_signal(question):
         return "explicit_external_search_signal"
+    if _web_search_requested_for_state(state):
+        return "client_requested_web_search"
     gate = dict(state.get("evidence_gate") or {})
     if gate.get("reason"):
         return str(gate.get("reason"))
@@ -2936,6 +3006,17 @@ def _tool_provider_attempts(result: ToolResult) -> list[dict[str, Any]]:
             }
         )
     return normalized
+
+
+def _is_web_search_call(call: dict[str, Any]) -> bool:
+    call_type = str(call.get("type") or "").lower()
+    name = str(call.get("name") or call.get("capability") or "").lower()
+    provider = str(call.get("provider") or "").lower()
+    return call_type == "web" or name == ToolCapability.WEB_SEARCH.value or "web_search" in name or provider in {
+        "mcp",
+        "tavily",
+        "web",
+    }
 
 
 def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
@@ -2970,9 +3051,9 @@ def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
                 "status": status or "unknown",
             }
         )
+    did_attempt_web = any(_is_web_search_call(call) for call in calls)
     did_use_web = any(
-        call.get("type") == "web"
-        and ("search" in str(call.get("name") or "").lower() or str(call.get("name") or "") == ToolCapability.WEB_SEARCH.value)
+        _is_web_search_call(call)
         and str(call.get("status") or "") == ToolStatus.SUCCESS.value
         and int(call.get("evidence_count") or 0) > 0
         for call in calls
@@ -2985,6 +3066,7 @@ def _build_tool_invocation_trace(state: QAGraphState) -> dict[str, Any]:
         "webSearchEnabled": web_search_enabled,
         "toolCallCount": len(calls),
         "toolCalls": calls,
+        "didAttemptWebSearch": did_attempt_web,
         "didUseWebSearch": did_use_web,
         "didUseAnyTool": bool(calls),
     }
@@ -3015,7 +3097,10 @@ def _previous_assistant_tool_trace(messages: list[dict[str, Any]]) -> dict[str, 
                         }
                     )
                 if calls:
-                    did_use_web = any(call["type"] == "web" and call["status"] == ToolStatus.SUCCESS.value for call in calls)
+                    did_attempt_web = any(_is_web_search_call(call) for call in calls)
+                    did_use_web = any(
+                        _is_web_search_call(call) and call["status"] == ToolStatus.SUCCESS.value for call in calls
+                    )
                     return {
                         "currentDate": None,
                         "timezone": None,
@@ -3024,6 +3109,7 @@ def _previous_assistant_tool_trace(messages: list[dict[str, Any]]) -> dict[str, 
                         "webSearchEnabled": False,
                         "toolCallCount": len(calls),
                         "toolCalls": calls,
+                        "didAttemptWebSearch": did_attempt_web,
                         "didUseWebSearch": did_use_web,
                         "didUseAnyTool": True,
                     }
@@ -3041,6 +3127,10 @@ def _normalize_tool_invocation_trace(raw: dict[str, Any]) -> dict[str, Any]:
         "webSearchEnabled": bool(raw.get("webSearchEnabled")),
         "toolCallCount": tool_call_count,
         "toolCalls": [dict(item) for item in calls if isinstance(item, dict)],
+        "didAttemptWebSearch": bool(
+            raw.get("didAttemptWebSearch")
+            or any(_is_web_search_call(dict(item)) for item in calls if isinstance(item, dict))
+        ),
         "didUseWebSearch": bool(raw.get("didUseWebSearch")),
         "didUseAnyTool": bool(raw.get("didUseAnyTool") or tool_call_count > 0),
     }
@@ -3814,6 +3904,8 @@ def _should_run_web_retrieval(
 ) -> bool:
     boundary = _question_boundary(state, question)
     if boundary.get("category") == QUESTION_META_TOOL_USAGE:
+        return False
+    if not _web_search_requested_for_state(state):
         return False
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
         return False

@@ -426,6 +426,14 @@ def _chat_state_from_orchestrator_result(
         question_type=resolved_question_type,
         preserve_notebook_notice=preserve_notebook_notice,
     )
+    web_search_attempted = bool(
+        child_payload.get("web_search_attempted", response_ui.get("web_search_attempted", False))
+        or tool_invocation_trace.get("didAttemptWebSearch")
+    )
+    web_search_used = bool(
+        child_payload.get("web_search_used", response_ui.get("web_search_used", False))
+        or tool_invocation_trace.get("didUseWebSearch")
+    )
     return {
         **initial_state,
         "message_id": str(initial_state.get("message_id") or initial_state.get("request_id") or ""),
@@ -467,8 +475,8 @@ def _chat_state_from_orchestrator_result(
         "external_tool_calls": external_tool_calls,
         "tool_invocation_trace": tool_invocation_trace,
         "question_boundary": question_boundary,
-        "web_search_attempted": bool(child_payload.get("web_search_attempted", response_ui.get("web_search_attempted", False))),
-        "web_search_used": bool(child_payload.get("web_search_used", response_ui.get("web_search_used", False))),
+        "web_search_attempted": web_search_attempted,
+        "web_search_used": web_search_used,
         "web_search_error": str(child_payload.get("web_search_error", response_ui.get("web_search_error", "")) or ""),
         "graph_runtime": {
             "mode": "orchestrator",

@@ -216,6 +216,7 @@ def _cases() -> list[GraphEvalCase]:
                     "user_message": "HTTP/3 最新浏览器支持情况？",
                     "question_type": "concept",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "allow_web": True,
                 }
             ),
             assertions=[

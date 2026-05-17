@@ -7,6 +7,7 @@ from langgraph.graph import END, StateGraph
 from app.orchestration.graphs.qa.adapter import QARuntimeAdapter
 from app.orchestration.graphs.qa.nodes import (
     clarify_node,
+    direct_answer_node,
     finalize_node,
     generate_answer_or_question_node,
     goal_router_node,
@@ -59,6 +60,7 @@ def build_graph(
     graph.add_node("quality_gate", quality_gate_node)
     graph.add_node("rethink_and_revise", rethink_and_revise_node)
     graph.add_node("hard_fallback", hard_fallback_node)
+    graph.add_node("direct_answer", direct_answer_node)
     graph.add_node("clarify", clarify_node)
     graph.add_node("out_of_scope", lambda state: out_of_scope_node(state, adapter=adapter))
     graph.add_node("finalize", finalize_node)
@@ -69,6 +71,7 @@ def build_graph(
         source="goal_router",
         path=route_after_goal_router,
         path_map={
+            "direct_answer": "direct_answer",
             "retrieve_core_408": "retrieve_core_408",
             "clarify": "clarify",
             "out_of_scope": "out_of_scope",
@@ -114,6 +117,7 @@ def build_graph(
         },
     )
     graph.add_edge("rethink_and_revise", "quality_gate")
+    graph.add_edge("direct_answer", "finalize")
     graph.add_edge("clarify", "finalize")
     graph.add_edge("out_of_scope", "finalize")
     graph.add_edge("hard_fallback", "finalize")
