@@ -244,6 +244,16 @@ def _orchestrator_state_from_chat_state(
     *,
     graph_run_id: str,
 ) -> dict[str, Any]:
+    question = str(state.get("contextual_question") or state.get("question") or "")
+    source_policy = _source_policy_from_chat_state(state)
+    selected_subject_id = normalize_subject_id(state.get("subject_id") or state.get("selected_subject_id"))
+    raw_notebook_id = normalize_subject_id(state.get("notebook_id"))
+    bind_current_notebook = _should_bind_current_notebook_for_question(
+        state,
+        question=question,
+        source_policy=source_policy,
+    )
+    notebook_id = (raw_notebook_id or selected_subject_id) if bind_current_notebook else None
     return {
         "run_id": graph_run_id,
         "user_id": str(state.get("user_id") or ""),
@@ -251,10 +261,14 @@ def _orchestrator_state_from_chat_state(
         "message_id": str(state.get("message_id") or state.get("request_id") or ""),
         "request_id": str(state.get("request_id") or state.get("message_id") or ""),
         "client_request_id": str(state.get("client_request_id") or ""),
-        "notebook_id": normalize_subject_id(state.get("subject_id") or state.get("notebook_id")),
+        "selected_subject_id": selected_subject_id,
+        "selected_subject_name": str(state.get("subject_name") or state.get("selected_subject_name") or DEFAULT_SUBJECTS[0]["name"]),
+        "selected_subject_description": str(state.get("subject_description") or state.get("selected_subject_description") or ""),
+        "subject_id": selected_subject_id,
+        "notebook_id": notebook_id,
         "course_id": state.get("course_id"),
-        "source_policy": _source_policy_from_chat_state(state),
-        "user_message": str(state.get("contextual_question") or state.get("question") or ""),
+        "source_policy": source_policy,
+        "user_message": question,
         "messages": list(state.get("short_term_messages") or state.get("messages") or []),
         "concepts": list(state.get("concepts") or []),
         "evidence": list(state.get("evidence") or []),
@@ -269,13 +283,17 @@ def _orchestrator_state_from_chat_state(
 
 
 def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
+    selected_subject_id = normalize_subject_id(state.get("subject_id") or state.get("selected_subject_id"))
     context = {
         "user_id": str(state.get("user_id") or ""),
         "session_id": str(state.get("session_id") or ""),
         "message_id": str(state.get("message_id") or state.get("request_id") or ""),
         "request_id": str(state.get("request_id") or state.get("message_id") or ""),
         "client_request_id": str(state.get("client_request_id") or ""),
-        "subject_id": normalize_subject_id(state.get("subject_id")),
+        "subject_id": selected_subject_id,
+        "selected_subject_id": selected_subject_id,
+        "selected_subject_name": str(state.get("subject_name") or state.get("selected_subject_name") or DEFAULT_SUBJECTS[0]["name"]),
+        "selected_subject_description": str(state.get("subject_description") or state.get("selected_subject_description") or ""),
         "subject_name": str(state.get("subject_name") or DEFAULT_SUBJECTS[0]["name"]),
         "subject_description": str(state.get("subject_description") or ""),
         "memory": dict(state.get("memory") or {}),
@@ -1185,12 +1203,40 @@ def _source_policy_from_chat_state(state: dict[str, Any]) -> str:
     return SourcePolicy.OPEN_TOOLS.value
 
 
+def _should_bind_current_notebook_for_question(
+    state: dict[str, Any],
+    *,
+    question: str,
+    source_policy: str,
+) -> bool:
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        return True
+    notebook_policy = str(state.get("notebook_policy") or "").strip()
+    if notebook_policy in {"required", "strict"}:
+        return True
+    return _has_notebook_signal(question)
+
+
 def _has_notebook_signal(question: str) -> bool:
     lowered = question.lower()
-    return any(
+    material_terms = ("当前 pdf", "当前文档", "notebook", "笔记", "资料", "课件", "课程", "知识库", "上传")
+    if any(
         term in question or term in lowered
-        for term in ("根据", "依据", "基于", "当前 pdf", "当前文档", "notebook", "笔记", "资料", "课件", "课程", "知识库")
+        for term in material_terms
+    ):
+        return True
+    scoped_reference_terms = (
+        "根据我的",
+        "依据我的",
+        "基于我的",
+        "根据这份",
+        "依据这份",
+        "基于这份",
+        "根据当前",
+        "依据当前",
+        "基于当前",
     )
+    return any(term in question or term in lowered for term in scoped_reference_terms)
 
 
 def _learning_event_count(result: dict[str, Any]) -> int:

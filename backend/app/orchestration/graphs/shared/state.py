@@ -17,6 +17,9 @@ class BaseLearningState(TypedDict, total=False):
     message_id: str | None
     request_id: str | None
     client_request_id: str | None
+    selected_subject_id: str | None
+    selected_subject_name: str | None
+    selected_subject_description: str | None
     notebook_id: str | None
     course_id: str | None
     thread_id: str | None

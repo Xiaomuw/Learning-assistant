@@ -23,6 +23,19 @@ _GENERIC_KNOWLEDGE_NOTICE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_NOTEBOOK_SWITCH_MARKERS = (
+    "当前主笔记本",
+    "当前的主笔记本",
+    "主笔记本",
+    "系统设定",
+)
+_NOTEBOOK_SWITCH_ACTION_MARKERS = (
+    "切换",
+    "换到",
+    "继续在",
+    "继续复习",
+)
+
 _PLANNING_PHRASE_PATTERNS = (
     re.compile(r"(?:用户|你|您)(?:想|希望|需要|正在|是想)(?:了解|知道|询问|学习|掌握)[^。！？!?\n]{0,120}[。！？!?\n]?\s*"),
     re.compile(r"(?:我|我们|下面)(?:会|将|先|来|要|可以)[^。！？!?\n]{0,120}(?:讲解|说明|解释|回答|展开)[^。！？!?\n]{0,40}[。！？!?\n]?\s*"),
@@ -122,11 +135,13 @@ def clean_display_answer(text: str, *, preserve_notebook_notice: bool = False) -
     if not normalized:
         return ""
 
-    normalized = _strip_planning_phrases(normalized)
+    normalized = _strip_notebook_switch_prompt(normalized)
 
     if not preserve_notebook_notice:
         normalized = _NOTEBOOK_NOTICE_RE.sub("", normalized)
         normalized = _GENERIC_KNOWLEDGE_NOTICE_RE.sub("", normalized)
+
+    normalized = _strip_planning_phrases(normalized)
 
     normalized = _collapse_adjacent_duplicate_paragraphs(normalized)
     normalized = _collapse_adjacent_duplicate_sentences(normalized)
@@ -448,6 +463,37 @@ def _strip_planning_phrases(value: str) -> str:
     normalized = str(value or "")
     for pattern in _PLANNING_PHRASE_PATTERNS:
         normalized = pattern.sub("", normalized)
+    return _tidy_display_text(normalized)
+
+
+def _strip_notebook_switch_prompt(value: str) -> str:
+    """Remove model-generated UI scope prompts from user-facing answers."""
+
+    normalized = str(value or "")
+    if not normalized:
+        return ""
+    candidate_indexes = [
+        index
+        for marker in ("⚠️", "提示：", "提示:", "虽然我解释", "根据系统设定", "当前主笔记本", "当前的主笔记本")
+        if (index := normalized.find(marker)) >= 0
+    ]
+    for index in sorted(candidate_indexes):
+        tail = normalized[index:]
+        compact_tail = re.sub(r"\s+", "", tail[:520])
+        if any(marker in compact_tail for marker in _NOTEBOOK_SWITCH_MARKERS) and any(
+            marker in compact_tail for marker in _NOTEBOOK_SWITCH_ACTION_MARKERS
+        ):
+            return _tidy_display_text(normalized[:index])
+    normalized = re.sub(
+        r"(?:需要|要不要|是否).{0,40}(?:帮你|我帮你)?.{0,20}(?:笔记本|知识库|科目).{0,80}(?:切换|换到).{0,120}[。！？!?]?",
+        "",
+        normalized,
+    )
+    normalized = re.sub(
+        r"(?:还是)?我们继续在.{0,40}(?:数据结构|算法|计算机网络|计算机组成|操作系统|408|笔记本|知识库|科目).{0,80}复习.{0,120}[。！？!?]?",
+        "",
+        normalized,
+    )
     return _tidy_display_text(normalized)
 
 

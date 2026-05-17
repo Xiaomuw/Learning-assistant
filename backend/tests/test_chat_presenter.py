@@ -329,6 +329,26 @@ class ChatPresenterTest(unittest.TestCase):
         self.assertNotIn("notebook 未命中", message["content"])
         self.assertEqual(message["content"].count("HTTP 是 Web 中用于客户端和服务器通信的应用层协议。"), 1)
 
+    def test_assistant_message_removes_main_notebook_switch_prompt(self) -> None:
+        message = build_assistant_message(
+            {
+                "question": "什么是 HTTP？",
+                "question_type": "concept",
+                "route": "explain",
+                "final_answer": (
+                    "HTTP 是 Web 中客户端和服务器之间通信的应用层协议。"
+                    "⚠️ 提示：虽然我解释了 HTTP，但根据系统设定，当前的主笔记本是数据结构与算法。"
+                    "如果你是在准备 408 考研，HTTP 属于计算机网络的范畴。"
+                    "需要我帮你把笔记本切换到计算机网络，还是我们继续在数据结构与算法里复习？"
+                ),
+            }
+        )
+
+        self.assertIn("HTTP 是 Web 中客户端和服务器之间通信的应用层协议。", message["content"])
+        self.assertNotIn("主笔记本", message["content"])
+        self.assertNotIn("切换", message["content"])
+        self.assertNotIn("数据结构与算法", message["content"])
+
     def test_assistant_message_preserves_material_notice_when_user_asked_for_notebook(self) -> None:
         message = build_assistant_message(
             {

@@ -516,6 +516,61 @@ class QAGraphAdapterTest(unittest.TestCase):
                 self.assertEqual(response.ui_payload["answer_mode"], "model_only")
                 self.assertNotIn("安全兜底", response.answer)
 
+    def test_selected_data_structure_notebook_does_not_limit_http_qa(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-http-with-selected-data-structure",
+                "user_id": "u1",
+                "notebook_id": "data-structure",
+                "selected_subject_id": "data-structure",
+                "user_message": "什么是 HTTP",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "evidence": [],
+            }
+        )
+
+        route_ids = [item["knowledge_base_id"] for item in result["knowledge_routes"]]
+        self.assertEqual(route_ids[:1], ["computer-network"])
+        self.assertEqual(result["concept_linking"]["subject_id"], "computer-network")
+        self.assertEqual(result["tool_requests"][0]["input"]["subject_id"], "computer-network")
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(response.ui_payload["answer_mode"], "model_only")
+        self.assertNotIn("主笔记本", response.answer)
+        self.assertNotIn("切换", response.answer)
+        self.assertNotIn("数据结构与算法", response.answer)
+
+    def test_selected_network_notebook_does_not_limit_stack_qa(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-stack-with-selected-network",
+                "user_id": "u1",
+                "notebook_id": "computer-network",
+                "selected_subject_id": "computer-network",
+                "user_message": "栈是什么",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "evidence": [],
+            }
+        )
+
+        route_ids = [item["knowledge_base_id"] for item in result["knowledge_routes"]]
+        self.assertEqual(route_ids[:1], ["data-structure"])
+        self.assertEqual(result["concept_linking"]["subject_id"], "data-structure")
+
+    def test_unhinted_os_question_routes_to_operating_system(self) -> None:
+        result = build_graph().compile().invoke(
+            {
+                "run_id": "run-qa-process-thread-auto-subject",
+                "user_id": "u1",
+                "user_message": "进程和线程区别",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "evidence": [],
+            }
+        )
+
+        route_ids = [item["knowledge_base_id"] for item in result["knowledge_routes"]]
+        self.assertEqual(route_ids[:1], ["operating-system"])
+        self.assertEqual(result["concept_linking"]["subject_id"], "operating-system")
+
     def test_suffix_concept_notebook_only_still_refuses_without_evidence(self) -> None:
         result = build_graph().compile().invoke(
             {

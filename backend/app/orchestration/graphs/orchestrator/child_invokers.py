@@ -531,6 +531,15 @@ def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, A
         "user_id": state.get("user_id", ""),
         "notebook_id": state.get("notebook_id"),
         "course_id": state.get("course_id"),
+        "selected_subject_id": state.get("selected_subject_id"),
+        "selected_subject_name": state.get("selected_subject_name"),
+        "selected_subject_description": state.get("selected_subject_description"),
+        "subject_id": (
+            runtime_context.get("selected_subject_id")
+            or runtime_context.get("subject_id")
+            or state.get("selected_subject_id")
+            or state.get("notebook_id")
+        ),
         "thread_id": state.get("thread_id"),
         "message_id": str(state.get("message_id") or state.get("request_id") or ""),
         "request_id": str(state.get("request_id") or state.get("message_id") or ""),

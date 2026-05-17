@@ -440,7 +440,12 @@ def concept_linker_node(state: QAGraphState) -> dict[str, Any]:
     """Bind the resolved question to the taxonomy registry before retrieval."""
 
     question = _resolved_question(state)
-    subject_hint = str(state.get("notebook_id") or state.get("course_id") or "").strip() or None
+    source_policy = _source_policy(state)
+    subject_hint = (
+        str(state.get("notebook_id") or state.get("course_id") or "").strip() or None
+        if _should_bind_current_knowledge_base(state, question, source_policy)
+        else None
+    )
     match = get_concept_registry().match_query(question, subject_id=subject_hint)
     concept_linking = match.model_dump(mode="json")
     update: dict[str, Any] = {
@@ -3276,10 +3281,24 @@ def _has_strict_notebook_signal(question: str) -> bool:
 
 def _has_notebook_signal(question: str) -> bool:
     lowered = question.lower()
-    return any(
+    material_terms = ("当前 pdf", "当前文档", "notebook", "笔记", "资料", "课件", "课程", "知识库", "上传")
+    if any(
         term in question or term in lowered
-        for term in ("根据", "依据", "基于", "当前 pdf", "当前文档", "notebook", "笔记", "资料", "课件", "课程", "知识库")
+        for term in material_terms
+    ):
+        return True
+    scoped_reference_terms = (
+        "根据我的",
+        "依据我的",
+        "基于我的",
+        "根据这份",
+        "依据这份",
+        "基于这份",
+        "根据当前",
+        "依据当前",
+        "基于当前",
     )
+    return any(term in question or term in lowered for term in scoped_reference_terms)
 
 
 def _has_external_search_signal(question: str) -> bool:
@@ -3581,19 +3600,22 @@ def _core_408_routes(state: QAGraphState | dict[str, Any]) -> list[dict[str, Any
             )
         ]
 
-    for subject_id in (str(state.get("notebook_id") or "").strip(), str(state.get("course_id") or "").strip()):
-        if subject_id in CANONICAL_SUBJECT_IDS:
-            routes.append(
-                _knowledge_route(
-                    knowledge_base_id=subject_id,
-                    subject_id=subject_id,
-                    source_reason="core_408_priority",
-                    priority=8,
-                    metadata=metadata,
+    question = _resolved_question(state)
+    source_policy = _source_policy(state)
+    if _should_bind_current_knowledge_base(state, question, source_policy):
+        for subject_id in (str(state.get("notebook_id") or "").strip(), str(state.get("course_id") or "").strip()):
+            if subject_id in CANONICAL_SUBJECT_IDS:
+                routes.append(
+                    _knowledge_route(
+                        knowledge_base_id=subject_id,
+                        subject_id=subject_id,
+                        source_reason="core_408_priority",
+                        priority=8,
+                        metadata=metadata,
+                    )
                 )
-            )
-    if routes:
-        return _dedupe_routes(routes)[:MAX_KNOWLEDGE_ROUTES]
+        if routes:
+            return _dedupe_routes(routes)[:MAX_KNOWLEDGE_ROUTES]
     for index, subject_id in enumerate(CANONICAL_SUBJECT_IDS, start=1):
         routes.append(
             _knowledge_route(
@@ -3682,6 +3704,19 @@ def _should_use_current_knowledge_base(
     if _has_notebook_signal(question):
         return True
     return False
+
+
+def _should_bind_current_knowledge_base(
+    state: QAGraphState | dict[str, Any],
+    question: str,
+    source_policy: str,
+) -> bool:
+    if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
+        return True
+    if _has_strict_notebook_signal(question) or _has_notebook_signal(question):
+        return True
+    notebook_policy = str(state.get("notebook_policy") or "").strip()
+    return notebook_policy in {"required", "strict"}
 
 
 def _should_consider_knowledge_candidates(question: str, source_policy: str) -> bool:

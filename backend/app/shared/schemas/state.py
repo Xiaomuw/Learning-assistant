@@ -149,6 +149,9 @@ class AgentState(TypedDict, total=False):
     subject_id: str             # 内部兼容命名；产品语义上等价于 notebook_id
     subject_name: str           # 内部兼容命名；产品语义上等价于 notebook_name
     subject_description: str    # 当前笔记本 / 资料库的简介，仅作为知识上下文，不再承担 persona
+    selected_subject_id: str     # 前端当前选中科目，仅用于学习记录/默认练习，不自动限制普通 QA
+    selected_subject_name: str
+    selected_subject_description: str
 
     # ---- 输入 ----
     question: str               # 用户提出的原始问题

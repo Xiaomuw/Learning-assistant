@@ -278,7 +278,7 @@ def _quiz_context(state: OrchestratorState) -> dict[str, Any]:
         "notebook_id": state.get("notebook_id"),
         "course_id": state.get("course_id"),
         "thread_id": state.get("thread_id"),
-        "subject_id": runtime_context.get("subject_id") or state.get("notebook_id"),
+        "subject_id": runtime_context.get("selected_subject_id") or runtime_context.get("subject_id") or state.get("notebook_id"),
         "subject_name": runtime_context.get("subject_name"),
         "current_question": runtime_context.get("current_question"),
         "current_practice_question": runtime_context.get("current_practice_question"),

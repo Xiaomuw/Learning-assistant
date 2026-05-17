@@ -841,7 +841,8 @@ def explain_for_qa_fallback(state: dict[str, Any]) -> dict[str, Any]:
     user_style_name = state.get("user_style_name", "")
     user_style_prompt = state.get("user_style_prompt", "")
 
-    if subject_name != "通用知识":
+    material_scoped_answer = notebook_required or source_policy == "notebook"
+    if material_scoped_answer and subject_name != "通用知识":
         notebook_context = f"当前知识库名称：{subject_name}。\n"
         if subject_description:
             notebook_context += f"【知识库简介】：{subject_description}\n"
@@ -854,7 +855,7 @@ def explain_for_qa_fallback(state: dict[str, Any]) -> dict[str, Any]:
             notebook_context += "\n注意：当前 notebook 资料覆盖有限，请先基于命中资料回答，并提醒用户资料可能不完整。"
     else:
         notebook_context = (
-            f"当前为通用问答模式，不限定某个专用知识库。"
+            f"当前为自动知识范围问答，不限定某个前端选中的专用知识库。"
             f"notebook_required={str(notebook_required).lower()}。"
         )
 

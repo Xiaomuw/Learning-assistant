@@ -26,7 +26,11 @@ os.environ.setdefault(
 import app.interfaces.api.chat as chat_module
 from app.interfaces.api.chat import ChatRequest, router as chat_router
 from app.application.chat import messages as chat_messages
-from app.application.chat.orchestrator_runtime import _chat_state_from_orchestrator_result, _trace_outputs
+from app.application.chat.orchestrator_runtime import (
+    _chat_state_from_orchestrator_result,
+    _orchestrator_state_from_chat_state,
+    _trace_outputs,
+)
 from app.application.chat import service as chat_service
 from app.application.chat import state_builder as chat_state_builder
 from app.interfaces.auth.dependencies import require_current_user
@@ -1778,10 +1782,41 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(len(state["short_term_messages"]), 2)
         self.assertEqual(state["request_mode"], "sync")
         self.assertEqual(state["subject_id"], "data-structure")
+        self.assertEqual(state["selected_subject_id"], "data-structure")
+        self.assertNotIn("notebook_id", state)
         self.assertIn("助手2（主题：HTTP）", state["short_term_context"])
         self.assertEqual(state["session_memory"]["active_topic"], "HTTP")
         self.assertIn("当前主主题：HTTP", state["session_memory_context"])
         self.assertIn("用户昵称：测试用户", state["long_term_context"])
+
+    def test_orchestrator_state_does_not_bind_selected_subject_for_general_qa(self) -> None:
+        state = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-1",
+            question="什么是 HTTP？",
+            subject_id="data-structure",
+            request_mode="sync",
+        )
+
+        orchestrator_state = _orchestrator_state_from_chat_state(state, graph_run_id="run-general")
+
+        self.assertEqual(orchestrator_state["selected_subject_id"], "data-structure")
+        self.assertEqual(orchestrator_state["subject_id"], "data-structure")
+        self.assertIsNone(orchestrator_state["notebook_id"])
+
+    def test_orchestrator_state_binds_selected_subject_for_material_qa(self) -> None:
+        state = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-1",
+            question="根据我的笔记解释 HTTP",
+            subject_id="data-structure",
+            request_mode="sync",
+        )
+
+        orchestrator_state = _orchestrator_state_from_chat_state(state, graph_run_id="run-material")
+
+        self.assertEqual(orchestrator_state["selected_subject_id"], "data-structure")
+        self.assertEqual(orchestrator_state["notebook_id"], "data-structure")
 
     def test_initial_state_marks_client_requested_web_search(self) -> None:
         state = chat_state_builder.build_initial_state(
