@@ -411,6 +411,7 @@ export interface SendChatOptions {
   notebookId?: string;
   sessionId?: string;
   thinkingMode?: boolean;
+  webSearchEnabled?: boolean;
   idleTimeoutMs?: number;
   maxConnectRetries?: number;
   onRetry?: (attempt: number, maxRetries: number) => void;
@@ -930,6 +931,7 @@ export function sendChatSSE(
           question,
           subject_id: options.notebookId ?? DEFAULT_NOTEBOOK_ID,
           thinking_mode: Boolean(options.thinkingMode),
+          allow_web: Boolean(options.webSearchEnabled),
         }),
         signal: controller.signal,
       });

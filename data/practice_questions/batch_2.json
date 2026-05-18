@@ -1,0 +1,101 @@
+[
+  {
+    "question_id": "pq-co-float-011",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "basic",
+    "stem": "IEEE 754 单精度浮点数由三个字段组成，它们依次是（ ）。",
+    "options": {"A": "符号 1 位 + 阶码 8 位 + 尾数 23 位，共 32 位", "B": "符号 8 位 + 阶码 1 位 + 尾数 23 位，符号占一字节", "C": "符号 1 位 + 阶码 23 位 + 尾数 8 位，阶码占多数", "D": "无符号位，阶码与尾数各占 16 位"},
+    "answer": "A",
+    "explanation": "根据 IEEE 754 标准，单精度浮点数共 32 位，由 1 位符号位、8 位阶码（偏置 127）和 23 位尾数组成。因为符号位决定正负、阶码决定数量级、尾数决定精度，所以三者缺一不可。选项 B 颠倒了符号和阶码的位数；选项 C 颠倒了阶码和尾数的位数；选项 D 缺少符号位且位数分配错误。",
+    "knowledge_points": ["浮点数", "IEEE 754", "数据表示"],
+    "common_trap": "混淆阶码和尾数的位数分配。"
+  },
+  {
+    "question_id": "pq-co-float-012",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "basic",
+    "stem": "IEEE 754 浮点数中阶码采用移码（偏置）表示的主要目的是（ ）。",
+    "options": {"A": "便于直接比较浮点数大小", "B": "减少尾数的存储位数", "C": "消除浮点运算中的舍入误差", "D": "使所有浮点数都变为正数"},
+    "answer": "A",
+    "explanation": "根据移码的性质，移码保持了数值的大小顺序。因为阶码使用偏置表示后负指数也映射为正数，所以可以直接用无符号数比较方式判断浮点数大小，简化了硬件比较电路。选项 B 移码不影响尾数位数；选项 C 舍入误差由尾数精度决定；选项 D 符号位仍然决定浮点数的正负。",
+    "knowledge_points": ["浮点数", "移码", "阶码偏置"],
+    "common_trap": "以为移码是为了扩大表示范围。"
+  },
+  {
+    "question_id": "pq-co-float-013",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "basic",
+    "stem": "IEEE 754 单精度浮点数中，规格化数的尾数隐含最高位为 1，这样做的好处是（ ）。",
+    "options": {"A": "多获得 1 位有效精度", "B": "使阶码范围翻倍", "C": "避免出现负数", "D": "让所有浮点数值相等"},
+    "answer": "A",
+    "explanation": "根据 IEEE 754 的规格化约定，尾数最高位固定为 1 因而不需要显式存储。因为隐含的 1 不占用存储空间，所以 23 位尾数字段实际表示 24 位有效数字，从而多获得 1 位精度。选项 B 隐含位不影响阶码；选项 C 符号位决定正负与尾数隐含位无关；选项 D 显然不成立。",
+    "knowledge_points": ["浮点数", "规格化", "尾数精度"],
+    "common_trap": "忘记隐含位的存在，误以为有效位数等于字段宽度。"
+  },
+  {
+    "question_id": "pq-co-float-014",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "medium",
+    "stem": "IEEE 754 单精度浮点数的阶码偏置值（bias）是（ ）。",
+    "options": {"A": "127（即 2^7 - 1）", "B": "128（即 2^7）", "C": "255（即 2^8 - 1）", "D": "256（即 2^8）"},
+    "answer": "A",
+    "explanation": "根据 IEEE 754 标准，单精度的阶码字段为 8 位，偏置值为 2^(8-1) - 1 = 127。因为实际指数等于阶码字段值减去 127，所以存储的阶码范围 1~254 对应实际指数 -126~+127。选项 B 的 128 是双精度 11 位阶码时的偏置公式常见误套；选项 C 的 255 是阶码全 1 的保留值；选项 D 超出了 8 位可表示的范围。",
+    "knowledge_points": ["浮点数", "阶码偏置", "IEEE 754"],
+    "common_trap": "把偏置值记成 2^(n-1) 而非 2^(n-1)-1。"
+  },
+  {
+    "question_id": "pq-co-float-015",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "medium",
+    "stem": "两个浮点数相加时，首先需要执行的操作步骤是（ ）。",
+    "options": {"A": "对阶，使两个操作数的阶码相同", "B": "直接将尾数相加然后截断", "C": "先对尾数规格化再比较符号", "D": "将两个浮点数都转换为定点整数"},
+    "answer": "A",
+    "explanation": "根据浮点加减运算流程，第一步是对阶操作。因为只有阶码相同时尾数才能直接相加减，所以必须先将小阶向大阶对齐（小阶的尾数右移）。选项 B 未对阶直接加尾数会导致数量级错误；选项 C 规格化是运算后的步骤而非第一步；选项 D 不需要转为定点整数。",
+    "knowledge_points": ["浮点数", "浮点加减运算", "对阶"],
+    "common_trap": "忽略对阶步骤，直接将尾数相加。"
+  },
+  {
+    "question_id": "pq-co-float-016",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "medium",
+    "stem": "浮点运算中对阶操作采用'小阶向大阶看齐'而非'大阶向小阶看齐'的原因是（ ）。",
+    "options": {"A": "小阶尾数右移只丢失低位精度，误差较小", "B": "大阶数不允许修改阶码", "C": "右移操作比左移操作速度快", "D": "左移会使阶码变为负数"},
+    "answer": "A",
+    "explanation": "根据对阶原则，小阶向大阶看齐时尾数右移，丢失的是低位数据。因为低位的权值小，所以精度损失最小。若大阶向小阶看齐则尾数左移可能丢失高位有效数字，造成严重精度损失。选项 B 阶码可以修改；选项 C 移位速度与方向无关；选项 D 左移与阶码正负无直接关系。",
+    "knowledge_points": ["浮点数", "对阶", "精度损失"],
+    "common_trap": "以为对阶方向无所谓，忽略高位丢失的严重性。"
+  },
+  {
+    "question_id": "pq-co-float-017",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "medium",
+    "stem": "IEEE 754 中阶码全 0 且尾数非零表示的是（ ）。",
+    "options": {"A": "非规格化的极小浮点数", "B": "正无穷大或负无穷大", "C": "机器零（精确的 0）", "D": "非数值 NaN"},
+    "answer": "A",
+    "explanation": "根据 IEEE 754 编码规则，阶码全 0 且尾数非零时表示非规格化数（denormalized number）。因为非规格化数的隐含最高位为 0 而非 1，所以可以表示比最小规格化数更接近零的极小值。选项 B 的无穷大要求阶码全 1 且尾数全 0；选项 C 的机器零要求阶码和尾数都全 0；选项 D 的 NaN 要求阶码全 1 且尾数非零。",
+    "knowledge_points": ["浮点数", "非规格化数", "IEEE 754"],
+    "common_trap": "混淆阶码全 0 和阶码全 1 的特殊含义。"
+  },
+  {
+    "question_id": "pq-co-float-018",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "hard",
+    "stem": "在 IEEE 754 单精度格式中，最大的规格化正数的阶码字段值和尾数字段值分别是（ ）。",
+    "options": {"A": "阶码字段为 254（即 1111 1110）且尾数字段全部为 1", "B": "阶码字段为 255（全 1 保留值）且尾数全 1 表示无穷大", "C": "阶码字段为 254 但尾数全 0 表示 2 的 127 次方", "D": "阶码字段为 127（偏置后实际指数为 0）且尾数全 1"},
+    "answer": "A",
+    "explanation": "根据 IEEE 754 标准，阶码全 1（255）是保留编码用于表示无穷大和 NaN。因为规格化数的最大阶码为 254（实际指数 254-127=127），尾数全 1 时有效值最大为 1.111...1，所以最大规格化正数的阶码字段为 254、尾数字段全 1。选项 B 的阶码 255 是特殊值不表示有限数；选项 C 尾数全 0 不是最大值；选项 D 的阶码 127 对应实际指数 0 远非最大。",
+    "knowledge_points": ["浮点数", "IEEE 754", "规格化数范围"],
+    "common_trap": "忘记阶码全 1 是保留值，误用 255 作为最大阶码。"
+  },
+  {
+    "question_id": "pq-co-float-019",
+    "concept_id": "computer-organization.data-representation.float",
+    "difficulty": "hard",
+    "stem": "浮点运算中尾数相加后结果为 10.1101，此时需要执行的规格化操作是（ ）。",
+    "options": {"A": "尾数右移一位并将阶码加 1（右规）", "B": "尾数左移一位并将阶码减 1（左规）", "C": "直接截断最高位的 1 即可", "D": "将阶码清零重新计算尾数"},
+    "answer": "A",
+    "explanation": "根据规格化规则，尾数形式应为 1.xxxx。因为运算结果 10.1101 的整数部分超过 1 位，所以需要右移一位变为 1.01101 并将阶码加 1，这一过程称为右规。选项 B 左规用于尾数最高位为 0 的情况；选项 C 直接截断会丢失进位信息；选项 D 清零阶码会完全改变数值大小。",
+    "knowledge_points": ["浮点数", "规格化", "右规操作"],
+    "common_trap": "分不清左规和右规的适用场景。"
+  }
+]

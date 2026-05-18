@@ -27,7 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/dashboard",
     icon: BarChart3,
-    label: "中心",
+    label: "学习中心",
     tone: "bg-neo-muted",
   },
   {
@@ -42,30 +42,28 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="absolute inset-x-0 bottom-6 z-50 pointer-events-none px-4 flex justify-center">
-      <div className="w-full max-w-[380px] pointer-events-auto rounded-[2rem] border-[3px] border-neo-ink bg-white p-2 shadow-neo-sm">
-        <div className="flex items-center justify-between gap-1">
-          {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
-            const Icon = item.icon;
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t-[3px] border-neo-ink bg-white">
+      <div className="mx-auto flex w-full max-w-md items-center justify-between">
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href;
+          const Icon = item.icon;
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-label={item.label}
-                className={`flex flex-col flex-1 items-center justify-center gap-1 rounded-2xl border-[3px] px-2 py-3 text-[11px] font-black uppercase tracking-widest transition-all duration-100 ease-linear ${
-                  isActive
-                    ? `${item.tone} border-neo-ink text-neo-ink shadow-neo-sm -translate-y-1`
-                    : "border-transparent text-neo-ink/60 hover:bg-neo-bg hover:border-neo-ink hover:text-neo-ink hover:-translate-y-1"
-                }`}
-              >
-                <Icon size={20} strokeWidth={2.8} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-label={item.label}
+              className={`flex flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-black uppercase tracking-widest transition-all duration-100 ${
+                isActive
+                  ? `${item.tone} text-neo-ink`
+                  : "text-neo-ink/50 hover:bg-neo-bg hover:text-neo-ink"
+              }`}
+            >
+              <Icon size={20} strokeWidth={2.8} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

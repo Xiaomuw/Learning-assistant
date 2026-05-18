@@ -1,16 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Clock, Sparkles } from "lucide-react";
-import ChatWindow from "@/components/ChatWindow";
-import InputBar from "@/components/InputBar";
-import NotebookSelector from "@/components/NotebookSelector";
 import BottomNav from "@/components/BottomNav";
 import { useAuth } from "@/components/AuthProvider";
-import HistoryDrawer from "@/components/HistoryDrawer";
-import SessionSummaryCard, {
-  hasSessionSummary,
-} from "@/components/SessionSummaryCard";
 import {
   deleteSession as deleteSessionRemote,
   fetchNotebookKnowledgeStatus,
@@ -804,6 +796,7 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [thinkingModeEnabled, setThinkingModeEnabled] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [, setMemory] = useState<Memory>(EMPTY_MEMORY);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState(DEFAULT_NOTEBOOK_ID);
@@ -1171,6 +1164,13 @@ export default function ChatPage() {
 
     const sessionId = currentSessionId || crypto.randomUUID();
     const thinkingModeForRequest = thinkingModeEnabled;
+    const webSearchForRequest = webSearchEnabled;
+    let initialProcessMessage = "已连接学习引擎，正在准备处理。";
+    if (thinkingModeForRequest) {
+      initialProcessMessage = "思考模式已启用，正在准备处理。";
+    } else if (webSearchForRequest) {
+      initialProcessMessage = "联网搜索已启用，正在准备处理。";
+    }
     const userMessage: Message = {
       role: "user",
       content: question,
@@ -1181,11 +1181,7 @@ export default function ChatPage() {
       role: "assistant",
       content: "",
       timestamp: Date.now() + 1,
-      process: createInitialProcess(
-        thinkingModeForRequest
-          ? "思考模式已启用，正在准备处理。"
-          : "已连接学习引擎，正在准备处理。"
-      ),
+      process: createInitialProcess(initialProcessMessage),
     };
 
     if (!currentSessionId) {
@@ -1918,6 +1914,7 @@ export default function ChatPage() {
         notebookId: selectedNotebookId,
         sessionId,
         thinkingMode: thinkingModeForRequest,
+        webSearchEnabled: webSearchForRequest,
         idleTimeoutMs: 90000,
         maxConnectRetries: 2,
         onRetry: (attempt, maxRetries) => {
@@ -1944,24 +1941,53 @@ export default function ChatPage() {
   const selectedNotebook = visibleNotebooks.find(
     (notebook) => notebook.id === selectedNotebookId
   );
-  const currentSession = sessions.find((session) => session.id === currentSessionId);
-  const currentSessionNotebook = currentSession
-    ? visibleNotebooks.find((notebook) => notebook.id === currentSession.notebookId) ?? null
-    : selectedNotebook ?? null;
   const modelDisplay = currentModelDisplay(modelConfig);
-  const shouldShowKnowledgeHint =
-    selectedKnowledgeStatus &&
-    selectedKnowledgeStatus.coverage_level !== "ready";
-  const knowledgeHintAction =
-    selectedKnowledgeStatus?.suggested_actions[0] ??
-    "可以上传 PDF 作为我的补充资料，让回答更贴近你的学习材料。";
+  const [inputValue, setInputValue] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isStreaming]);
+
+  function formatDate(ts: number) {
+    const d = new Date(ts);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function handleInputSend() {
+    const q = inputValue.trim();
+    if (!q || isStreaming) return;
+    setInputValue("");
+    handleSend(q);
+  }
+
+  function handleSelectSession(session: ChatSession) {
+    activeStreamRef.current?.abort();
+    activeStreamRef.current = null;
+    setIsStreaming(false);
+    const sessionNotebookId = resolveNotebookId(visibleNotebooks, session.notebookId);
+    setSelectedNotebookId(sessionNotebookId);
+    persistStoredNotebookId(sessionNotebookId);
+    setCurrentSessionId(session.id);
+    activeDraftSessionRef.current = session.id;
+    rememberActiveSession(session.id, sessionNotebookId);
+    setMessages(session.messages);
+    setShowHistory(false);
+  }
+
+  function handleDeleteSessionById(id: string) {
+    if (!user) return;
+    void deleteSessionRemote(user.id, id)
+      .then(() => refreshSessions())
+      .catch((error: unknown) => { console.error("删除聊天记录失败:", error); });
+    if (currentSessionId === id) { handleNewSession(); }
+  }
 
   if (isLoading || !user) {
     return (
       <div className="flex h-full items-center justify-center bg-neo-bg px-4">
         <div className="neo-card-secondary w-full p-5 text-center">
-          <p className="neo-label">Notebook Tutor</p>
-          <p className="mt-3 text-lg font-black">正在恢复你的学习空间…</p>
+          <p className="text-lg font-black">正在恢复你的学习空间…</p>
         </div>
       </div>
     );
@@ -1969,161 +1995,125 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full flex-col bg-neo-bg">
-      <header className="border-b-[3px] border-neo-ink bg-neo-secondary px-4 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="neo-label">Notebook Tutor</p>
-            <h1 className="mt-2 inline-block -rotate-1 border-[3px] border-neo-ink bg-white px-4 py-2 text-3xl font-black tracking-tight shadow-neo-sm">
-              学习助手
-            </h1>
-            <p className="mt-3 max-w-xs text-sm font-bold leading-relaxed">
-              围绕你的笔记本来学，还会记住你卡住的地方。
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label={showHistory ? "关闭聊天历史" : "打开聊天历史"}
-              onClick={() => setShowHistory(true)}
-              className="group flex flex-col items-center gap-1 transition-transform hover:-translate-y-1"
-            >
-              <div className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-[3px] border-neo-ink bg-white shadow-neo-sm">
-                <Clock size={18} strokeWidth={2.8} className="text-neo-ink" />
-              </div>
-            </button>
-          </div>
+      {/* ── Header ── */}
+      <header className="flex items-center justify-between border-b-[3px] border-neo-ink bg-neo-secondary px-4 py-3">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-black">问答</h1>
+          {modelConfig ? (
+            <div className="flex items-center gap-1">
+              <div className="h-2.5 w-2.5 rounded-full border-2 border-neo-ink bg-green-500" />
+              <span className="text-[10px] font-black text-neo-ink/70">{modelDisplay.label}</span>
+            </div>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" className="neo-badge bg-white" onClick={() => { void refreshSessions(); setShowHistory(true); }}>历史</button>
+          <button type="button" className="neo-badge bg-white" onClick={handleNewSession}>新对话</button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-4 pb-6">
-        <div className="space-y-6">
-          <div className="flex items-center gap-2">
-            <div className="flex-1">
-              <NotebookSelector
-                notebooks={visibleNotebooks}
-                selectedId={selectedNotebookId}
-                onSelect={handleNotebookSelect}
-              />
+      {/* ── Messages ── */}
+      <main className="flex-1 overflow-y-auto px-4 py-3 pb-2">
+        {messages.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <p className="text-2xl font-black">开始学习 ✨</p>
+            <p className="mt-2 text-sm font-bold text-neo-ink/60">围绕「{selectedNotebook?.name || "知识库"}」提问</p>
+          </div>
+        ) : null}
+
+        {messages.map((message, index) => (
+          <div key={`${message.timestamp}-${index}`} className={`mb-3 ${message.role === "user" ? "flex justify-end" : ""}`}>
+            <div className={`max-w-[85%] rounded-2xl border-[3px] border-neo-ink p-3 shadow-neo-sm ${
+              message.role === "user" ? "bg-neo-secondary" : "bg-white"
+            }`}>
+              <p className="text-[10px] font-black uppercase tracking-widest text-neo-ink/50">
+                {message.role === "user" ? "你" : "Coach"}
+              </p>
+              <div className="mt-1 whitespace-pre-wrap text-sm font-bold leading-relaxed">
+                {message.content || "模型正在处理..."}
+              </div>
+              {message.quiz && message.quiz.length > 0 ? (
+                <div className="mt-3 border-[3px] border-neo-ink bg-neo-bg p-3">
+                  <p className="text-xs font-black">练习题已打包 · 共 {message.quiz.length} 道</p>
+                  <button type="button" className="neo-button mt-2 w-full justify-center text-xs" onClick={() => window.location.href = "/practice"}>去刷题</button>
+                </div>
+              ) : null}
+              {message.quizClarification ? (
+                <div className="mt-3 border-[3px] border-neo-ink bg-neo-muted p-3">
+                  <p className="text-xs font-black">{message.quizClarification.title || "想练哪一块？"}</p>
+                  <p className="mt-1 text-[11px] font-bold text-neo-ink/60">{message.quizClarification.description}</p>
+                  {(message.quizClarification.recommended_options || []).slice(0, 3).map((opt) => (
+                    <button key={`${opt.source}-${opt.value}`} type="button" className="neo-badge mt-2 mr-2 bg-white" disabled={isStreaming} onClick={() => handleSend(`围绕 ${opt.value} 出 5 道单选题`)}>{opt.label || opt.value}</button>
+                  ))}
+                </div>
+              ) : null}
+              {message.process && message.process.stages.length > 0 ? (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-[10px] font-black text-neo-ink/50">处理过程 · {message.process.currentStage}</summary>
+                  <div className="mt-1 space-y-1">
+                    {message.process.stages.map((stage) => (
+                      <div key={stage.key} className="flex items-center gap-2 text-[10px] font-bold text-neo-ink/60">
+                        <span className={`h-1.5 w-1.5 rounded-full ${stage.status === "completed" ? "bg-green-500" : stage.status === "failed" ? "bg-red-500" : "bg-yellow-500"}`} />
+                        <span>{stage.label}</span>
+                        {typeof stage.elapsed === "number" ? <span className="text-neo-ink/40">{stage.elapsed.toFixed(1)}s</span> : null}
+                      </div>
+                    ))}
+                    {message.process.toolCalls?.map((tc, i) => (
+                      <div key={`tc-${i}`} className="text-[10px] font-bold text-neo-ink/50">🔧 {tc.label}{tc.success ? " ✓" : " ✗"}{tc.docCount ? ` · ${tc.docCount}条` : ""}</div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
           </div>
-
-          {modelConfig && (
-            <div className="flex items-center justify-between rounded-[1rem] border-[3px] border-neo-ink bg-neo-muted px-4 py-2 shadow-neo-sm">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full border-2 border-neo-ink bg-green-500 animate-pulse" />
-                <div className="min-w-0">
-                  <span className="block truncate text-xs font-black uppercase tracking-widest text-neo-ink">
-                    {modelDisplay.label}
-                  </span>
-                  <span className="block truncate text-[10px] font-bold text-neo-ink/60">
-                    {[modelDisplay.provider, modelDisplay.family, modelDisplay.id]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs font-bold text-neo-ink/70">当前启用</span>
-            </div>
-          )}
-
-          {shouldShowKnowledgeHint && (
-            <div className="border-[3px] border-neo-ink bg-white p-3 shadow-neo-sm">
-              <div className="flex items-center justify-between gap-3">
-                <p className="neo-label">{COVERAGE_LABELS[selectedKnowledgeStatus.coverage_level]}</p>
-                <span className="neo-badge bg-neo-muted">
-                  完整度 {selectedKnowledgeStatus.coverage_score}
-                </span>
-              </div>
-              <p className="mt-2 text-sm font-bold leading-relaxed text-neo-ink/70">
-                当前 notebook 资料还不够完整，RAG 会优先使用已命中的内容，但可能需要补资料才能回答得更准。
-                {selectedKnowledgeStatus.personal_doc_count > 0
-                  ? ` 已加载 ${selectedKnowledgeStatus.personal_doc_count} 条我的补充资料。`
-                  : " 你也可以上传 PDF，补充内容仅自己可见。"}
-              </p>
-              <p className="mt-2 border-l-[4px] border-neo-ink bg-neo-bg px-3 py-2 text-xs font-black text-neo-ink">
-                建议：{knowledgeHintAction}
-              </p>
-            </div>
-          )}
-
-          {currentSession && hasSessionSummary(currentSession.sessionMemory) && (
-            <SessionSummaryCard
-              session={currentSession}
-              notebook={currentSessionNotebook}
-              title="当前会话进度"
-              compact
-            />
-          )}
-
-          <section className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} strokeWidth={2.8} />
-              <p className="neo-label">Notebook Feed</p>
-            </div>
-
-            <ChatWindow
-              messages={messages}
-              isStreaming={isStreaming}
-              onSuggestionClick={handleSend}
-            />
-          </section>
-        </div>
+        ))}
+        <div ref={chatEndRef} />
       </main>
 
-      <div className="sticky bottom-0 z-10 border-t-[3px] border-neo-ink bg-neo-bg px-4 pb-20 pt-4">
-        <InputBar
-          onSend={handleSend}
-          onUpload={handleUpload}
-          inputDisabled={false}
-          sendDisabled={isStreaming}
-          uploadDisabled={isStreaming}
-          isSending={isStreaming}
-          isUploading={isUploading}
-          thinkingModeEnabled={thinkingModeEnabled}
-          thinkingModeDisabled={isStreaming}
-          onThinkingModeChange={setThinkingModeEnabled}
-          placeholder={`围绕「${selectedNotebook?.name ?? "选择知识库辅助参考"}」开始提问...`}
-        />
+      {/* ── Composer ── */}
+      <div className="border-t-[3px] border-neo-ink bg-white px-4 py-3 pb-20">
+        <div className="flex items-center gap-2 mb-2">
+          <button type="button" className={`neo-badge ${webSearchEnabled ? "bg-neo-accent" : "bg-white"}`} disabled={isStreaming} onClick={() => setWebSearchEnabled(!webSearchEnabled)}>
+            {webSearchEnabled ? "联网开" : "联网"}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <textarea className="neo-input flex-1 resize-none" rows={1} maxLength={2000} placeholder="输入你的问题..." disabled={isStreaming} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleInputSend(); } }} />
+          <button type="button" className="neo-button px-4 py-3" disabled={!inputValue.trim() || isStreaming} onClick={handleInputSend}>
+            {isStreaming ? "生成中" : "发送"}
+          </button>
+        </div>
       </div>
 
       <BottomNav />
 
-      <HistoryDrawer
-        isOpen={showHistory}
-        onClose={() => setShowHistory(false)}
-        sessions={sessions}
-        notebooks={visibleNotebooks}
-        currentSessionId={currentSessionId}
-        onSelectSession={(session) => {
-          activeStreamRef.current?.abort();
-          activeStreamRef.current = null;
-          setIsStreaming(false);
-          const sessionNotebookId = resolveNotebookId(
-            visibleNotebooks,
-            session.notebookId
-          );
-          setSelectedNotebookId(sessionNotebookId);
-          persistStoredNotebookId(sessionNotebookId);
-          setCurrentSessionId(session.id);
-          activeDraftSessionRef.current = session.id;
-          rememberActiveSession(session.id, sessionNotebookId);
-          setMessages(session.messages);
-          setShowHistory(false);
-        }}
-        onDeleteSession={(id) => {
-          void deleteSessionRemote(user.id, id)
-            .then(() => refreshSessions())
-            .catch((error) => {
-              console.error("删除聊天记录失败:", error);
-            });
-          if (currentSessionId === id) {
-            handleNewSession();
-          }
-        }}
-        onNewSession={handleNewSession}
-      />
-
+      {/* ── History Drawer ── */}
+      {showHistory ? (
+        <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setShowHistory(false)}>
+          <div className="absolute right-0 top-0 bottom-0 w-[80%] max-w-sm border-l-[3px] border-neo-ink bg-white" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b-[3px] border-neo-ink p-4">
+              <h2 className="text-lg font-black">最近记录</h2>
+              <button type="button" className="neo-badge bg-white" onClick={() => setShowHistory(false)}>关闭</button>
+            </div>
+            <button type="button" className="neo-button mx-4 mt-4 w-[calc(100%-2rem)] justify-center" onClick={() => { setShowHistory(false); handleNewSession(); }}>开启新对话</button>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {sessions.length === 0 ? <p className="text-sm font-bold text-neo-ink/50">暂无聊天记录</p> : null}
+              {sessions.map((session) => {
+                const nb = visibleNotebooks.find((n) => n.id === session.notebookId);
+                return (
+                  <div key={session.id} className={`border-[3px] border-neo-ink p-3 shadow-neo-sm ${session.id === currentSessionId ? "bg-neo-secondary" : "bg-white"}`}>
+                    <div className="cursor-pointer" onClick={() => handleSelectSession(session)}>
+                      <p className="text-sm font-black truncate">{session.title}</p>
+                      <p className="mt-1 text-[10px] font-bold text-neo-ink/50">{nb?.name || "未知"} · {formatDate(session.updatedAt)} · {session.messages?.length || 0}条</p>
+                    </div>
+                    <button type="button" className="mt-2 text-[10px] font-black text-red-600" onClick={() => handleDeleteSessionById(session.id)}>删除</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,0 +1,232 @@
+{
+  "summary": {
+    "total_questions": 16,
+    "kept_count": 15,
+    "review_count": 1,
+    "drop_count": 0,
+    "kept_rate": 0.9375,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-ds-misc-016",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.search.binary-search-tree",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-018",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.search.hash-table",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-019",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.search.hash-table",
+      "difficulty": "hard",
+      "score": 82,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "placeholder_like"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-020",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.search.hash-table",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-021",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.complexity-stability",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-022",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.complexity-stability",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-023",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.complexity-stability",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-024",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.complexity-stability",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-025",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.complexity-stability",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-026",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.complexity-stability",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-027",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.complexity-stability",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-028",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-029",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-030",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "hard",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-031",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [
+    {
+      "question_id": "pq-ds-misc-017",
+      "decision": "REVIEW",
+      "score": 77,
+      "issues": [
+        "题干包含模糊词汇",
+        "解析未围绕标准答案展开"
+      ],
+      "risk_tags": [
+        "ambiguous_stem",
+        "weak_rationale_alignment"
+      ],
+      "fix_suggestions": [
+        "在解析中明确指出答案的正确理由",
+        "删除“可能/大致/一般”等模糊词，使题意明确"
+      ]
+    }
+  ],
+  "aggregates": {
+    "subject_pass_rate": {
+      "data-structure": 0.9375
+    },
+    "difficulty_pass_rate": {
+      "hard": 1.0,
+      "medium": 0.875,
+      "basic": 1.0
+    },
+    "top_risk_tags": [
+      [
+        "ambiguous_stem",
+        1
+      ],
+      [
+        "weak_rationale_alignment",
+        1
+      ]
+    ],
+    "top20_risk_questions": [
+      {
+        "question_id": "pq-ds-misc-017",
+        "score": 77,
+        "issues": [
+          "题干包含模糊词汇",
+          "解析未围绕标准答案展开"
+        ],
+        "risk_tags": [
+          "ambiguous_stem",
+          "weak_rationale_alignment"
+        ]
+      }
+    ]
+  },
+  "kept_question_ids": [
+    "pq-ds-misc-016",
+    "pq-ds-misc-018",
+    "pq-ds-misc-019",
+    "pq-ds-misc-020",
+    "pq-ds-misc-021",
+    "pq-ds-misc-022",
+    "pq-ds-misc-023",
+    "pq-ds-misc-024",
+    "pq-ds-misc-025",
+    "pq-ds-misc-026",
+    "pq-ds-misc-027",
+    "pq-ds-misc-028",
+    "pq-ds-misc-029",
+    "pq-ds-misc-030",
+    "pq-ds-misc-031"
+  ]
+}

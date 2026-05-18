@@ -1,0 +1,59 @@
+{
+  "summary": {
+    "total_questions": 3,
+    "kept_count": 3,
+    "review_count": 0,
+    "drop_count": 0,
+    "kept_rate": 1.0,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-cn-network-018",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.ip-subnet",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-routing-016",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.routing",
+      "difficulty": "basic",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-cn-transport-023",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.transport.tcp-udp",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "computer-network": 1.0
+    },
+    "difficulty_pass_rate": {
+      "medium": 1.0,
+      "basic": 1.0
+    },
+    "top_risk_tags": [],
+    "top20_risk_questions": []
+  },
+  "kept_question_ids": [
+    "pq-cn-network-018",
+    "pq-cn-routing-016",
+    "pq-cn-transport-023"
+  ]
+}

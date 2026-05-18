@@ -1,0 +1,299 @@
+{
+  "summary": {
+    "total_questions": 18,
+    "kept_count": 15,
+    "review_count": 2,
+    "drop_count": 1,
+    "kept_rate": 0.8333,
+    "drop_rate": 0.0556
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-cn-app-016",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.application.dns",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_explanation"
+      ]
+    },
+    {
+      "question_id": "pq-cn-app-017",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.application.dns",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-app-018",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.application.http-https",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-app-019",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.application.smtp-ftp",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-app-020",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.application.smtp-ftp",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-data-link-028",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.data-link.framing-crc",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-data-link-029",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.data-link.mac-ethernet",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-layer-027",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.layering.osi-tcpip",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-layer-028",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.layering.osi-tcpip",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-012",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.ip-subnet",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-network-013",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.ip-subnet",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_explanation"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-014",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.ip-subnet",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-routing-001",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.routing",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-routing-003",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.routing",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-routing-004",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.routing",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_explanation"
+      ]
+    }
+  ],
+  "discarded_questions": [
+    {
+      "question_id": "pq-cn-app-021",
+      "decision": "DROP",
+      "score": 67,
+      "issues": [
+        "解析缺少推理链关键词",
+        "文本中包含模板化占位符"
+      ],
+      "risk_tags": [
+        "placeholder_like",
+        "weak_explanation"
+      ],
+      "fix_suggestions": [
+        "将模板化符号替换为实际内容",
+        "在解析中增加推理关联词如“因为”、“所以”、“可得”"
+      ]
+    }
+  ],
+  "review_questions": [
+    {
+      "question_id": "pq-cn-routing-002",
+      "decision": "REVIEW",
+      "score": 73,
+      "issues": [
+        "解析未围绕标准答案展开",
+        "未体现目标知识点关键词"
+      ],
+      "risk_tags": [
+        "topic_mismatch",
+        "weak_rationale_alignment"
+      ],
+      "fix_suggestions": [
+        "在解析中明确指出答案的正确理由",
+        "在题干或解析中融入对应的知识点关键词"
+      ]
+    },
+    {
+      "question_id": "pq-cn-routing-005",
+      "decision": "REVIEW",
+      "score": 70,
+      "issues": [
+        "解析缺少推理链关键词",
+        "解析未围绕标准答案展开"
+      ],
+      "risk_tags": [
+        "weak_explanation",
+        "weak_rationale_alignment"
+      ],
+      "fix_suggestions": [
+        "在解析中明确指出答案的正确理由",
+        "在解析中增加推理关联词如“因为”、“所以”、“可得”"
+      ]
+    }
+  ],
+  "aggregates": {
+    "subject_pass_rate": {
+      "computer-network": 0.8333
+    },
+    "difficulty_pass_rate": {
+      "basic": 0.75,
+      "medium": 1.0,
+      "hard": 0.7143
+    },
+    "top_risk_tags": [
+      [
+        "weak_explanation",
+        2
+      ],
+      [
+        "weak_rationale_alignment",
+        2
+      ],
+      [
+        "placeholder_like",
+        1
+      ],
+      [
+        "topic_mismatch",
+        1
+      ]
+    ],
+    "top20_risk_questions": [
+      {
+        "question_id": "pq-cn-app-021",
+        "score": 67,
+        "issues": [
+          "解析缺少推理链关键词",
+          "文本中包含模板化占位符"
+        ],
+        "risk_tags": [
+          "placeholder_like",
+          "weak_explanation"
+        ]
+      },
+      {
+        "question_id": "pq-cn-routing-005",
+        "score": 70,
+        "issues": [
+          "解析缺少推理链关键词",
+          "解析未围绕标准答案展开"
+        ],
+        "risk_tags": [
+          "weak_explanation",
+          "weak_rationale_alignment"
+        ]
+      },
+      {
+        "question_id": "pq-cn-routing-002",
+        "score": 73,
+        "issues": [
+          "解析未围绕标准答案展开",
+          "未体现目标知识点关键词"
+        ],
+        "risk_tags": [
+          "topic_mismatch",
+          "weak_rationale_alignment"
+        ]
+      }
+    ]
+  },
+  "kept_question_ids": [
+    "pq-cn-app-016",
+    "pq-cn-app-017",
+    "pq-cn-app-018",
+    "pq-cn-app-019",
+    "pq-cn-app-020",
+    "pq-cn-data-link-028",
+    "pq-cn-data-link-029",
+    "pq-cn-layer-027",
+    "pq-cn-layer-028",
+    "pq-cn-network-012",
+    "pq-cn-network-013",
+    "pq-cn-network-014",
+    "pq-cn-routing-001",
+    "pq-cn-routing-003",
+    "pq-cn-routing-004"
+  ]
+}

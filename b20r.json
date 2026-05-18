@@ -1,0 +1,168 @@
+{
+  "summary": {
+    "total_questions": 13,
+    "kept_count": 13,
+    "review_count": 0,
+    "drop_count": 0,
+    "kept_rate": 1.0,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-ds-tree-011",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-tree-012",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-tree-013",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-tree-014",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-tree-015",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-tree-016",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-tree-017",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-tree-018",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.traversal",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-thr-011",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.threaded-tree",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-thr-012",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.threaded-tree",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-thr-013",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.threaded-tree",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-thr-014",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.threaded-tree",
+      "difficulty": "hard",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-ds-thr-015",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.binary-tree.threaded-tree",
+      "difficulty": "medium",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "data-structure": 1.0
+    },
+    "difficulty_pass_rate": {
+      "basic": 1.0,
+      "medium": 1.0,
+      "hard": 1.0
+    },
+    "top_risk_tags": [],
+    "top20_risk_questions": []
+  },
+  "kept_question_ids": [
+    "pq-ds-tree-011",
+    "pq-ds-tree-012",
+    "pq-ds-tree-013",
+    "pq-ds-tree-014",
+    "pq-ds-tree-015",
+    "pq-ds-tree-016",
+    "pq-ds-tree-017",
+    "pq-ds-tree-018",
+    "pq-ds-thr-011",
+    "pq-ds-thr-012",
+    "pq-ds-thr-013",
+    "pq-ds-thr-014",
+    "pq-ds-thr-015"
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "summary": {
+    "total_questions": 9,
+    "kept_count": 9,
+    "review_count": 0,
+    "drop_count": 0,
+    "kept_rate": 1.0,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-co-hier-011",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-hier-012",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-hier-013",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "basic",
+      "score": 94,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "short_stem"
+      ]
+    },
+    {
+      "question_id": "pq-co-hier-014",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "medium",
+      "score": 94,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "short_stem"
+      ]
+    },
+    {
+      "question_id": "pq-co-hier-015",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-hier-016",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-hier-017",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-hier-018",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-hier-019",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.memory.hierarchy-locality",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "computer-organization": 1.0
+    },
+    "difficulty_pass_rate": {
+      "basic": 1.0,
+      "medium": 1.0,
+      "hard": 1.0
+    },
+    "top_risk_tags": [],
+    "top20_risk_questions": []
+  },
+  "kept_question_ids": [
+    "pq-co-hier-011",
+    "pq-co-hier-012",
+    "pq-co-hier-013",
+    "pq-co-hier-014",
+    "pq-co-hier-015",
+    "pq-co-hier-016",
+    "pq-co-hier-017",
+    "pq-co-hier-018",
+    "pq-co-hier-019"
+  ]
+}

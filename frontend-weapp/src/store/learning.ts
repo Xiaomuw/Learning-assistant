@@ -25,6 +25,7 @@ export interface StoredQuizState {
   answers: Record<string, string>;
   feedback?: PracticeAttemptResult | null;
   feedbackQuizKey?: string;
+  feedbacks?: Record<string, PracticeAttemptResult>;
   isCompleted?: boolean;
   completedAt?: number | null;
 }
@@ -82,6 +83,32 @@ function appendUniqueQuizItems(current: QuizItem[], incoming: QuizItem[]) {
   });
 
   return { merged, addedCount };
+}
+
+function normalizeFeedbacks(value: any): Record<string, PracticeAttemptResult> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value).reduce<Record<string, PracticeAttemptResult>>((result, [key, feedback]) => {
+    if (key && feedback && typeof feedback === "object" && !Array.isArray(feedback)) {
+      result[key] = feedback as PracticeAttemptResult;
+    }
+    return result;
+  }, {});
+}
+
+function mergeCurrentFeedback(
+  feedbacks: Record<string, PracticeAttemptResult>,
+  feedback: PracticeAttemptResult | null | undefined,
+  feedbackQuizKey: string | undefined
+) {
+  if (!feedback || !feedbackQuizKey) {
+    return feedbacks;
+  }
+  return {
+    ...feedbacks,
+    [feedbackQuizKey]: feedback
+  };
 }
 
 function getUserIdFromAuthStorage() {
@@ -180,19 +207,24 @@ export function getStoredQuizState(): StoredQuizState {
       answers: {},
       feedback: null,
       feedbackQuizKey: "",
+      feedbacks: {},
       isCompleted: false,
       completedAt: null
     };
   }
   if (value && typeof value === "object" && Array.isArray(value.items)) {
+    const feedback = value.feedback && typeof value.feedback === "object" ? value.feedback as PracticeAttemptResult : null;
+    const feedbackQuizKey = typeof value.feedbackQuizKey === "string" ? value.feedbackQuizKey : "";
+    const feedbacks = mergeCurrentFeedback(normalizeFeedbacks(value.feedbacks), feedback, feedbackQuizKey);
     return {
       sessionId: value.sessionId || "",
       subjectId: normalizeNotebookId(value.subjectId || getStoredNotebookId()),
       items: value.items,
       currentIndex: Number.isFinite(value.currentIndex) ? value.currentIndex : 0,
       answers: value.answers && typeof value.answers === "object" ? value.answers : {},
-      feedback: value.feedback && typeof value.feedback === "object" ? value.feedback : null,
-      feedbackQuizKey: typeof value.feedbackQuizKey === "string" ? value.feedbackQuizKey : "",
+      feedback,
+      feedbackQuizKey,
+      feedbacks,
       isCompleted: Boolean(value.isCompleted),
       completedAt: Number.isFinite(value.completedAt) ? Number(value.completedAt) : null
     };
@@ -205,6 +237,7 @@ export function getStoredQuizState(): StoredQuizState {
     answers: {},
     feedback: null,
     feedbackQuizKey: "",
+    feedbacks: {},
     isCompleted: false,
     completedAt: null
   };
@@ -219,6 +252,7 @@ export function setStoredQuiz(items: QuizItem[], meta: Partial<Omit<StoredQuizSt
     answers: meta.answers || {},
     feedback: meta.feedback ?? null,
     feedbackQuizKey: meta.feedbackQuizKey || "",
+    feedbacks: meta.feedbacks || {},
     isCompleted: Boolean(meta.isCompleted),
     completedAt: meta.completedAt ?? null
   });
@@ -239,6 +273,7 @@ export function appendStoredQuiz(items: QuizItem[], meta: Partial<Omit<StoredQui
     answers: current.answers || {},
     feedback: shouldJumpToNewItems ? null : current.feedback ?? null,
     feedbackQuizKey: shouldJumpToNewItems ? "" : current.feedbackQuizKey || "",
+    feedbacks: current.feedbacks || {},
     isCompleted: shouldJumpToNewItems ? false : Boolean(current.isCompleted),
     completedAt: shouldJumpToNewItems ? null : current.completedAt ?? null
   };
@@ -252,6 +287,7 @@ export function appendStoredQuiz(items: QuizItem[], meta: Partial<Omit<StoredQui
 }
 
 export function setStoredQuizState(state: StoredQuizState) {
+  const feedbacks = mergeCurrentFeedback(state.feedbacks || {}, state.feedback, state.feedbackQuizKey);
   writeStoreValue(QUIZ_KEY, {
     sessionId: state.sessionId || "",
     subjectId: normalizeNotebookId(state.subjectId || getStoredNotebookId()),
@@ -260,6 +296,7 @@ export function setStoredQuizState(state: StoredQuizState) {
     answers: state.answers || {},
     feedback: state.feedback ?? null,
     feedbackQuizKey: state.feedbackQuizKey || "",
+    feedbacks,
     isCompleted: Boolean(state.isCompleted),
     completedAt: state.completedAt ?? null
   });

@@ -1,0 +1,208 @@
+{
+  "summary": {
+    "total_questions": 8,
+    "kept_count": 4,
+    "review_count": 2,
+    "drop_count": 2,
+    "kept_rate": 0.5,
+    "drop_rate": 0.25
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-cn-data-link-017",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.data-link.mac-ethernet",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-data-link-018",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.data-link.mac-ethernet",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_explanation"
+      ]
+    },
+    {
+      "question_id": "pq-cn-layer-021",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.layering.service-protocol-interface",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-data-link-020",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.data-link.framing-crc",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [
+    {
+      "question_id": "pq-cn-network-004",
+      "decision": "DROP",
+      "score": -65,
+      "issues": [
+        "解析未围绕标准答案展开",
+        "选项之间文本高度相似"
+      ],
+      "risk_tags": [
+        "duplicate_option",
+        "weak_rationale_alignment"
+      ],
+      "fix_suggestions": [
+        "增加选项之间的区分度",
+        "在解析中明确指出答案的正确理由"
+      ]
+    },
+    {
+      "question_id": "pq-cn-layer-022",
+      "decision": "DROP",
+      "score": 58,
+      "issues": [
+        "解析未围绕标准答案展开",
+        "解析缺少推理链关键词",
+        "未体现目标知识点关键词"
+      ],
+      "risk_tags": [
+        "weak_explanation",
+        "topic_mismatch",
+        "weak_rationale_alignment"
+      ],
+      "fix_suggestions": [
+        "在解析中明确指出答案的正确理由",
+        "在解析中增加推理关联词如“因为”、“所以”、“可得”",
+        "在题干或解析中融入对应的知识点关键词"
+      ]
+    }
+  ],
+  "review_questions": [
+    {
+      "question_id": "pq-cn-network-005",
+      "decision": "REVIEW",
+      "score": 75,
+      "issues": [
+        "选项之间文本高度相似"
+      ],
+      "risk_tags": [
+        "duplicate_option"
+      ],
+      "fix_suggestions": [
+        "增加选项之间的区分度"
+      ]
+    },
+    {
+      "question_id": "pq-cn-data-link-019",
+      "decision": "REVIEW",
+      "score": 70,
+      "issues": [
+        "解析未围绕标准答案展开",
+        "解析缺少推理链关键词"
+      ],
+      "risk_tags": [
+        "weak_explanation",
+        "weak_rationale_alignment"
+      ],
+      "fix_suggestions": [
+        "在解析中明确指出答案的正确理由",
+        "在解析中增加推理关联词如“因为”、“所以”、“可得”"
+      ]
+    }
+  ],
+  "aggregates": {
+    "subject_pass_rate": {
+      "computer-network": 0.5
+    },
+    "difficulty_pass_rate": {
+      "medium": 0.5,
+      "hard": 0.6667,
+      "basic": 0.0
+    },
+    "top_risk_tags": [
+      [
+        "weak_rationale_alignment",
+        3
+      ],
+      [
+        "duplicate_option",
+        2
+      ],
+      [
+        "weak_explanation",
+        2
+      ],
+      [
+        "topic_mismatch",
+        1
+      ]
+    ],
+    "top20_risk_questions": [
+      {
+        "question_id": "pq-cn-network-004",
+        "score": -65,
+        "issues": [
+          "解析未围绕标准答案展开",
+          "选项之间文本高度相似"
+        ],
+        "risk_tags": [
+          "duplicate_option",
+          "weak_rationale_alignment"
+        ]
+      },
+      {
+        "question_id": "pq-cn-layer-022",
+        "score": 58,
+        "issues": [
+          "解析未围绕标准答案展开",
+          "解析缺少推理链关键词",
+          "未体现目标知识点关键词"
+        ],
+        "risk_tags": [
+          "weak_explanation",
+          "topic_mismatch",
+          "weak_rationale_alignment"
+        ]
+      },
+      {
+        "question_id": "pq-cn-data-link-019",
+        "score": 70,
+        "issues": [
+          "解析未围绕标准答案展开",
+          "解析缺少推理链关键词"
+        ],
+        "risk_tags": [
+          "weak_explanation",
+          "weak_rationale_alignment"
+        ]
+      },
+      {
+        "question_id": "pq-cn-network-005",
+        "score": 75,
+        "issues": [
+          "选项之间文本高度相似"
+        ],
+        "risk_tags": [
+          "duplicate_option"
+        ]
+      }
+    ]
+  },
+  "kept_question_ids": [
+    "pq-cn-data-link-017",
+    "pq-cn-data-link-018",
+    "pq-cn-layer-021",
+    "pq-cn-data-link-020"
+  ]
+}

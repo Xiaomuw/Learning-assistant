@@ -1,0 +1,185 @@
+{
+  "summary": {
+    "total_questions": 15,
+    "kept_count": 15,
+    "review_count": 0,
+    "drop_count": 0,
+    "kept_rate": 1.0,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-ds-lin-011",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.process.process-thread",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-012",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.array-linked-list",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-013",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.array-linked-list",
+      "difficulty": "basic",
+      "score": 90,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "option_too_short"
+      ]
+    },
+    {
+      "question_id": "pq-ds-lin-014",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.array-linked-list",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-015",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.array-linked-list",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-016",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.array-linked-list",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-017",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.array-linked-list",
+      "difficulty": "hard",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-ds-lin-018",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.array-linked-list",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-019",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.definition-storage",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-020",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.definition-storage",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-021",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.definition-storage",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-022",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.definition-storage",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-023",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.definition-storage",
+      "difficulty": "hard",
+      "score": 82,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "placeholder_like"
+      ]
+    },
+    {
+      "question_id": "pq-ds-lin-024",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.definition-storage",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-lin-025",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.linear-list.definition-storage",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "operating-system": 1.0,
+      "data-structure": 1.0
+    },
+    "difficulty_pass_rate": {
+      "basic": 1.0,
+      "medium": 1.0,
+      "hard": 1.0
+    },
+    "top_risk_tags": [],
+    "top20_risk_questions": []
+  },
+  "kept_question_ids": [
+    "pq-ds-lin-011",
+    "pq-ds-lin-012",
+    "pq-ds-lin-013",
+    "pq-ds-lin-014",
+    "pq-ds-lin-015",
+    "pq-ds-lin-016",
+    "pq-ds-lin-017",
+    "pq-ds-lin-018",
+    "pq-ds-lin-019",
+    "pq-ds-lin-020",
+    "pq-ds-lin-021",
+    "pq-ds-lin-022",
+    "pq-ds-lin-023",
+    "pq-ds-lin-024",
+    "pq-ds-lin-025"
+  ]
+}

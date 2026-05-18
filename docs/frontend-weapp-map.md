@@ -2,13 +2,12 @@
 
 > 适用代码：`frontend-weapp/`  
 > 技术栈：Taro 4 + React + TypeScript + 微信小程序  
-> 定位：正式小程序前端模块；旧 `miniprogram/` 仅作为 legacy/reference 保留。
+> 定位：唯一的微信小程序前端模块。
 
 ## 1. 模块边界
 
 - `frontend/`：现有 Next.js H5 前端，不被小程序改造覆盖。
-- `miniprogram/`：旧原生小程序实现，本轮不继续扩展。
-- `frontend-weapp/`：新的 Taro React 小程序入口。
+- `frontend-weapp/`：Taro React 微信小程序前端（唯一小程序入口）。
 
 小程序直连 FastAPI `/api/*`，复用现有 `LearningOrchestratorGraph`、聊天 SSE 事件、题包练习、学习记忆和掌握度接口。
 

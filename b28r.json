@@ -1,0 +1,338 @@
+{
+  "summary": {
+    "total_questions": 15,
+    "kept_count": 7,
+    "review_count": 5,
+    "drop_count": 3,
+    "kept_rate": 0.4667,
+    "drop_rate": 0.2
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-cn-layer-023",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.layering.osi-tcpip",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-layer-026",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.layering.osi-tcpip",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-cn-data-link-024",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.data-link.mac-ethernet",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-data-link-025",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.data-link.mac-ethernet",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-007",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.ip-subnet",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-008",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.ip-subnet",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-010",
+      "subject_id": "computer-network",
+      "concept_id": "computer-network.network-layer.ip-subnet",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [
+    {
+      "question_id": "pq-cn-data-link-021",
+      "decision": "DROP",
+      "score": 50,
+      "issues": [
+        "选项之间文本高度相似"
+      ],
+      "risk_tags": [
+        "duplicate_option"
+      ],
+      "fix_suggestions": [
+        "增加选项之间的区分度"
+      ]
+    },
+    {
+      "question_id": "pq-cn-data-link-022",
+      "decision": "DROP",
+      "score": 10,
+      "issues": [
+        "选项之间文本高度相似",
+        "解析未围绕标准答案展开"
+      ],
+      "risk_tags": [
+        "weak_rationale_alignment",
+        "duplicate_option"
+      ],
+      "fix_suggestions": [
+        "增加选项之间的区分度",
+        "在解析中明确指出答案的正确理由"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-009",
+      "decision": "DROP",
+      "score": 0,
+      "issues": [
+        "选项之间文本高度相似"
+      ],
+      "risk_tags": [
+        "duplicate_option"
+      ],
+      "fix_suggestions": [
+        "增加选项之间的区分度"
+      ]
+    }
+  ],
+  "review_questions": [
+    {
+      "question_id": "pq-cn-layer-024",
+      "decision": "REVIEW",
+      "score": 77,
+      "issues": [
+        "解析未围绕标准答案展开",
+        "题干包含模糊词汇"
+      ],
+      "risk_tags": [
+        "weak_rationale_alignment",
+        "ambiguous_stem"
+      ],
+      "fix_suggestions": [
+        "删除“可能/大致/一般”等模糊词，使题意明确",
+        "在解析中明确指出答案的正确理由"
+      ]
+    },
+    {
+      "question_id": "pq-cn-layer-025",
+      "decision": "REVIEW",
+      "score": 77,
+      "issues": [
+        "解析未围绕标准答案展开",
+        "题干包含模糊词汇"
+      ],
+      "risk_tags": [
+        "weak_rationale_alignment",
+        "ambiguous_stem"
+      ],
+      "fix_suggestions": [
+        "删除“可能/大致/一般”等模糊词，使题意明确",
+        "在解析中明确指出答案的正确理由"
+      ]
+    },
+    {
+      "question_id": "pq-cn-data-link-023",
+      "decision": "REVIEW",
+      "score": 70,
+      "issues": [
+        "解析缺少推理链关键词",
+        "解析未围绕标准答案展开"
+      ],
+      "risk_tags": [
+        "weak_explanation",
+        "weak_rationale_alignment"
+      ],
+      "fix_suggestions": [
+        "在解析中明确指出答案的正确理由",
+        "在解析中增加推理关联词如“因为”、“所以”、“可得”"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-006",
+      "decision": "REVIEW",
+      "score": 75,
+      "issues": [
+        "选项之间文本高度相似"
+      ],
+      "risk_tags": [
+        "duplicate_option"
+      ],
+      "fix_suggestions": [
+        "增加选项之间的区分度"
+      ]
+    },
+    {
+      "question_id": "pq-cn-network-011",
+      "decision": "REVIEW",
+      "score": 75,
+      "issues": [
+        "选项之间文本高度相似"
+      ],
+      "risk_tags": [
+        "duplicate_option"
+      ],
+      "fix_suggestions": [
+        "增加选项之间的区分度"
+      ]
+    }
+  ],
+  "aggregates": {
+    "subject_pass_rate": {
+      "computer-network": 0.4667
+    },
+    "difficulty_pass_rate": {
+      "medium": 0.375,
+      "basic": 0.25,
+      "hard": 1.0
+    },
+    "top_risk_tags": [
+      [
+        "duplicate_option",
+        5
+      ],
+      [
+        "weak_rationale_alignment",
+        4
+      ],
+      [
+        "ambiguous_stem",
+        2
+      ],
+      [
+        "weak_explanation",
+        1
+      ]
+    ],
+    "top20_risk_questions": [
+      {
+        "question_id": "pq-cn-network-009",
+        "score": 0,
+        "issues": [
+          "选项之间文本高度相似"
+        ],
+        "risk_tags": [
+          "duplicate_option"
+        ]
+      },
+      {
+        "question_id": "pq-cn-data-link-022",
+        "score": 10,
+        "issues": [
+          "选项之间文本高度相似",
+          "解析未围绕标准答案展开"
+        ],
+        "risk_tags": [
+          "weak_rationale_alignment",
+          "duplicate_option"
+        ]
+      },
+      {
+        "question_id": "pq-cn-data-link-021",
+        "score": 50,
+        "issues": [
+          "选项之间文本高度相似"
+        ],
+        "risk_tags": [
+          "duplicate_option"
+        ]
+      },
+      {
+        "question_id": "pq-cn-data-link-023",
+        "score": 70,
+        "issues": [
+          "解析缺少推理链关键词",
+          "解析未围绕标准答案展开"
+        ],
+        "risk_tags": [
+          "weak_explanation",
+          "weak_rationale_alignment"
+        ]
+      },
+      {
+        "question_id": "pq-cn-network-006",
+        "score": 75,
+        "issues": [
+          "选项之间文本高度相似"
+        ],
+        "risk_tags": [
+          "duplicate_option"
+        ]
+      },
+      {
+        "question_id": "pq-cn-network-011",
+        "score": 75,
+        "issues": [
+          "选项之间文本高度相似"
+        ],
+        "risk_tags": [
+          "duplicate_option"
+        ]
+      },
+      {
+        "question_id": "pq-cn-layer-024",
+        "score": 77,
+        "issues": [
+          "解析未围绕标准答案展开",
+          "题干包含模糊词汇"
+        ],
+        "risk_tags": [
+          "weak_rationale_alignment",
+          "ambiguous_stem"
+        ]
+      },
+      {
+        "question_id": "pq-cn-layer-025",
+        "score": 77,
+        "issues": [
+          "解析未围绕标准答案展开",
+          "题干包含模糊词汇"
+        ],
+        "risk_tags": [
+          "weak_rationale_alignment",
+          "ambiguous_stem"
+        ]
+      }
+    ]
+  },
+  "kept_question_ids": [
+    "pq-cn-layer-023",
+    "pq-cn-layer-026",
+    "pq-cn-data-link-024",
+    "pq-cn-data-link-025",
+    "pq-cn-network-007",
+    "pq-cn-network-008",
+    "pq-cn-network-010"
+  ]
+}

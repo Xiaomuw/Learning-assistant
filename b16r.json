@@ -1,0 +1,178 @@
+{
+  "summary": {
+    "total_questions": 15,
+    "kept_count": 15,
+    "review_count": 0,
+    "drop_count": 0,
+    "kept_rate": 1.0,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-os-alloc-011",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-012",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-013",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-014",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-015",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-016",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-017",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-018",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-alloc-019",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.allocation",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-disk-011",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.disk-scheduling",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-disk-012",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.disk-scheduling",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-disk-013",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.disk-scheduling",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-disk-014",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.disk-scheduling",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-disk-015",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.disk-scheduling",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-os-disk-016",
+      "subject_id": "operating-system",
+      "concept_id": "operating-system.file-system.disk-scheduling",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "operating-system": 1.0
+    },
+    "difficulty_pass_rate": {
+      "basic": 1.0,
+      "medium": 1.0,
+      "hard": 1.0
+    },
+    "top_risk_tags": [],
+    "top20_risk_questions": []
+  },
+  "kept_question_ids": [
+    "pq-os-alloc-011",
+    "pq-os-alloc-012",
+    "pq-os-alloc-013",
+    "pq-os-alloc-014",
+    "pq-os-alloc-015",
+    "pq-os-alloc-016",
+    "pq-os-alloc-017",
+    "pq-os-alloc-018",
+    "pq-os-alloc-019",
+    "pq-os-disk-011",
+    "pq-os-disk-012",
+    "pq-os-disk-013",
+    "pq-os-disk-014",
+    "pq-os-disk-015",
+    "pq-os-disk-016"
+  ]
+}

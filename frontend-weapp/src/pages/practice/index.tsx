@@ -118,16 +118,30 @@ function buildImmediateFeedback(quiz: QuizItem, selectedOption: string): Practic
   };
 }
 
+function feedbacksWith(
+  currentFeedbacks: Record<string, PracticeAttemptResult>,
+  key: string,
+  nextFeedback: PracticeAttemptResult | null | undefined
+) {
+  if (!key || !nextFeedback) return currentFeedbacks;
+  return {
+    ...currentFeedbacks,
+    [key]: nextFeedback
+  };
+}
+
 export default function PracticePage() {
   const [quizList, setQuizList] = useState<QuizItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState("");
   const [feedback, setFeedback] = useState<PracticeAttemptResult | null>(null);
+  const [feedbacks, setFeedbacks] = useState<Record<string, PracticeAttemptResult>>({});
   const [sessionId, setSessionId] = useState("");
   const [notebookId, setNotebookId] = useState(getStoredNotebookId());
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [showHint, setShowHint] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [completedAt, setCompletedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [generatingPack, setGeneratingPack] = useState(false);
@@ -146,6 +160,11 @@ export default function PracticePage() {
     ? feedback.option_rationales?.[feedback.selected_option || selectedOption] || ""
     : "";
   const correctRationale = feedback ? feedback.option_rationales?.[feedback.correct_option] || "" : "";
+  const isLastQuestion = Boolean(currentQuiz && currentIndex >= quizList.length - 1);
+  const showCompletedCard = isCompleted && isLastQuestion;
+  const hasPreviousQuestion = currentIndex > 0;
+  const hasNextQuestion = currentIndex < quizList.length - 1;
+  const navigationDisabled = submitting || generatingPack;
   const progressText = useMemo(() => {
     if (!quizList.length) return "0 / 0";
     return `${currentIndex + 1} / ${quizList.length}`;
@@ -171,16 +190,19 @@ export default function PracticePage() {
 
   function persistState(partial: Partial<StoredQuizState> = {}) {
     const nextFeedback = partial.feedback !== undefined ? partial.feedback : feedback;
+    const nextFeedbackQuizKey = partial.feedbackQuizKey ?? (nextFeedback ? currentQuizKey : "");
+    const nextFeedbacks = partial.feedbacks ?? feedbacksWith(feedbacks, nextFeedbackQuizKey, nextFeedback);
     setStoredQuizState({
-      sessionId,
-      subjectId: notebookId,
-      items: quizList,
-      currentIndex,
-      answers,
+      sessionId: partial.sessionId ?? sessionId,
+      subjectId: partial.subjectId ?? notebookId,
+      items: partial.items ?? quizList,
+      currentIndex: partial.currentIndex ?? currentIndex,
+      answers: partial.answers ?? answers,
       feedback: nextFeedback ?? null,
-      feedbackQuizKey: partial.feedbackQuizKey ?? (nextFeedback ? currentQuizKey : ""),
-      isCompleted,
-      ...partial
+      feedbackQuizKey: nextFeedbackQuizKey,
+      feedbacks: nextFeedbacks,
+      isCompleted: partial.isCompleted ?? isCompleted,
+      completedAt: partial.completedAt !== undefined ? partial.completedAt : completedAt
     });
   }
 
@@ -188,7 +210,9 @@ export default function PracticePage() {
     const nextIndex = Math.min(partial.currentIndex || 0, Math.max(items.length - 1, 0));
     const nextAnswers = partial.answers || {};
     const nextQuizKey = quizKey(items[nextIndex], nextIndex);
-    const nextFeedback = partial.feedback && partial.feedbackQuizKey === nextQuizKey ? partial.feedback : null;
+    const nextFeedbacks = feedbacksWith(partial.feedbacks || {}, partial.feedbackQuizKey || "", partial.feedback);
+    const nextFeedback = nextFeedbacks[nextQuizKey] || null;
+    const nextCompletedAt = partial.completedAt ?? null;
     setQuizList(items);
     setCurrentIndex(nextIndex);
     setSessionId(nextSessionId);
@@ -198,8 +222,10 @@ export default function PracticePage() {
     setAnswers(nextAnswers);
     setSelectedOption(nextFeedback?.selected_option || nextAnswers[nextQuizKey] || "");
     setFeedback(nextFeedback);
+    setFeedbacks(nextFeedbacks);
     setShowHint(false);
     setIsCompleted(Boolean(partial.isCompleted));
+    setCompletedAt(nextCompletedAt);
     setStoredQuizState({
       sessionId: nextSessionId,
       subjectId: nextNotebookId,
@@ -208,8 +234,9 @@ export default function PracticePage() {
       answers: nextAnswers,
       feedback: nextFeedback,
       feedbackQuizKey: nextFeedback ? nextQuizKey : "",
+      feedbacks: nextFeedbacks,
       isCompleted: Boolean(partial.isCompleted),
-      completedAt: partial.completedAt ?? null
+      completedAt: nextCompletedAt
     });
   }
 
@@ -280,8 +307,10 @@ export default function PracticePage() {
     setSelectedOption("");
     setAnswers({});
     setFeedback(null);
+    setFeedbacks({});
     setShowHint(false);
     setIsCompleted(false);
+    setCompletedAt(null);
     setError("");
     setLoading(false);
     Taro.showToast({ title: "题库已清空", icon: "success" });
@@ -305,6 +334,7 @@ export default function PracticePage() {
         answers: cached.answers || {},
         feedback: cached.feedback ?? null,
         feedbackQuizKey: cached.feedbackQuizKey || "",
+        feedbacks: cached.feedbacks || {},
         isCompleted: cached.isCompleted,
         completedAt: cached.completedAt
       });
@@ -365,20 +395,25 @@ export default function PracticePage() {
     const previousNotebookId = notebookId;
     const previousAnswers = answers;
     const previousFeedback = feedback;
+    const previousFeedbacks = feedbacks;
     const previousIsCompleted = isCompleted;
+    const previousCompletedAt = completedAt;
     const previousStoredState = getStoredQuizState();
     const nextAnswers = {
       ...answers,
       [currentQuizKey]: selectedOption
     };
     const immediateFeedback = buildImmediateFeedback(currentQuiz, selectedOption);
-    const nextIsCompleted = currentIndex >= quizList.length - 1;
-    const nextCompletedAt = nextIsCompleted ? Date.now() : null;
+    const nextIsCompleted = isCompleted || currentIndex >= quizList.length - 1;
+    const nextCompletedAt = nextIsCompleted ? (completedAt ?? Date.now()) : null;
+    const nextFeedbacks = feedbacksWith(feedbacks, currentQuizKey, immediateFeedback);
     setSessionId(nextSessionId);
     setNotebookId(nextNotebookId);
     setFeedback(immediateFeedback);
+    setFeedbacks(nextFeedbacks);
     setAnswers(nextAnswers);
     setIsCompleted(nextIsCompleted);
+    setCompletedAt(nextCompletedAt);
     setStoredQuizState({
       sessionId: nextSessionId,
       subjectId: nextNotebookId,
@@ -387,6 +422,7 @@ export default function PracticePage() {
       answers: nextAnswers,
       feedback: immediateFeedback,
       feedbackQuizKey: currentQuizKey,
+      feedbacks: nextFeedbacks,
       isCompleted: nextIsCompleted,
       completedAt: nextCompletedAt
     });
@@ -408,9 +444,12 @@ export default function PracticePage() {
         option_rationales: result.option_rationales || immediateFeedback.option_rationales,
         personalized_feedback: result.personalized_feedback || immediateFeedback.personalized_feedback
       };
+      const calibratedFeedbacks = feedbacksWith(nextFeedbacks, currentQuizKey, calibratedFeedback);
       setFeedback(calibratedFeedback);
+      setFeedbacks(calibratedFeedbacks);
       setAnswers(nextAnswers);
       setIsCompleted(nextIsCompleted);
+      setCompletedAt(nextCompletedAt);
       setStoredQuizState({
         sessionId: nextSessionId,
         subjectId: nextNotebookId,
@@ -419,6 +458,7 @@ export default function PracticePage() {
         answers: nextAnswers,
         feedback: calibratedFeedback,
         feedbackQuizKey: currentQuizKey,
+        feedbacks: calibratedFeedbacks,
         isCompleted: nextIsCompleted,
         completedAt: nextCompletedAt
       });
@@ -427,7 +467,9 @@ export default function PracticePage() {
       setNotebookId(previousNotebookId);
       setAnswers(previousAnswers);
       setFeedback(previousFeedback);
+      setFeedbacks(previousFeedbacks);
       setIsCompleted(previousIsCompleted);
+      setCompletedAt(previousCompletedAt);
       setStoredQuizState(previousStoredState);
       setError(err?.message ? `保存失败：${err.message}，请重试` : "保存失败，请稍后重试");
     } finally {
@@ -474,12 +516,15 @@ export default function PracticePage() {
       const nextIndex = shouldJumpToNewItems ? quizList.length : currentIndex;
       const nextFeedback = shouldJumpToNewItems ? null : feedback;
       const nextSelectedOption = shouldJumpToNewItems ? "" : selectedOption;
+      const nextFeedbacks = feedbacksWith(feedbacks, currentQuizKey, feedback);
       setQuizList(nextQuizList);
       setCurrentIndex(nextIndex);
       setFeedback(nextFeedback);
+      setFeedbacks(nextFeedbacks);
       setSelectedOption(nextSelectedOption);
       setShowHint(false);
       setIsCompleted(false);
+      setCompletedAt(null);
       setSessionId(activeSessionId);
       setNotebookId(result.subject_id || activeNotebookId);
       setStoredQuizState({
@@ -490,6 +535,7 @@ export default function PracticePage() {
         answers,
         feedback: nextFeedback,
         feedbackQuizKey: nextFeedback ? currentQuizKey : "",
+        feedbacks: nextFeedbacks,
         isCompleted: false,
         completedAt: null
       });
@@ -500,26 +546,48 @@ export default function PracticePage() {
     }
   }
 
+  function goToQuestion(targetIndex: number) {
+    if (targetIndex < 0 || targetIndex >= quizList.length || navigationDisabled) return;
+    const nextFeedbacks = feedbacksWith(feedbacks, currentQuizKey, feedback);
+    const nextQuizKey = quizKey(quizList[targetIndex], targetIndex);
+    const nextFeedback = nextFeedbacks[nextQuizKey] || null;
+    const nextSelectedOption = nextFeedback?.selected_option || answers[nextQuizKey] || "";
+    setCurrentIndex(targetIndex);
+    setSelectedOption(nextSelectedOption);
+    setFeedback(nextFeedback);
+    setFeedbacks(nextFeedbacks);
+    setShowHint(false);
+    setError("");
+    setStoredQuizState({
+      sessionId,
+      subjectId: notebookId,
+      items: quizList,
+      currentIndex: targetIndex,
+      answers,
+      feedback: nextFeedback,
+      feedbackQuizKey: nextFeedback ? nextQuizKey : "",
+      feedbacks: nextFeedbacks,
+      isCompleted,
+      completedAt
+    });
+  }
+
   function handleNext() {
+    if (navigationDisabled) return;
     if (currentIndex >= quizList.length - 1) {
+      const nextCompletedAt = completedAt ?? Date.now();
       setIsCompleted(true);
+      setCompletedAt(nextCompletedAt);
       persistState({
         isCompleted: true,
-        completedAt: Date.now(),
+        completedAt: nextCompletedAt,
         feedback,
-        feedbackQuizKey: feedback ? currentQuizKey : ""
+        feedbackQuizKey: feedback ? currentQuizKey : "",
+        feedbacks: feedbacksWith(feedbacks, currentQuizKey, feedback)
       });
       return;
     }
-    const nextIndex = currentIndex + 1;
-    const nextQuizKey = quizKey(quizList[nextIndex], nextIndex);
-    setCurrentIndex(nextIndex);
-    setSelectedOption(answers[nextQuizKey] || "");
-    setFeedback(null);
-    setShowHint(false);
-    setError("");
-    setIsCompleted(false);
-    persistState({ currentIndex: nextIndex, feedback: null, feedbackQuizKey: "", isCompleted: false, completedAt: null });
+    goToQuestion(currentIndex + 1);
   }
 
   function optionClass(key: string) {
@@ -653,7 +721,7 @@ export default function PracticePage() {
             </View>
           ) : null}
 
-          {isCompleted ? (
+          {showCompletedCard ? (
             <View className="complete-card">
               <Text className="complete-title">这组题已完成</Text>
               <Text className="complete-desc">可以继续复盘，也可以点 AI 补题生成新的练习。</Text>
@@ -662,23 +730,37 @@ export default function PracticePage() {
 
           {error ? <Text className="error-text">{error}</Text> : null}
 
-          {!feedback && !isCompleted ? (
-            <Button className="button-primary action-button" disabled={!selectedOption || submitting} loading={submitting} onClick={handleSubmit}>
+          <View className="question-nav-row">
+            <Button
+              className="button-secondary question-nav-button"
+              disabled={!hasPreviousQuestion || navigationDisabled}
+              onClick={() => goToQuestion(currentIndex - 1)}
+            >
+              上一题
+            </Button>
+            <Text className="question-nav-count">第 {currentIndex + 1} / 共 {quizList.length} 题</Text>
+            <Button
+              className="button-secondary question-nav-button"
+              disabled={!hasNextQuestion || navigationDisabled}
+              onClick={() => goToQuestion(currentIndex + 1)}
+            >
+              下一题
+            </Button>
+          </View>
+
+          {!feedback ? (
+            <Button className="button-primary action-button" disabled={!selectedOption || submitting || generatingPack} loading={submitting} onClick={handleSubmit}>
               提交答案
             </Button>
-          ) : feedback ? (
+          ) : (
             <View>
-              <Button className="button-primary action-button" loading={submitting} disabled={submitting} onClick={handleNext}>
-                {submitting ? "正在保存" : currentIndex >= quizList.length - 1 ? "完成复盘" : "下一题"}
+              <Button className="button-primary action-button" loading={submitting} disabled={submitting || generatingPack} onClick={handleNext}>
+                {submitting ? "正在保存" : isLastQuestion ? "完成复盘" : "下一题"}
               </Button>
               <Button className="button-secondary action-button" loading={generatingPack} disabled={generatingPack || submitting} onClick={handleGenerateMore}>
                 {generatingPack ? "正在补题" : "AI 补题"}
               </Button>
             </View>
-          ) : (
-            <Button className="button-secondary action-button" loading={generatingPack} disabled={generatingPack} onClick={handleGenerateMore}>
-              {generatingPack ? "正在补题" : "AI 补题"}
-            </Button>
           )}
         </View>
       )}

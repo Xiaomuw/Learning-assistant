@@ -1,0 +1,271 @@
+{
+  "summary": {
+    "total_questions": 16,
+    "kept_count": 14,
+    "review_count": 0,
+    "drop_count": 2,
+    "kept_rate": 0.875,
+    "drop_rate": 0.125
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-ds-misc-032",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.search.hash-table",
+      "difficulty": "hard",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-033",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-034",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-035",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "hard",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-036",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.sort.quick-merge-heap",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-037",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.greedy-recursion",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-038",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.greedy-recursion",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-039",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.greedy-recursion",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-040",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.greedy-recursion",
+      "difficulty": "medium",
+      "score": 90,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "option_too_short"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-041",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.dynamic-programming",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-042",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.dynamic-programming",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-043",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.dynamic-programming",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-046",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.dynamic-programming",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-ds-misc-047",
+      "subject_id": "data-structure",
+      "concept_id": "data-structure.algorithm-design.dynamic-programming",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    }
+  ],
+  "discarded_questions": [
+    {
+      "question_id": "pq-ds-misc-044",
+      "decision": "DROP",
+      "score": 52,
+      "issues": [
+        "文本中包含模板化占位符",
+        "解析缺少推理链关键词",
+        "解析未围绕标准答案展开"
+      ],
+      "risk_tags": [
+        "placeholder_like",
+        "weak_rationale_alignment",
+        "weak_explanation"
+      ],
+      "fix_suggestions": [
+        "在解析中增加推理关联词如“因为”、“所以”、“可得”",
+        "在解析中明确指出答案的正确理由",
+        "将模板化符号替换为实际内容"
+      ]
+    },
+    {
+      "question_id": "pq-ds-misc-045",
+      "decision": "DROP",
+      "score": 52,
+      "issues": [
+        "文本中包含模板化占位符",
+        "解析缺少推理链关键词",
+        "解析未围绕标准答案展开"
+      ],
+      "risk_tags": [
+        "placeholder_like",
+        "weak_rationale_alignment",
+        "weak_explanation"
+      ],
+      "fix_suggestions": [
+        "在解析中增加推理关联词如“因为”、“所以”、“可得”",
+        "在解析中明确指出答案的正确理由",
+        "将模板化符号替换为实际内容"
+      ]
+    }
+  ],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "data-structure": 0.875
+    },
+    "difficulty_pass_rate": {
+      "hard": 0.6667,
+      "medium": 1.0,
+      "basic": 1.0
+    },
+    "top_risk_tags": [
+      [
+        "placeholder_like",
+        2
+      ],
+      [
+        "weak_explanation",
+        2
+      ],
+      [
+        "weak_rationale_alignment",
+        2
+      ]
+    ],
+    "top20_risk_questions": [
+      {
+        "question_id": "pq-ds-misc-044",
+        "score": 52,
+        "issues": [
+          "文本中包含模板化占位符",
+          "解析缺少推理链关键词",
+          "解析未围绕标准答案展开"
+        ],
+        "risk_tags": [
+          "placeholder_like",
+          "weak_rationale_alignment",
+          "weak_explanation"
+        ]
+      },
+      {
+        "question_id": "pq-ds-misc-045",
+        "score": 52,
+        "issues": [
+          "文本中包含模板化占位符",
+          "解析缺少推理链关键词",
+          "解析未围绕标准答案展开"
+        ],
+        "risk_tags": [
+          "placeholder_like",
+          "weak_rationale_alignment",
+          "weak_explanation"
+        ]
+      }
+    ]
+  },
+  "kept_question_ids": [
+    "pq-ds-misc-032",
+    "pq-ds-misc-033",
+    "pq-ds-misc-034",
+    "pq-ds-misc-035",
+    "pq-ds-misc-036",
+    "pq-ds-misc-037",
+    "pq-ds-misc-038",
+    "pq-ds-misc-039",
+    "pq-ds-misc-040",
+    "pq-ds-misc-041",
+    "pq-ds-misc-042",
+    "pq-ds-misc-043",
+    "pq-ds-misc-046",
+    "pq-ds-misc-047"
+  ]
+}

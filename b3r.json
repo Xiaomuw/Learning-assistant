@@ -1,0 +1,124 @@
+{
+  "summary": {
+    "total_questions": 9,
+    "kept_count": 9,
+    "review_count": 0,
+    "drop_count": 0,
+    "kept_rate": 1.0,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-co-alu-011",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-alu-012",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-alu-013",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "basic",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-co-alu-014",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-alu-015",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-co-alu-016",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-alu-017",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-alu-018",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "hard",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-co-alu-019",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.alu.arithmetic-logic",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "computer-organization": 1.0
+    },
+    "difficulty_pass_rate": {
+      "basic": 1.0,
+      "medium": 1.0,
+      "hard": 1.0
+    },
+    "top_risk_tags": [],
+    "top20_risk_questions": []
+  },
+  "kept_question_ids": [
+    "pq-co-alu-011",
+    "pq-co-alu-012",
+    "pq-co-alu-013",
+    "pq-co-alu-014",
+    "pq-co-alu-015",
+    "pq-co-alu-016",
+    "pq-co-alu-017",
+    "pq-co-alu-018",
+    "pq-co-alu-019"
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "summary": {
+    "total_questions": 16,
+    "kept_count": 16,
+    "review_count": 0,
+    "drop_count": 0,
+    "kept_rate": 1.0,
+    "drop_rate": 0.0
+  },
+  "kept_questions": [
+    {
+      "question_id": "pq-co-bus-011",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "basic",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-co-bus-012",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "basic",
+      "score": 94,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "short_stem"
+      ]
+    },
+    {
+      "question_id": "pq-co-bus-013",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "basic",
+      "score": 94,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "short_stem"
+      ]
+    },
+    {
+      "question_id": "pq-co-bus-014",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-bus-015",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-bus-016",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-co-bus-017",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-bus-018",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-bus-019",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-bus-020",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.bus.bandwidth-arbitration",
+      "difficulty": "medium",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-io-011",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.io.interrupt-dma",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-io-012",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.io.interrupt-dma",
+      "difficulty": "basic",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-io-013",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.io.interrupt-dma",
+      "difficulty": "medium",
+      "score": 85,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "weak_rationale_alignment"
+      ]
+    },
+    {
+      "question_id": "pq-co-io-014",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.io.interrupt-dma",
+      "difficulty": "medium",
+      "score": 92,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": [
+        "ambiguous_stem"
+      ]
+    },
+    {
+      "question_id": "pq-co-io-015",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.io.interrupt-dma",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    },
+    {
+      "question_id": "pq-co-io-016",
+      "subject_id": "computer-organization",
+      "concept_id": "computer-organization.io.interrupt-dma",
+      "difficulty": "hard",
+      "score": 100,
+      "reason_short": "无硬性违规且评分达到上线标准",
+      "risk_tags": []
+    }
+  ],
+  "discarded_questions": [],
+  "review_questions": [],
+  "aggregates": {
+    "subject_pass_rate": {
+      "computer-organization": 1.0
+    },
+    "difficulty_pass_rate": {
+      "basic": 1.0,
+      "medium": 1.0,
+      "hard": 1.0
+    },
+    "top_risk_tags": [],
+    "top20_risk_questions": []
+  },
+  "kept_question_ids": [
+    "pq-co-bus-011",
+    "pq-co-bus-012",
+    "pq-co-bus-013",
+    "pq-co-bus-014",
+    "pq-co-bus-015",
+    "pq-co-bus-016",
+    "pq-co-bus-017",
+    "pq-co-bus-018",
+    "pq-co-bus-019",
+    "pq-co-bus-020",
+    "pq-co-io-011",
+    "pq-co-io-012",
+    "pq-co-io-013",
+    "pq-co-io-014",
+    "pq-co-io-015",
+    "pq-co-io-016"
+  ]
+}

@@ -4,7 +4,7 @@
 
 ## 审查范围
 - 基线：`4be431887e1f387a54dfc2ff93e1a940f91d6d2f`
-- 范围：`backend`、`frontend`、`frontend-weapp`、`miniprogram`（按当前未提交变更和现有工作树差异）
+- 范围：`backend`、`frontend`、`frontend-weapp`（按当前未提交变更和现有工作树差异）
 - 结论口径：仅将外部网络/DNS/密钥/配额问题归为环境阻塞；其余按代码回归处理。
 
 ## 关键发现（按优先级）
