@@ -267,6 +267,8 @@ export default function ProfilePage() {
         退出登录
       </Button>
 
+      <Text className="team-credit">第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手</Text>
+
       {/* ── 编辑昵称 Modal ── */}
       {showEditName ? (
         <View className="modal-overlay" onClick={() => setShowEditName(false)}>

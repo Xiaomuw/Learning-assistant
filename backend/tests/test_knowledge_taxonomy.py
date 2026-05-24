@@ -19,7 +19,7 @@ os.environ.setdefault(
 )
 
 from app.infrastructure.db.models import KbSubjectModel  # noqa: E402
-from app.infrastructure.db.repositories import knowledge_taxonomy  # noqa: E402
+import app.infrastructure.db.repositories.knowledge_taxonomy as knowledge_taxonomy  # noqa: E402
 
 
 class _FakeSession:
@@ -59,7 +59,7 @@ class _FakeRegistry:
 
 
 class KnowledgeTaxonomyTest(unittest.TestCase):
-    def test_flushes_subjects_before_child_taxonomy_rows(self) -> None:
+    def test_flushes_taxonomy_rows_by_fk_dependency_order(self) -> None:
         events: list[str] = []
 
         @contextmanager
@@ -81,10 +81,19 @@ class KnowledgeTaxonomyTest(unittest.TestCase):
             written = knowledge_taxonomy.sync_knowledge_taxonomy(_FakeRegistry())
 
         self.assertEqual(written, 4)
-        self.assertIn("flush", events)
-        self.assertLess(events.index("flush"), events.index("chapter"))
-        self.assertLess(events.index("flush"), events.index("topic"))
-        self.assertLess(events.index("flush"), events.index("concept"))
+        self.assertEqual(
+            events,
+            [
+                "add_subject",
+                "flush",
+                "chapter",
+                "flush",
+                "topic",
+                "flush",
+                "concept",
+                "flush",
+            ],
+        )
 
 
 if __name__ == "__main__":

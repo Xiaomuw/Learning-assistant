@@ -387,6 +387,8 @@ def migrate_legacy_memories(save_memory_fn) -> int:
             existing = session.get(UserMemoryModel, user_id)
             if existing:
                 continue
+            if session.get(UserModel, user_id) is None:
+                continue
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except Exception:

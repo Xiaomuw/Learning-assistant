@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class QuizOptionOutput(BaseModel):
@@ -23,6 +23,22 @@ class GeneratedQuizItemOutput(BaseModel):
 
 class GeneratedQuizListOutput(BaseModel):
     items: list[GeneratedQuizItemOutput] = Field(min_length=1, max_length=6)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_model_output(cls, data: Any) -> Any:
+        if isinstance(data, list):
+            return {"items": data}
+        if isinstance(data, dict) and "items" not in data and _looks_like_quiz_item(data):
+            return {"items": [data]}
+        return data
+
+
+def _looks_like_quiz_item(data: dict[str, Any]) -> bool:
+    return bool(
+        {"question", "options", "correct_option", "explanation", "knowledge_point"}
+        .issubset(data.keys())
+    )
 
 
 class McqSolveOutput(BaseModel):

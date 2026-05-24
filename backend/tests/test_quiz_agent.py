@@ -10,9 +10,61 @@ os.environ.setdefault(
 )
 
 from app.domains.practice.generation import build_mixed_practice_items_with_status
+from app.domains.practice.schemas import GeneratedQuizListOutput
+
+
+def _ai_quiz_item() -> dict:
+    return {
+        "difficulty": "基础",
+        "question": "HTTP 请求未显式写端口时默认连接哪个端口？",
+        "options": [
+            {"key": "A", "text": "21"},
+            {"key": "B", "text": "53"},
+            {"key": "C", "text": "80"},
+            {"key": "D", "text": "443"},
+        ],
+        "correct_option": "C",
+        "explanation": "HTTP URL 未显式写端口时，客户端通常使用默认端口 80。",
+        "option_rationales": {
+            "A": "21 常用于 FTP 控制连接。",
+            "B": "53 常用于 DNS。",
+            "C": "80 是 HTTP 默认端口。",
+            "D": "443 是 HTTPS 默认端口。",
+        },
+        "knowledge_point": "HTTP 默认端口",
+    }
 
 
 class QuizGenerationDomainTest(unittest.TestCase):
+    def test_single_ai_item_is_accepted_and_fallback_fills_remaining_count(self) -> None:
+        with (
+            patch("app.domains.practice.generation._list_question_bank_items", return_value=[]),
+            patch(
+                "app.domains.practice.generation._invoke_generation_chain",
+                return_value=GeneratedQuizListOutput.model_validate(_ai_quiz_item()),
+            ),
+        ):
+            result = build_mixed_practice_items_with_status(
+                subject_id="general",
+                subject_name="通用知识",
+                topic="HTTP 默认端口",
+                difficulty="基础",
+                count=2,
+                original_question="帮我复习 HTTP 默认端口",
+                user_style_name="",
+                user_style_prompt="",
+                short_term_context="",
+                session_memory_context="",
+                long_term_context="",
+                model_name="test-model",
+            )
+
+        self.assertEqual(len(result.items), 2)
+        self.assertEqual(result.status["ai_count"], 1)
+        self.assertEqual(result.status["fallback_count"], 1)
+        self.assertFalse(result.status["ai_generation_failed"])
+        self.assertNotIn("AI 选择题生成失败", result.status["degraded_reason"])
+
     def test_generation_fallback_fills_requested_count_when_ai_generation_fails(self) -> None:
         with (
             patch("app.domains.practice.generation._list_question_bank_items", return_value=[]),

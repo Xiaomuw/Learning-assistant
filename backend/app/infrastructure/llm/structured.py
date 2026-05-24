@@ -102,7 +102,7 @@ def validate_schema_output(raw: Any, schema: type[SchemaT]) -> SchemaT:
         return validate_schema_output(message_to_text(raw), schema)
     if isinstance(raw, BaseModel):
         return schema.model_validate(raw.model_dump())
-    if isinstance(raw, dict):
+    if isinstance(raw, (dict, list)):
         return schema.model_validate(raw)
 
     json_text = extract_json_text(raw)

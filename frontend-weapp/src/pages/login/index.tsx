@@ -172,6 +172,8 @@ export default function LoginPage() {
           </View>
         </View>
       </View>
+
+      <Text className="team-credit">第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手</Text>
     </View>
   );
 }

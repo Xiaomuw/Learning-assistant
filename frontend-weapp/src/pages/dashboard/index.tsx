@@ -442,6 +442,8 @@ export default function DashboardPage() {
         ))}
         {!mastery.length ? <Text className="empty-text">完成几道练习后，这里会出现掌握度。</Text> : null}
       </View>
+
+      <Text className="team-credit">第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手</Text>
     </View>
   );
 }

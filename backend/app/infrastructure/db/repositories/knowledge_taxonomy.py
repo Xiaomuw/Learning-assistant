@@ -41,17 +41,31 @@ def sync_knowledge_taxonomy(registry: ConceptRegistry | None = None) -> int:
         # so PostgreSQL never sees kb_chapter/kb_topic/kb_concept first.
         session.flush()
 
+        nodes = list(registry.list_candidates(limit=10_000))
+
         chapter_seen: set[str] = set()
         topic_seen: set[str] = set()
-        for index, node in enumerate(registry.list_candidates(limit=10_000), start=1):
+        chapter_nodes: list[tuple[int, ConceptNode]] = []
+        topic_nodes: list[tuple[int, ConceptNode]] = []
+        for index, node in enumerate(nodes, start=1):
             if node.chapter_id not in chapter_seen:
-                _upsert_chapter(session, node=node, sort_order=index)
+                chapter_nodes.append((index, node))
                 chapter_seen.add(node.chapter_id)
-                written += 1
             if node.topic_id not in topic_seen:
-                _upsert_topic(session, node=node, sort_order=index)
+                topic_nodes.append((index, node))
                 topic_seen.add(node.topic_id)
-                written += 1
+
+        for index, node in chapter_nodes:
+            _upsert_chapter(session, node=node, sort_order=index)
+            written += 1
+        session.flush()
+
+        for index, node in topic_nodes:
+            _upsert_topic(session, node=node, sort_order=index)
+            written += 1
+        session.flush()
+
+        for node in nodes:
             _upsert_concept(session, node=node)
             written += 1
         session.flush()

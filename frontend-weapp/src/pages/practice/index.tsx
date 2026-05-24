@@ -604,6 +604,7 @@ export default function PracticePage() {
         <View className="card empty-card">
           <Text>{generatingPack ? "正在生成定向练习题..." : "正在加载练习题..."}</Text>
         </View>
+        <Text className="team-credit">第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手</Text>
       </View>
     );
   }
@@ -764,6 +765,8 @@ export default function PracticePage() {
           )}
         </View>
       )}
+
+      <Text className="team-credit">第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手</Text>
     </View>
   );
 }

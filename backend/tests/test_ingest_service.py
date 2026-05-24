@@ -17,10 +17,29 @@ os.environ.setdefault(
 )
 
 from app.application.errors import ServiceUnavailableError, ValidationError
-from app.application.ingest.service import ingest_pdf_bytes, ingest_urls
+from app.application.ingest.service import _build_url_ingest_payload, ingest_pdf_bytes, ingest_urls
 
 
 class IngestServiceTest(unittest.TestCase):
+    def test_url_payload_builder_ignores_short_pages_and_keeps_long_pages(self) -> None:
+        long_text = (
+            "HTTP 是应用层协议，默认端口是 80。"
+            "这个临时页面包含足够多的正文，用来验证 URL 入库的内容长度门槛。"
+        )
+        with patch(
+            "app.application.ingest.service.extract_text_from_url",
+            side_effect=["太短", long_text],
+        ):
+            texts, metadatas, success_count = _build_url_ingest_payload(
+                subject_id="computer-network",
+                urls=["https://example.com/short", "https://example.com/http"],
+            )
+
+        self.assertEqual(texts, [long_text])
+        self.assertEqual(success_count, 1)
+        self.assertEqual(metadatas[0]["source"], "https://example.com/http")
+        self.assertEqual(metadatas[0]["doc_type"], "url")
+
     def test_url_ingest_wraps_vector_store_failures_as_service_unavailable(self) -> None:
         with (
             patch(
