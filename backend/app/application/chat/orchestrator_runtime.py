@@ -247,7 +247,8 @@ def _orchestrator_state_from_chat_state(
     question = str(state.get("contextual_question") or state.get("question") or "")
     source_policy = _source_policy_from_chat_state(state)
     selected_subject_id = normalize_subject_id(state.get("subject_id") or state.get("selected_subject_id"))
-    raw_notebook_id = normalize_subject_id(state.get("notebook_id"))
+    knowledge_base_mode = _knowledge_base_mode_from_chat_state(state)
+    raw_notebook_id = normalize_subject_id(state.get("notebook_id")) if state.get("notebook_id") else ""
     bind_current_notebook = _should_bind_current_notebook_for_question(
         state,
         question=question,
@@ -267,6 +268,8 @@ def _orchestrator_state_from_chat_state(
         "subject_id": selected_subject_id,
         "notebook_id": notebook_id,
         "course_id": state.get("course_id"),
+        "knowledge_base_mode": knowledge_base_mode,
+        "auto_web_fallback": bool(state.get("auto_web_fallback", True)),
         "source_policy": source_policy,
         "user_message": question,
         "messages": list(state.get("short_term_messages") or state.get("messages") or []),
@@ -284,6 +287,7 @@ def _orchestrator_state_from_chat_state(
 
 def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
     selected_subject_id = normalize_subject_id(state.get("subject_id") or state.get("selected_subject_id"))
+    knowledge_base_mode = _knowledge_base_mode_from_chat_state(state)
     context = {
         "user_id": str(state.get("user_id") or ""),
         "session_id": str(state.get("session_id") or ""),
@@ -296,6 +300,8 @@ def _chat_runtime_context(state: dict[str, Any]) -> dict[str, Any]:
         "selected_subject_description": str(state.get("subject_description") or state.get("selected_subject_description") or ""),
         "subject_name": str(state.get("subject_name") or DEFAULT_SUBJECTS[0]["name"]),
         "subject_description": str(state.get("subject_description") or ""),
+        "knowledge_base_mode": knowledge_base_mode,
+        "auto_web_fallback": bool(state.get("auto_web_fallback", True)),
         "memory": dict(state.get("memory") or {}),
         "short_term_messages": list(state.get("short_term_messages") or []),
         "short_term_context": str(state.get("short_term_context") or ""),
@@ -1195,6 +1201,9 @@ def _source_policy_from_chat_state(state: dict[str, Any]) -> str:
     raw = str(state.get("source_policy") or "").strip()
     if raw in {item.value for item in SourcePolicy}:
         return raw
+    knowledge_base_mode = _knowledge_base_mode_from_chat_state(state)
+    if knowledge_base_mode == "strict":
+        return SourcePolicy.NOTEBOOK_ONLY.value
     notebook_policy = str(state.get("notebook_policy") or "").strip()
     search_policy = str(state.get("search_policy") or "").strip()
     question = str(state.get("contextual_question") or state.get("question") or "")
@@ -1219,10 +1228,19 @@ def _should_bind_current_notebook_for_question(
 ) -> bool:
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
         return True
+    if _knowledge_base_mode_from_chat_state(state) in {"current", "strict"}:
+        return True
     notebook_policy = str(state.get("notebook_policy") or "").strip()
     if notebook_policy in {"required", "strict"}:
         return True
     return _has_notebook_signal(question)
+
+
+def _knowledge_base_mode_from_chat_state(state: dict[str, Any]) -> str:
+    candidate = str(state.get("knowledge_base_mode") or "auto").strip().lower()
+    if candidate in {"auto", "current", "strict"}:
+        return candidate
+    return "auto"
 
 
 def _has_notebook_signal(question: str) -> bool:

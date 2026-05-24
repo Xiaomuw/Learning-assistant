@@ -288,7 +288,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn(ToolCapability.WEB_SEARCH.value, requested_capabilities)
         self.assertNotIn("tavily", encoded_requests.lower())
 
-    def test_open_tools_stable_concept_plans_filtered_retrieval(self) -> None:
+    def test_open_tools_stable_concept_plans_filtered_retrieval_and_auto_web(self) -> None:
         result = build_graph().compile().invoke(
             {
                 "run_id": "run-qa-stable-concept",
@@ -301,16 +301,13 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         self.assertEqual(
             [item["capability"] for item in result["tool_requests"]],
-            [ToolCapability.NOTEBOOK_RETRIEVE.value],
+            [ToolCapability.NOTEBOOK_RETRIEVE.value, ToolCapability.WEB_SEARCH.value],
         )
         request_input = result["tool_requests"][0]["input"]
         self.assertEqual(request_input["subject_id"], "computer-network")
         self.assertEqual(request_input["concept_id"], "computer-network.application.http-https")
         self.assertFalse(result["web_search_attempted"])
-        self.assertIn(
-            result["web_search_reason"],
-            {"not_requested_before_evidence_judge", "no_external_search_signal"},
-        )
+        self.assertEqual(result["web_search_reason"], "planned_without_executor")
 
     def test_notebook_signal_plans_internal_then_web_if_evidence_insufficient(self) -> None:
         result = build_graph().compile().invoke(
@@ -526,7 +523,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertEqual(response.source_level, SourceLevel.WEB)
         self.assertEqual(response.evidence_refs, ["web-http3"])
 
-    def test_plain_stable_concept_does_not_auto_web_search_by_default(self) -> None:
+    def test_plain_stable_concept_does_not_auto_web_search_when_fallback_disabled(self) -> None:
         class FakeToolExecutor:
             def __init__(self) -> None:
                 self.capabilities = []
@@ -558,6 +555,7 @@ class QAGraphAdapterTest(unittest.TestCase):
                     "user_id": "u1",
                     "user_message": "什么是 HTTP？",
                     "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                    "auto_web_fallback": False,
                 }
             )
 
@@ -989,6 +987,60 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertTrue(result.get("web_search_attempted", False))
         self.assertEqual(result.get("web_search_reason"), "explicit_external_search_signal")
 
+    def test_auto_web_fallback_runs_when_internal_evidence_empty_without_allow_web(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                if request.capability == ToolCapability.WEB_SEARCH:
+                    return ToolResult(
+                        tool_id="fake:web_search",
+                        provider="fake",
+                        capability=request.capability,
+                        status=ToolStatus.SUCCESS,
+                        input_summary=request.input_summary,
+                        evidence=[
+                            EvidenceChunk(
+                                id="web-page-fault",
+                                source_type="web",
+                                source_id="https://example.test/page-fault",
+                                text="缺页中断发生在访问页不在内存时，操作系统需要调入页面并更新页表。",
+                                score=0.9,
+                            )
+                        ],
+                    )
+                return ToolResult(
+                    tool_id="fake:notebook_retrieve",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[],
+                )
+
+        executor = FakeToolExecutor()
+        result = build_graph(tool_executor=executor).compile().invoke(
+            {
+                "run_id": "run-qa-auto-web-fallback-no-client-web",
+                "user_id": "u1",
+                "user_message": "什么是虚拟内存缺页中断？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": False,
+            }
+        )
+
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertIn(ToolCapability.NOTEBOOK_RETRIEVE, executor.capabilities)
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result.get("web_search_reason"), "auto_web_fallback")
+        self.assertTrue(result["external_evidence_gate"]["sufficient"])
+        self.assertEqual(result["source_usage"], "web")
+        self.assertEqual(response.source_level, SourceLevel.WEB)
+        self.assertEqual(response.evidence_refs, ["web-page-fault"])
+
     def test_low_confidence_notebook_evidence_triggers_web_when_enabled(self) -> None:
         class FakeToolExecutor:
             def __init__(self) -> None:
@@ -1039,7 +1091,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertTrue(result["evidence_confidence"]["sufficient"])
         self.assertEqual(len(result["web_staging_notes"]), 1)
 
-    def test_stable_knowledge_does_not_force_web_search_even_when_auto_enabled(self) -> None:
+    def test_stable_knowledge_uses_auto_web_after_empty_internal_evidence(self) -> None:
         class FakeToolExecutor:
             def __init__(self) -> None:
                 self.capabilities = []
@@ -1068,10 +1120,12 @@ class QAGraphAdapterTest(unittest.TestCase):
 
         response = FinalResponse.model_validate(result["final_response"])
         trace = result["tool_invocation_trace"]
-        self.assertNotIn(ToolCapability.WEB_SEARCH, executor.capabilities)
-        self.assertFalse(result.get("web_search_attempted", False))
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted", False))
+        self.assertEqual(result.get("web_search_reason"), "auto_web_fallback")
+        self.assertTrue(trace["didAttemptWebSearch"])
         self.assertFalse(trace["didUseWebSearch"])
-        self.assertEqual(trace["toolCallCount"], 1)
+        self.assertEqual(trace["toolCallCount"], 2)
         self.assertNotIn("目前公开信息", response.answer)
 
     def test_meta_tool_usage_answers_from_previous_trace(self) -> None:
@@ -1205,7 +1259,7 @@ class QAGraphAdapterTest(unittest.TestCase):
         self.assertIn("官方", response.answer)
         self.assertEqual(adapter.evidence_ids, ["web-openai-models"])
 
-    def test_direct_qagraph_allow_web_false_never_calls_web_tool(self) -> None:
+    def test_auto_web_fallback_false_keeps_plain_internal_miss_offline(self) -> None:
         class FakeToolExecutor:
             def __init__(self) -> None:
                 self.capabilities = []
@@ -1226,9 +1280,10 @@ class QAGraphAdapterTest(unittest.TestCase):
             {
                 "run_id": "run-qa-web-hard-deny",
                 "user_id": "u1",
-                "user_message": "联网搜索一下 HTTP/3 最新浏览器支持情况",
+                "user_message": "什么是 HTTP？",
                 "source_policy": SourcePolicy.OPEN_TOOLS.value,
                 "allow_web": False,
+                "auto_web_fallback": False,
                 "runtime_time_context": {
                     "currentDate": "2026-05-14",
                     "timezone": "Asia/Shanghai",

@@ -26,6 +26,8 @@ class BaseLearningState(TypedDict, total=False):
     graph_type: Literal["orchestrator", "qa", "question_generation", "mastery"]
     graph_version: str
     source_policy: Literal["notebook_only", "notebook_plus_external", "open_tools"]
+    knowledge_base_mode: Literal["auto", "current", "strict"]
+    auto_web_fallback: bool
     allow_web: bool
     web_search_requested: bool
     user_message: str | None

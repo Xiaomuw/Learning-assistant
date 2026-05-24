@@ -1229,6 +1229,8 @@ export default function ChatPage() {
         session_id: nextSessionId,
         question,
         subject_id: selectedNotebookId || DEFAULT_NOTEBOOK_ID,
+        knowledge_base_mode: "auto",
+        auto_web_fallback: true,
         thinking_mode: false,
         allow_web: allowWebForRequest
       }),

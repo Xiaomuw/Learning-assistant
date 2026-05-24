@@ -25,6 +25,8 @@ export interface ChatStreamPayload {
   session_id: string;
   question: string;
   subject_id: string;
+  knowledge_base_mode?: "auto" | "current" | "strict";
+  auto_web_fallback?: boolean;
   thinking_mode?: boolean;
   allow_web?: boolean;
 }

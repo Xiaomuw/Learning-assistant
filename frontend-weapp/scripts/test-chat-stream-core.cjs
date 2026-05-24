@@ -49,6 +49,8 @@ try {
         session_id: "s1",
         question: "HTTP/3 是什么？",
         subject_id: "computer-network",
+        knowledge_base_mode: "auto",
+        auto_web_fallback: true,
         thinking_mode: false,
         allow_web: false
       }
@@ -68,6 +70,8 @@ try {
       session_id: "s1",
       question: "今天有什么新标准？",
       subject_id: "computer-network",
+      knowledge_base_mode: "auto",
+      auto_web_fallback: true,
       thinking_mode: false,
       allow_web: true
     });
@@ -76,6 +80,8 @@ try {
       session_id: "s1",
       question: "今天有什么新标准？",
       subject_id: "computer-network",
+      knowledge_base_mode: "auto",
+      auto_web_fallback: true,
       thinking_mode: false,
       allow_web: true
     });

@@ -51,6 +51,8 @@ class ChildGraphInvokerFactoryTest(unittest.TestCase):
                 "user_id": "u1",
                 "user_message": "帮我出题练习 HTTP",
                 "source_policy": SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
+                "knowledge_base_mode": "auto",
+                "auto_web_fallback": True,
                 "quiz_request": quiz_request,
                 "intent_decision": intent_decision,
                 "production_runtime": True,
@@ -62,6 +64,8 @@ class ChildGraphInvokerFactoryTest(unittest.TestCase):
         self.assertEqual(state["graph_type"], GraphType.QUESTION_GENERATION.value)
         self.assertEqual(state["question"], "帮我出题练习 HTTP")
         self.assertEqual(state["source_policy"], SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value)
+        self.assertEqual(state["knowledge_base_mode"], "auto")
+        self.assertTrue(state["auto_web_fallback"])
         self.assertEqual(state["quiz_request"], quiz_request)
         self.assertEqual(state["parent_intent_decision"], intent_decision)
         self.assertTrue(state["production_runtime"])

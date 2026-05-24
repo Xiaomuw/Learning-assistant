@@ -1836,6 +1836,8 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(state["client_request_id"], "client-turn-1")
         self.assertEqual(len(state["short_term_messages"]), 2)
         self.assertEqual(state["request_mode"], "sync")
+        self.assertEqual(state["knowledge_base_mode"], "auto")
+        self.assertTrue(state["auto_web_fallback"])
         self.assertEqual(state["subject_id"], "data-structure")
         self.assertEqual(state["selected_subject_id"], "data-structure")
         self.assertNotIn("notebook_id", state)
@@ -1858,6 +1860,8 @@ class ChatApiTest(unittest.TestCase):
         self.assertEqual(orchestrator_state["selected_subject_id"], "data-structure")
         self.assertEqual(orchestrator_state["subject_id"], "data-structure")
         self.assertIsNone(orchestrator_state["notebook_id"])
+        self.assertEqual(orchestrator_state["knowledge_base_mode"], "auto")
+        self.assertTrue(orchestrator_state["auto_web_fallback"])
 
     def test_orchestrator_state_binds_selected_subject_for_material_qa(self) -> None:
         state = chat_state_builder.build_initial_state(
@@ -1872,6 +1876,37 @@ class ChatApiTest(unittest.TestCase):
 
         self.assertEqual(orchestrator_state["selected_subject_id"], "data-structure")
         self.assertEqual(orchestrator_state["notebook_id"], "data-structure")
+
+    def test_orchestrator_state_binds_selected_subject_for_current_mode(self) -> None:
+        state = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-1",
+            question="什么是 HTTP？",
+            subject_id="computer-network",
+            request_mode="sync",
+            knowledge_base_mode="current",
+        )
+
+        orchestrator_state = _orchestrator_state_from_chat_state(state, graph_run_id="run-current")
+
+        self.assertEqual(orchestrator_state["knowledge_base_mode"], "current")
+        self.assertEqual(orchestrator_state["notebook_id"], "computer-network")
+        self.assertEqual(orchestrator_state["source_policy"], "notebook_plus_external")
+
+    def test_initial_state_strict_mode_sets_notebook_only_policy(self) -> None:
+        state = chat_state_builder.build_initial_state(
+            user_id="default_user",
+            session_id="session-strict",
+            question="只根据当前资料解释 HTTP",
+            subject_id="computer-network",
+            request_mode="sync",
+            knowledge_base_mode="strict",
+        )
+
+        self.assertEqual(state["knowledge_base_mode"], "strict")
+        self.assertEqual(state["notebook_policy"], "strict")
+        self.assertTrue(state["notebook_required"])
+        self.assertEqual(state["source_policy"], "notebook_only")
 
     def test_initial_state_marks_client_requested_web_search(self) -> None:
         state = chat_state_builder.build_initial_state(

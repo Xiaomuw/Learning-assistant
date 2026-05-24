@@ -15,6 +15,8 @@ class QAGraphState(BaseLearningState, total=False):
     qa_flow_version: str
     goal_route: str
     hard_fallback_reason: str
+    knowledge_base_mode: str
+    auto_web_fallback: bool
     allow_web: bool
     web_search_requested: bool
     has_web_search_tool: bool

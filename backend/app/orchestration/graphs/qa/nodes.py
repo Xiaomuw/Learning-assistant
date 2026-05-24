@@ -120,6 +120,8 @@ def input_normalize_node(
         current_date=runtime_time_context.get("currentDate"),
     ).as_dict()
     web_search_requested = _web_search_requested_for_state(state)
+    auto_web_fallback = _auto_web_fallback_enabled_for_state(state)
+    knowledge_base_mode = _knowledge_base_mode_for_state(state)
     has_web_search_tool = _tool_executor_has_web_search(tool_executor)
     web_search_enabled = _web_search_enabled_for_state(
         {**state, "source_policy": source_policy, "user_message": normalized_question},
@@ -143,6 +145,8 @@ def input_normalize_node(
         "normalized_question": normalized_question,
         "runtime_time_context": runtime_time_context,
         "question_boundary": question_boundary,
+        "knowledge_base_mode": knowledge_base_mode,
+        "auto_web_fallback": auto_web_fallback,
         "allow_web": bool(state.get("allow_web", False)),
         "web_search_requested": web_search_requested,
         "has_web_search_tool": has_web_search_tool,
@@ -175,6 +179,8 @@ def input_normalize_node(
             "course_id": state.get("course_id"),
             "source_policy": source_policy,
             "web_search_requested": web_search_requested,
+            "auto_web_fallback": auto_web_fallback,
+            "knowledge_base_mode": knowledge_base_mode,
         },
     }
 
@@ -862,7 +868,11 @@ def web_search_if_needed_node(
         blocked_reason = "internal_evidence_sufficient" if gate.get("sufficient") else "source_policy_disallows_web"
         if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
             blocked_reason = "source_policy_notebook_only"
-        elif not _web_search_requested_for_state(state):
+        elif not (
+            _web_search_requested_for_state(state)
+            or _auto_web_fallback_enabled_for_state(state)
+            or _has_external_search_signal(question)
+        ):
             blocked_reason = "allow_web_false"
         elif not (web_search_requested or _has_external_search_signal(question)):
             blocked_reason = "no_external_search_signal"
@@ -1023,7 +1033,12 @@ def web_search_node_408(
     query = str(state.get("web_query") or _resolved_question(state)).strip()
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or not _web_search_enabled_for_state(state, has_web_search_tool=True):
         blocked_reason = "source_policy_notebook_only" if source_policy == SourcePolicy.NOTEBOOK_ONLY.value else "source_policy_disallows_web"
-        if blocked_reason != "source_policy_notebook_only" and not _web_search_requested_for_state(state):
+        if (
+            blocked_reason != "source_policy_notebook_only"
+            and not _web_search_requested_for_state(state)
+            and not _auto_web_fallback_enabled_for_state(state)
+            and not _has_external_search_signal(query)
+        ):
             blocked_reason = "allow_web_false"
         return {
             "web_search_attempted": False,
@@ -2108,7 +2123,12 @@ def web_search_node(
     source_policy = _source_policy(state)
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value or not _web_search_enabled_for_state(state, has_web_search_tool=True):
         blocked_reason = "source_policy_notebook_only" if source_policy == SourcePolicy.NOTEBOOK_ONLY.value else "source_policy_disallows_web"
-        if blocked_reason != "source_policy_notebook_only" and not _web_search_requested_for_state(state):
+        if (
+            blocked_reason != "source_policy_notebook_only"
+            and not _web_search_requested_for_state(state)
+            and not _auto_web_fallback_enabled_for_state(state)
+            and not _has_external_search_signal(_resolved_question(state))
+        ):
             blocked_reason = "allow_web_false"
         return {
             "web_search_attempted": False,
@@ -2872,6 +2892,8 @@ def _public_source_from_capability(capability: ToolCapability) -> str:
 
 def _source_policy(state: QAGraphState) -> str:
     raw = str(state.get("source_policy") or SourcePolicy.OPEN_TOOLS.value).strip()
+    if _knowledge_base_mode_for_state(state) == "strict":
+        return SourcePolicy.NOTEBOOK_ONLY.value
     compatibility_map = {
         "notebook": SourcePolicy.NOTEBOOK_ONLY.value,
         "web": SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
@@ -2953,8 +2975,33 @@ def _web_search_requested_for_state(state: QAGraphState | dict[str, Any]) -> boo
     return False
 
 
+def _auto_web_fallback_enabled_for_state(state: QAGraphState | dict[str, Any]) -> bool:
+    runtime_context = state.get("chat_runtime_context") or state.get("runtime_context") or {}
+    if "auto_web_fallback" in state:
+        return bool(state.get("auto_web_fallback"))
+    if isinstance(runtime_context, dict) and "auto_web_fallback" in runtime_context:
+        return bool(runtime_context.get("auto_web_fallback"))
+    return True
+
+
+def _knowledge_base_mode_for_state(state: QAGraphState | dict[str, Any]) -> str:
+    runtime_context = state.get("chat_runtime_context") or state.get("runtime_context") or {}
+    raw = state.get("knowledge_base_mode")
+    if raw is None and isinstance(runtime_context, dict):
+        raw = runtime_context.get("knowledge_base_mode")
+    candidate = str(raw or "auto").strip().lower()
+    if candidate in {"auto", "current", "strict"}:
+        return candidate
+    return "auto"
+
+
 def _web_search_enabled_for_state(state: QAGraphState | dict[str, Any], *, has_web_search_tool: bool) -> bool:
-    if not _web_search_requested_for_state(state):
+    question = _question(state)  # type: ignore[arg-type]
+    if not (
+        _web_search_requested_for_state(state)
+        or _auto_web_fallback_enabled_for_state(state)
+        or _has_external_search_signal(question)
+    ):
         return False
     if not has_web_search_tool:
         return False
@@ -2977,6 +3024,8 @@ def _web_search_reason_for_state(state: QAGraphState | dict[str, Any], *, questi
         return "explicit_external_search_signal"
     if _web_search_requested_for_state(state):
         return "client_requested_web_search"
+    if _auto_web_fallback_enabled_for_state(state):
+        return "auto_web_fallback"
     gate = dict(state.get("evidence_gate") or {})
     if gate.get("reason"):
         return str(gate.get("reason"))
@@ -3905,8 +3954,6 @@ def _should_run_web_retrieval(
     boundary = _question_boundary(state, question)
     if boundary.get("category") == QUESTION_META_TOOL_USAGE:
         return False
-    if not _web_search_requested_for_state(state):
-        return False
     if source_policy == SourcePolicy.NOTEBOOK_ONLY.value:
         return False
     if source_policy not in {
@@ -3914,15 +3961,6 @@ def _should_run_web_retrieval(
         SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value,
     }:
         return False
-    if _web_search_requested_for_state(state):
-        return True
-    if _has_external_search_signal(question):
-        return True
-    if boundary.get("category") == QUESTION_STABLE_KNOWLEDGE:
-        return False
-    if not _web_search_empty_concepts_enabled():
-        return False
-
     gate = dict(state.get("evidence_gate") or {})
     question_type = str(state.get("question_type") or _infer_question_type(question))
     intent = str((state.get("intent_result") or {}).get("intent") or "")
@@ -3934,6 +3972,18 @@ def _should_run_web_retrieval(
         return False
     if intent in {"question_generation", "answer_review", "learning_diagnosis"}:
         return False
+
+    if _web_search_requested_for_state(state) or _has_external_search_signal(question):
+        return True
+    if gate.get("notebook_required") or _has_strict_notebook_signal(question) or _has_notebook_signal(question):
+        return False
+
+    auto_fallback_enabled = _auto_web_fallback_enabled_for_state(state) or _web_search_empty_concepts_enabled()
+    if not auto_fallback_enabled:
+        return False
+    if gate.get("sufficient"):
+        return False
+
     web_candidate = question_type in {"concept", "qa", "fact"} or intent == "concept_explain"
     if not web_candidate:
         return False

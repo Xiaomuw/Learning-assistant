@@ -10,6 +10,8 @@ export interface ChatStreamPayloadDraft {
   session_id: string;
   question: string;
   subject_id: string;
+  knowledge_base_mode?: "auto" | "current" | "strict";
+  auto_web_fallback?: boolean;
   thinking_mode?: boolean;
   allow_web?: boolean;
 }
@@ -20,6 +22,8 @@ export function buildChatStreamPayload(draft: ChatStreamPayloadDraft): ChatStrea
     session_id: draft.session_id,
     question: draft.question,
     subject_id: draft.subject_id,
+    knowledge_base_mode: draft.knowledge_base_mode || "auto",
+    auto_web_fallback: draft.auto_web_fallback === undefined ? true : Boolean(draft.auto_web_fallback),
     thinking_mode: Boolean(draft.thinking_mode),
     allow_web: Boolean(draft.allow_web)
   };

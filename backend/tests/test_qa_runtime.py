@@ -21,6 +21,8 @@ from app.domains.qa import explanation_fallback as explainer_module
 from app.domains.qa.explanation_fallback import ExplanationOutput, explain_for_qa_fallback
 from app.domains.qa.mode_selection import select_execution_mode
 from app.domains.qa.prompts import (
+    PLAIN_ANSWER_SYSTEM_PROMPT,
+    build_plain_answer_prompt_payload,
     build_tool_system_message,
     format_user_style_instruction as format_qa_user_style_instruction,
 )
@@ -375,6 +377,25 @@ class QARuntimeTest(unittest.TestCase):
         self.assertNotIn("web_search", tool_names)
         self.assertNotIn("tavily_web_search", tool_names)
         self.assertNotIn("search_notebook_context", tool_names)
+
+    def test_plain_answer_prompt_does_not_nudge_smalltalk_to_current_notebook(self) -> None:
+        request = AgentRequest(
+            user_id="u1",
+            session_id="s1",
+            subject_id="computer-network",
+            subject_name="计算机网络",
+            subject_description="TCP/IP、HTTP、DNS",
+            question="你好",
+            question_type="smalltalk",
+            runtime_context={"notebook_policy": "skip"},
+        )
+
+        payload = build_plain_answer_prompt_payload(request)
+
+        self.assertEqual(payload["subject_name"], "计算机网络")
+        self.assertIn("轻松寒暄", payload["style_instruction"])
+        self.assertNotIn("结合当前笔记本给一个轻量继续聊的方向", PLAIN_ANSWER_SYSTEM_PROMPT)
+        self.assertIn("不要结合当前笔记本", PLAIN_ANSWER_SYSTEM_PROMPT)
 
     def test_qa_runtime_tool_registry_denies_tools_without_explicit_policy(self) -> None:
         request = AgentRequest(

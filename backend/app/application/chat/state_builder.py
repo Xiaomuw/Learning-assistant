@@ -19,6 +19,8 @@ def build_initial_state(
     question: str,
     subject_id: str,
     request_mode: str,
+    knowledge_base_mode: str = "auto",
+    auto_web_fallback: bool = True,
     thinking_mode: bool = False,
     allow_web: bool = False,
     client_request_id: str | None = None,
@@ -35,6 +37,7 @@ def build_initial_state(
     normalized_request_id = str(request_id or "").strip()
     message_id = normalized_client_request_id or normalized_request_id or str(uuid4())
     normalized_request_id = normalized_request_id or message_id
+    normalized_knowledge_base_mode = _normalize_knowledge_base_mode(knowledge_base_mode)
 
     initial_state: AgentState = {
         "user_id": user_id,
@@ -50,6 +53,8 @@ def build_initial_state(
         "selected_subject_description": subject_description,
         "question": question,
         "request_mode": request_mode,
+        "knowledge_base_mode": normalized_knowledge_base_mode,
+        "auto_web_fallback": bool(auto_web_fallback),
         "thinking_mode": thinking_mode,
         "allow_web": bool(allow_web),
         "web_search_requested": bool(allow_web),
@@ -63,7 +68,15 @@ def build_initial_state(
         "long_term_context": context["long_term_context"],
         "model_name": resolve_active_chat_model(),
     }
-    if allow_web:
+    if normalized_knowledge_base_mode == "strict":
+        initial_state["notebook_policy"] = "strict"
+        initial_state["notebook_required"] = True
+        initial_state["source_policy"] = SourcePolicy.NOTEBOOK_ONLY.value
+    elif normalized_knowledge_base_mode == "current":
+        initial_state["notebook_policy"] = "required"
+        initial_state["notebook_required"] = False
+        initial_state["source_policy"] = SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value
+    elif allow_web:
         initial_state["source_policy"] = SourcePolicy.NOTEBOOK_PLUS_EXTERNAL.value
     logger.info(
         f"📋 初始 State 构建完成 | user={user_id} | subject={subject_name} | "
@@ -72,3 +85,10 @@ def build_initial_state(
         f"long_term_topics={len(context['memory'].get('recent_topics', []))}"
     )
     return initial_state
+
+
+def _normalize_knowledge_base_mode(value: str | None) -> str:
+    candidate = str(value or "auto").strip().lower()
+    if candidate in {"auto", "current", "strict"}:
+        return candidate
+    return "auto"

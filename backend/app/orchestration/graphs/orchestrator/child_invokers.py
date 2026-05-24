@@ -84,6 +84,26 @@ class QAGraphInvoker:
         runtime_context = state.get("chat_runtime_context") if isinstance(state.get("chat_runtime_context"), dict) else {}
         requested_token_stream = bool(runtime_context.get("stream_answer_tokens"))
         injected_stream_writer = runtime_context.get("stream_writer")
+        knowledge_base_mode = _knowledge_base_mode(state, runtime_context)
+        selected_subject_id = normalize_subject_id(
+            runtime_context.get("selected_subject_id")
+            or runtime_context.get("subject_id")
+            or state.get("selected_subject_id")
+            or state.get("notebook_id")
+        )
+        selected_subject_name = str(
+            runtime_context.get("selected_subject_name")
+            or runtime_context.get("subject_name")
+            or state.get("selected_subject_name")
+            or DEFAULT_SUBJECTS[0]["name"]
+        )
+        selected_subject_description = str(
+            runtime_context.get("selected_subject_description")
+            or runtime_context.get("subject_description")
+            or state.get("selected_subject_description")
+            or ""
+        )
+        current_scope_bound = bool(state.get("notebook_id")) or knowledge_base_mode in {"current", "strict"}
         qa_runtime_context = {
             "graph_run_id": f"{state.get('run_id', '')}:{self.graph_type.value}",
             "message_id": str(state.get("message_id") or state.get("request_id") or ""),
@@ -95,6 +115,11 @@ class QAGraphInvoker:
             "thinking_mode": bool(runtime_context.get("thinking_mode", False)),
             "allow_web": bool(runtime_context.get("allow_web", False)),
             "web_search_requested": bool(runtime_context.get("web_search_requested") or state.get("web_search_requested")),
+            "knowledge_base_mode": knowledge_base_mode,
+            "auto_web_fallback": bool(runtime_context.get("auto_web_fallback", state.get("auto_web_fallback", True))),
+            "selected_subject_id": selected_subject_id,
+            "selected_subject_name": selected_subject_name,
+            "selected_subject_description": selected_subject_description,
         }
         if qa_runtime_context["stream_answer_tokens"]:
             if callable(injected_stream_writer):
@@ -110,9 +135,13 @@ class QAGraphInvoker:
             model_name=str(runtime_context.get("model_name") or DEFAULT_CHAT_MODEL),
             user_id=str(runtime_context.get("user_id") or state.get("user_id") or ""),
             session_id=str(runtime_context.get("session_id") or state.get("thread_id") or ""),
-            subject_id=normalize_subject_id(runtime_context.get("subject_id") or state.get("notebook_id")),
-            subject_name=str(runtime_context.get("subject_name") or DEFAULT_SUBJECTS[0]["name"]),
-            subject_description=str(runtime_context.get("subject_description") or ""),
+            subject_id=selected_subject_id,
+            subject_name=selected_subject_name if current_scope_bound else "通用知识",
+            subject_description=(
+                selected_subject_description
+                if current_scope_bound
+                else "自动选择 408 知识库，普通问答不限定前端当前笔记本。"
+            ),
             memory=dict(runtime_context.get("memory") or {}),
             short_term_messages=list(runtime_context.get("short_term_messages") or state.get("messages") or []),
             short_term_context=str(runtime_context.get("short_term_context") or ""),
@@ -522,6 +551,13 @@ def _persist_fallback_learning_events_safely(raw_events: list[Any]) -> None:
         logger.warning(f"QAGraph fallback learning event persistence failed open: {exc.__class__.__name__}")
 
 
+def _knowledge_base_mode(state: OrchestratorState, runtime_context: dict[str, Any]) -> str:
+    candidate = str(runtime_context.get("knowledge_base_mode") or state.get("knowledge_base_mode") or "auto").strip().lower()
+    if candidate in {"auto", "current", "strict"}:
+        return candidate
+    return "auto"
+
+
 def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, Any]:
     message = str(state.get("user_message") or "").strip()
     runtime_context = state.get("chat_runtime_context") if isinstance(state.get("chat_runtime_context"), dict) else {}
@@ -534,6 +570,8 @@ def _child_state(state: OrchestratorState, graph_type: GraphType) -> dict[str, A
         "selected_subject_id": state.get("selected_subject_id"),
         "selected_subject_name": state.get("selected_subject_name"),
         "selected_subject_description": state.get("selected_subject_description"),
+        "knowledge_base_mode": _knowledge_base_mode(state, runtime_context),
+        "auto_web_fallback": bool(state.get("auto_web_fallback", runtime_context.get("auto_web_fallback", True))),
         "subject_id": (
             runtime_context.get("selected_subject_id")
             or runtime_context.get("subject_id")

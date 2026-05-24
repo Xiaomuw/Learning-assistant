@@ -157,6 +157,8 @@ class AgentState(TypedDict, total=False):
     question: str               # 用户提出的原始问题
     normalized_question: str    # preflight 规范化后的问题，用于 Studio/trace 排障
     request_mode: Literal["sync", "sse"]  # 当前请求入口，用于调试与 tracing 命名
+    knowledge_base_mode: Literal["auto", "current", "strict"]  # 普通 QA 默认自动选库；current/strict 才绑定当前知识库
+    auto_web_fallback: bool    # 内部知识库证据不足时是否允许自动联网补充
     thinking_mode: bool        # 本轮是否启用 DeepSeek thinking
     allow_web: bool            # 本轮是否由客户端主动启用联网搜索
     web_search_requested: bool # 客户端或策略是否要求本轮主动触发 web_search
