@@ -99,6 +99,21 @@ class RouteDeciderTest(unittest.TestCase):
         self.assertFalse(decision.policy.allow_web)
         self.assertTrue(decision.policy.notebook_only)
 
+    def test_simple_fact_with_notebook_only_policy_stays_direct_no_web(self) -> None:
+        decision = decide_route(
+            {
+                "user_id": "u1",
+                "user_message": "1+1等于几",
+                "source_policy": SourcePolicy.NOTEBOOK_ONLY.value,
+                "runtime_context": {"available_capabilities": [ToolCapability.WEB_SEARCH.value]},
+            }
+        )
+
+        self.assertEqual(decision.route, BoundaryRoute.SIMPLE_FACT)
+        self.assertEqual(decision.target_graph_type, GraphType.ORCHESTRATOR)
+        self.assertFalse(decision.policy.allow_web)
+        self.assertTrue(decision.policy.notebook_only)
+
     def test_explanation_or_tutoring_enters_qagraph(self) -> None:
         decision = decide_route({"user_id": "u1", "user_message": "详细解释 TCP 三次握手"})
 

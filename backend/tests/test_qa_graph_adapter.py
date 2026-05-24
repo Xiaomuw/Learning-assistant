@@ -203,6 +203,53 @@ class QAGraphAdapterTest(unittest.TestCase):
         traces = list(result.get("trace_records") or [])
         self.assertNotIn(True, [item.get("web_called") for item in traces if item.get("stage") == "web_search_if_needed"])
 
+    def test_web_evidence_insufficient_keeps_hard_fallback(self) -> None:
+        class FakeToolExecutor:
+            def __init__(self) -> None:
+                self.capabilities = []
+
+            def execute(self, request):
+                self.capabilities.append(request.capability)
+                return ToolResult(
+                    tool_id="fake:web_search",
+                    provider="fake",
+                    capability=request.capability,
+                    status=ToolStatus.SUCCESS,
+                    input_summary=request.input_summary,
+                    evidence=[
+                        EvidenceChunk(
+                            id="web-low-score",
+                            source_type="web",
+                            source_id="https://example.test/weak-web",
+                            text="低置信度网页证据。",
+                            score=0.2,
+                        )
+                    ],
+                )
+
+        executor = FakeToolExecutor()
+        result = build_graph(tool_executor=executor).compile().invoke(
+            {
+                "run_id": "run-qa-web-insufficient",
+                "user_id": "u1",
+                "user_message": "今天 HTTP 生态有什么新进展？",
+                "source_policy": SourcePolicy.OPEN_TOOLS.value,
+                "allow_web": True,
+                "web_search_requested": True,
+                "evidence": [],
+            }
+        )
+
+        self.assertIn(ToolCapability.WEB_SEARCH, executor.capabilities)
+        self.assertTrue(result.get("web_search_attempted"))
+        self.assertEqual(result["external_evidence_judgement"]["status"], "insufficient")
+        self.assertFalse(result["external_evidence_gate"]["sufficient"])
+        self.assertEqual(result["evidence_judgement"]["web_count"], 0)
+        response = FinalResponse.model_validate(result["final_response"])
+        self.assertEqual(response.source_level, SourceLevel.NONE)
+        self.assertEqual(response.ui_payload["answer_mode"], "hard_fallback")
+        self.assertNotIn("web-low-score", response.evidence_refs)
+
     def test_repeated_same_question_uses_message_id_for_learning_event_idempotency(self) -> None:
         base = {
             "user_id": "u1",
