@@ -502,11 +502,14 @@ export default function RegisterPage() {
 
           <div className="mt-6 rounded-[24px] border-[3px] border-dashed border-neo-ink bg-neo-bg px-4 py-4">
             <p className="neo-label mb-1">已经有账号？</p>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-bold text-neo-ink/70">
                 直接用邮箱和密码登录就可以继续学习
               </p>
-              <Link href={loginHref} className="neo-button neo-button-secondary">
+              <Link
+                href={loginHref}
+                className="neo-button-secondary w-fit shrink-0 whitespace-nowrap px-4 py-2 text-xs sm:text-sm"
+              >
                 去登录
                 <ArrowRight size={16} strokeWidth={3} />
               </Link>

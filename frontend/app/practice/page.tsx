@@ -690,7 +690,7 @@ export default function PracticePage() {
 
   function getOptionCardClass(optionKey: OptionKey) {
     const base =
-      "relative overflow-hidden rounded-[1.25rem] border-[3px] border-neo-ink px-4 py-4 shadow-neo-sm";
+      "relative overflow-hidden rounded-2xl sm:rounded-[1.25rem] border-2 sm:border-[3px] border-neo-ink px-3 py-3 sm:px-4 sm:py-4 shadow-neo-xs sm:shadow-neo-sm";
 
     if (!feedback) {
       return selectedOption === optionKey
@@ -731,10 +731,10 @@ export default function PracticePage() {
       : "登录状态需要刷新，正在带你回到登录页。";
 
     return (
-      <div className="flex h-full items-center justify-center bg-neo-bg px-4">
-        <div className="neo-card-secondary w-full p-5 text-center">
+      <div className="flex h-full items-center justify-center bg-neo-bg px-3 sm:px-4">
+        <div className="neo-card-secondary w-full p-4 sm:p-5 text-center animate-fade-in">
           <p className="neo-label">Practice</p>
-          <p className="mt-3 text-lg font-black">{message}</p>
+          <p className="mt-2 sm:mt-3 text-base sm:text-lg font-black">{message}</p>
         </div>
       </div>
     );

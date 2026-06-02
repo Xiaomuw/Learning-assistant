@@ -1,40 +1,40 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, MessageCircleMore, PencilRuler, User } from "lucide-react";
 
 interface NavItem {
   href: string;
-  icon: typeof MessageCircleMore;
+  icon: string;
+  activeIcon: string;
   label: string;
-  tone: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/chat",
-    icon: MessageCircleMore,
+    icon: "/weapp-icons/chat.png",
+    activeIcon: "/weapp-icons/chat-active.png",
     label: "问答",
-    tone: "bg-neo-secondary",
   },
   {
     href: "/practice",
-    icon: PencilRuler,
+    icon: "/weapp-icons/practice.png",
+    activeIcon: "/weapp-icons/practice-active.png",
     label: "刷题",
-    tone: "bg-neo-accent",
   },
   {
     href: "/dashboard",
-    icon: BarChart3,
-    label: "学习中心",
-    tone: "bg-neo-muted",
+    icon: "/weapp-icons/dashboard.png",
+    activeIcon: "/weapp-icons/dashboard-active.png",
+    label: "中心",
   },
   {
     href: "/profile",
-    icon: User,
+    icon: "/weapp-icons/profile.png",
+    activeIcon: "/weapp-icons/profile-active.png",
     label: "我的",
-    tone: "bg-neo-accent",
   },
 ];
 
@@ -42,25 +42,33 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t-[3px] border-neo-ink bg-white">
-      <div className="mx-auto flex w-full max-w-md items-center justify-between">
+    <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-md -translate-x-1/2 border-t-[3px] border-neo-ink bg-neo-bg safe-area-bottom">
+      <div className="grid h-[64px] grid-cols-4 items-center">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href;
-          const Icon = item.icon;
 
           return (
             <Link
               key={item.href}
               href={item.href}
               aria-label={item.label}
-              className={`flex flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-black uppercase tracking-widest transition-all duration-100 ${
+              className={`flex h-full flex-col items-center justify-center gap-1 text-[11px] font-black transition-colors duration-150 ${
                 isActive
-                  ? `${item.tone} text-neo-ink`
-                  : "text-neo-ink/50 hover:bg-neo-bg hover:text-neo-ink"
+                  ? "text-[#1F2937]"
+                  : "text-[#6B7280] hover:text-[#1F2937]"
               }`}
             >
-              <Icon size={20} strokeWidth={2.8} />
-              <span>{item.label}</span>
+              <Image
+                src={isActive ? item.activeIcon : item.icon}
+                alt=""
+                width={27}
+                height={27}
+                className="h-[27px] w-[27px]"
+                priority={isActive}
+              />
+              <span className="leading-none">
+                {item.label}
+              </span>
             </Link>
           );
         })}

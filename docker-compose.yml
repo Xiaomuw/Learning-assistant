@@ -10,10 +10,10 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: learning-postgres
+    container_name: la-postgres
     restart: unless-stopped
     ports:
-      - "5433:5432"
+      - "5434:5432"
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-learning_assistant}
       - POSTGRES_USER=${POSTGRES_USER:-learning_user}
@@ -30,10 +30,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: learning-backend
+    container_name: la-backend
     restart: unless-stopped
     ports:
-      - "8002:8000"
+      - "8003:8000"
     env_file:
       - ./backend/.env
     environment:
@@ -41,7 +41,7 @@ services:
       - LANGGRAPH_POSTGRES_URL=postgresql://${POSTGRES_USER:-learning_user}:${POSTGRES_PASSWORD:-learning_password}@postgres:5432/${POSTGRES_DB:-learning_assistant}
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
-      - APP_ENV=production
+      - APP_ENV=development
       - LOG_LEVEL=INFO
     depends_on:
       postgres:
@@ -59,10 +59,10 @@ services:
       args:
         INTERNAL_API_BASE: http://backend:8000/api
         NEXT_PUBLIC_API_BASE: /api
-    container_name: learning-frontend
+    container_name: la-frontend
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "3003:3000"
     environment:
       - INTERNAL_API_BASE=http://backend:8000/api
       - NEXT_PUBLIC_API_BASE=/api

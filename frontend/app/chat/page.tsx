@@ -61,6 +61,13 @@ const EMPTY_MEMORY: Memory = {
 const LEGACY_DUPLICATE_QUALITY_GATE_TEXT = "发现重复题目";
 const LEGACY_DUPLICATE_QUALITY_GATE_NOTICE =
   "当前服务返回了旧质量门策略的重复题失败结果。请确认后端已重启到最新代码后重试；新策略会复用已有题，不会因为题库已有相似题整包失败。";
+const CHAT_TEAM_CREDIT =
+  "第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手";
+const EMPTY_CHAT_PROMPTS = [
+  "这个概念怎么理解？",
+  "帮我出几道题",
+  "解释一下原理",
+];
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   concept: "概念理解",
@@ -1994,63 +2001,135 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-neo-bg">
+    <div className="flex h-full flex-col overflow-hidden bg-neo-bg">
       {/* ── Header ── */}
-      <header className="flex items-center justify-between border-b-[3px] border-neo-ink bg-neo-secondary px-4 py-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-black">问答</h1>
-          {modelConfig ? (
-            <div className="flex items-center gap-1">
-              <div className="h-2.5 w-2.5 rounded-full border-2 border-neo-ink bg-green-500" />
-              <span className="text-[10px] font-black text-neo-ink/70">{modelDisplay.label}</span>
+      <header className="shrink-0 border-b-[3px] border-neo-ink bg-neo-secondary px-5 pb-3 pt-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="shrink-0 text-2xl font-black leading-none">问答</h1>
+              <span
+                className={`h-3 w-3 shrink-0 rounded-full border-2 border-neo-ink ${
+                  modelConfig ? "bg-green-500 shadow-[0_0_6px_2px_rgba(34,197,94,0.35)]" : "bg-neo-ink/20"
+                }`}
+              />
+              <span className="truncate text-[11px] font-black text-neo-ink/55">
+                {modelDisplay.label}
+              </span>
             </div>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" className="neo-badge bg-white" onClick={() => { void refreshSessions(); setShowHistory(true); }}>历史</button>
-          <button type="button" className="neo-badge bg-white" onClick={handleNewSession}>新对话</button>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              className="neo-button-secondary bg-neo-accent px-4 py-2 text-xs"
+              onClick={() => {
+                void refreshSessions();
+                setShowHistory(true);
+              }}
+            >
+              历史
+            </button>
+            <button
+              type="button"
+              className="neo-button-secondary bg-neo-accent px-4 py-2 text-xs"
+              onClick={handleNewSession}
+            >
+              新对话
+            </button>
+          </div>
         </div>
       </header>
 
+      <p className="shrink-0 truncate px-5 py-1 text-[10px] font-bold text-neo-ink/35">
+        {CHAT_TEAM_CREDIT}
+      </p>
+
       {/* ── Messages ── */}
-      <main className="flex-1 overflow-y-auto px-4 py-3 pb-2">
+      <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-[132px] pt-2">
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <p className="text-2xl font-black">开始学习 ✨</p>
-            <p className="mt-2 text-sm font-bold text-neo-ink/60">围绕「{selectedNotebook?.name || "知识库"}」提问</p>
+          <div className="flex h-full min-h-[380px] flex-col items-center justify-center text-center">
+            <p className="text-5xl leading-none">✨</p>
+            <p className="mt-8 text-2xl font-black">开始学习</p>
+            <p className="mt-3 max-w-[18rem] text-sm font-bold leading-relaxed text-neo-ink/55">
+              围绕「{selectedNotebook?.name || "知识库"}」提问，我来帮你解答
+            </p>
+            <div className="mt-8 flex max-w-[18rem] flex-wrap items-center justify-center gap-2">
+              {EMPTY_CHAT_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  className="rounded-full border-[3px] border-neo-ink bg-white px-3 py-2 text-xs font-black shadow-neo-sm transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50"
+                  disabled={isStreaming}
+                  onClick={() => handleSend(prompt)}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
 
         {messages.map((message, index) => (
-          <div key={`${message.timestamp}-${index}`} className={`mb-3 ${message.role === "user" ? "flex justify-end" : ""}`}>
-            <div className={`max-w-[85%] rounded-2xl border-[3px] border-neo-ink p-3 shadow-neo-sm ${
-              message.role === "user" ? "bg-neo-secondary" : "bg-white"
-            }`}>
-              <p className="text-[10px] font-black uppercase tracking-widest text-neo-ink/50">
+          <div
+            key={`${message.timestamp}-${index}`}
+            className={`mb-4 flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[86%] rounded-[24px] border-[3px] border-neo-ink p-4 shadow-neo-sm ${
+                message.role === "user"
+                  ? "rounded-br-md bg-white"
+                  : "rounded-bl-md bg-white"
+              }`}
+            >
+              <p
+                className={`mb-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-neo-ink/55 ${
+                  message.role === "user" ? "border-2 border-neo-ink/30 bg-neo-accent/50" : ""
+                }`}
+              >
                 {message.role === "user" ? "你" : "Coach"}
               </p>
-              <div className="mt-1 whitespace-pre-wrap text-sm font-bold leading-relaxed">
+              <div className="whitespace-pre-wrap break-words text-sm font-bold leading-relaxed text-neo-ink">
                 {message.content || "模型正在处理..."}
               </div>
               {message.quiz && message.quiz.length > 0 ? (
-                <div className="mt-3 border-[3px] border-neo-ink bg-neo-bg p-3">
+                <div className="mt-3 rounded-[20px] border-[3px] border-neo-ink bg-neo-bg p-3 shadow-neo-sm">
                   <p className="text-xs font-black">练习题已打包 · 共 {message.quiz.length} 道</p>
-                  <button type="button" className="neo-button mt-2 w-full justify-center text-xs" onClick={() => window.location.href = "/practice"}>去刷题</button>
+                  <button
+                    type="button"
+                    className="neo-button mt-2 w-full justify-center text-xs"
+                    onClick={() => window.location.href = "/practice"}
+                  >
+                    去刷题
+                  </button>
                 </div>
               ) : null}
               {message.quizClarification ? (
-                <div className="mt-3 border-[3px] border-neo-ink bg-neo-muted p-3">
-                  <p className="text-xs font-black">{message.quizClarification.title || "想练哪一块？"}</p>
-                  <p className="mt-1 text-[11px] font-bold text-neo-ink/60">{message.quizClarification.description}</p>
+                <div className="mt-3 rounded-[20px] border-[3px] border-neo-ink bg-neo-muted p-3 shadow-neo-sm">
+                  <p className="text-xs font-black">
+                    {message.quizClarification.title || "想练哪一块？"}
+                  </p>
+                  <p className="mt-1 text-[11px] font-bold text-neo-ink/60">
+                    {message.quizClarification.description}
+                  </p>
                   {(message.quizClarification.recommended_options || []).slice(0, 3).map((opt) => (
-                    <button key={`${opt.source}-${opt.value}`} type="button" className="neo-badge mt-2 mr-2 bg-white" disabled={isStreaming} onClick={() => handleSend(`围绕 ${opt.value} 出 5 道单选题`)}>{opt.label || opt.value}</button>
+                    <button
+                      key={`${opt.source}-${opt.value}`}
+                      type="button"
+                      className="neo-badge mr-2 mt-2 bg-white"
+                      disabled={isStreaming}
+                      onClick={() => handleSend(`围绕 ${opt.value} 出 5 道单选题`)}
+                    >
+                      {opt.label || opt.value}
+                    </button>
                   ))}
                 </div>
               ) : null}
               {message.process && message.process.stages.length > 0 ? (
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-[10px] font-black text-neo-ink/50">处理过程 · {message.process.currentStage}</summary>
-                  <div className="mt-1 space-y-1">
+                <details className="mt-3 rounded-[18px] border-[3px] border-neo-ink bg-neo-secondary/45 shadow-neo-xs">
+                  <summary className="cursor-pointer px-3 py-2 text-[10px] font-black text-neo-ink/65">
+                    处理过程 · {message.process.currentStage}
+                  </summary>
+                  <div className="space-y-1 border-t-[3px] border-neo-ink bg-white px-3 py-2">
                     {message.process.stages.map((stage) => (
                       <div key={stage.key} className="flex items-center gap-2 text-[10px] font-bold text-neo-ink/60">
                         <span className={`h-1.5 w-1.5 rounded-full ${stage.status === "completed" ? "bg-green-500" : stage.status === "failed" ? "bg-red-500" : "bg-yellow-500"}`} />
@@ -2059,7 +2138,9 @@ export default function ChatPage() {
                       </div>
                     ))}
                     {message.process.toolCalls?.map((tc, i) => (
-                      <div key={`tc-${i}`} className="text-[10px] font-bold text-neo-ink/50">🔧 {tc.label}{tc.success ? " ✓" : " ✗"}{tc.docCount ? ` · ${tc.docCount}条` : ""}</div>
+                      <div key={`tc-${i}`} className="text-[10px] font-bold text-neo-ink/50">
+                        🔧 {tc.label}{tc.success ? " ✓" : " ✗"}{tc.docCount ? ` · ${tc.docCount}条` : ""}
+                      </div>
                     ))}
                   </div>
                 </details>
@@ -2071,15 +2152,42 @@ export default function ChatPage() {
       </main>
 
       {/* ── Composer ── */}
-      <div className="border-t-[3px] border-neo-ink bg-white px-4 py-3 pb-20">
-        <div className="flex items-center gap-2 mb-2">
-          <button type="button" className={`neo-badge ${webSearchEnabled ? "bg-neo-accent" : "bg-white"}`} disabled={isStreaming} onClick={() => setWebSearchEnabled(!webSearchEnabled)}>
+      <div className="fixed bottom-[calc(67px+var(--safe-area-bottom))] left-1/2 z-40 w-full max-w-md -translate-x-1/2 border-t-[3px] border-neo-ink bg-white px-4 py-4">
+        <div className="flex items-end gap-2">
+          <button
+            type="button"
+            className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[18px] border-[3px] border-neo-ink bg-white text-[10px] font-black leading-none shadow-neo-sm transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50 ${
+              webSearchEnabled ? "bg-neo-blue" : ""
+            }`}
+            disabled={isStreaming}
+            onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+          >
+            <span className="mb-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-neo-ink bg-neo-secondary text-[12px]">
+              网
+            </span>
             {webSearchEnabled ? "联网开" : "联网"}
           </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <textarea className="neo-input flex-1 resize-none" rows={1} maxLength={2000} placeholder="输入你的问题..." disabled={isStreaming} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleInputSend(); } }} />
-          <button type="button" className="neo-button px-4 py-3" disabled={!inputValue.trim() || isStreaming} onClick={handleInputSend}>
+          <textarea
+            className="min-h-14 flex-1 resize-none rounded-[22px] border-[3px] border-neo-ink bg-neo-bg px-4 py-3 text-sm font-bold leading-relaxed text-neo-ink shadow-neo-sm placeholder:text-neo-ink/35 focus-visible:outline-none disabled:opacity-60"
+            rows={1}
+            maxLength={2000}
+            placeholder="输入你的问题..."
+            disabled={isStreaming}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleInputSend();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="h-14 shrink-0 rounded-full border-[3px] border-neo-ink bg-neo-accent px-4 text-sm font-black text-neo-ink shadow-neo-sm transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!inputValue.trim() || isStreaming}
+            onClick={handleInputSend}
+          >
             {isStreaming ? "生成中" : "发送"}
           </button>
         </div>
@@ -2089,24 +2197,57 @@ export default function ChatPage() {
 
       {/* ── History Drawer ── */}
       {showHistory ? (
-        <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setShowHistory(false)}>
-          <div className="absolute right-0 top-0 bottom-0 w-[80%] max-w-sm border-l-[3px] border-neo-ink bg-white" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b-[3px] border-neo-ink p-4">
-              <h2 className="text-lg font-black">最近记录</h2>
-              <button type="button" className="neo-badge bg-white" onClick={() => setShowHistory(false)}>关闭</button>
+        <div className="fixed inset-0 z-50 bg-black/35" onClick={() => setShowHistory(false)}>
+          <div
+            className="absolute bottom-0 right-0 top-0 flex w-[82%] max-w-sm flex-col border-l-[3px] border-neo-ink bg-white shadow-[-6px_0_0_0_#1e293b]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b-[3px] border-neo-ink bg-neo-secondary p-4">
+              <h2 className="text-xl font-black">最近记录</h2>
+              <button
+                type="button"
+                className="neo-button-secondary bg-white px-4 py-2 text-xs"
+                onClick={() => setShowHistory(false)}
+              >
+                关闭
+              </button>
             </div>
-            <button type="button" className="neo-button mx-4 mt-4 w-[calc(100%-2rem)] justify-center" onClick={() => { setShowHistory(false); handleNewSession(); }}>开启新对话</button>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {sessions.length === 0 ? <p className="text-sm font-bold text-neo-ink/50">暂无聊天记录</p> : null}
+            <button
+              type="button"
+              className="neo-button mx-4 mt-4 justify-center"
+              onClick={() => {
+                setShowHistory(false);
+                handleNewSession();
+              }}
+            >
+              开启新对话
+            </button>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              {sessions.length === 0 ? (
+                <p className="py-12 text-center text-sm font-bold text-neo-ink/50">暂无聊天记录</p>
+              ) : null}
               {sessions.map((session) => {
                 const nb = visibleNotebooks.find((n) => n.id === session.notebookId);
                 return (
-                  <div key={session.id} className={`border-[3px] border-neo-ink p-3 shadow-neo-sm ${session.id === currentSessionId ? "bg-neo-secondary" : "bg-white"}`}>
+                  <div
+                    key={session.id}
+                    className={`rounded-[24px] border-[3px] border-neo-ink p-3 shadow-neo-sm ${
+                      session.id === currentSessionId ? "bg-neo-secondary" : "bg-white"
+                    }`}
+                  >
                     <div className="cursor-pointer" onClick={() => handleSelectSession(session)}>
-                      <p className="text-sm font-black truncate">{session.title}</p>
-                      <p className="mt-1 text-[10px] font-bold text-neo-ink/50">{nb?.name || "未知"} · {formatDate(session.updatedAt)} · {session.messages?.length || 0}条</p>
+                      <p className="truncate text-sm font-black">{session.title}</p>
+                      <p className="mt-1 text-[10px] font-bold text-neo-ink/50">
+                        {nb?.name || "未知"} · {formatDate(session.updatedAt)} · {session.messages?.length || 0}条
+                      </p>
                     </div>
-                    <button type="button" className="mt-2 text-[10px] font-black text-red-600" onClick={() => handleDeleteSessionById(session.id)}>删除</button>
+                    <button
+                      type="button"
+                      className="mt-3 rounded-full border-2 border-neo-ink bg-neo-accent px-3 py-1 text-[10px] font-black text-neo-ink shadow-neo-xs"
+                      onClick={() => handleDeleteSessionById(session.id)}
+                    >
+                      删除
+                    </button>
                   </div>
                 );
               })}
