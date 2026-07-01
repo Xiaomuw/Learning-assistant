@@ -20,6 +20,7 @@ env/
 node_modules/
 .next/
 .swc/
+*.tsbuildinfo
 dist/
 build/
 out/
