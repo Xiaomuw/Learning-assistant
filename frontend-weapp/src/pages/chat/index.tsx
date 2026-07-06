@@ -1592,9 +1592,6 @@ export default function ChatPage() {
           </Button>
         </View>
       </View>
-
-      <Text className="team-credit">第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手</Text>
-
       <ScrollView className="message-list" scrollY scrollIntoView="chat-bottom">
         <View className="message-list-inner">
           {messages.map((message, index) => (

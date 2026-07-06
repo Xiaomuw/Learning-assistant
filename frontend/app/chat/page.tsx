@@ -61,8 +61,6 @@ const EMPTY_MEMORY: Memory = {
 const LEGACY_DUPLICATE_QUALITY_GATE_TEXT = "发现重复题目";
 const LEGACY_DUPLICATE_QUALITY_GATE_NOTICE =
   "当前服务返回了旧质量门策略的重复题失败结果。请确认后端已重启到最新代码后重试；新策略会复用已有题，不会因为题库已有相似题整包失败。";
-const CHAT_TEAM_CREDIT =
-  "第六组：方励志、周江杰、黄思炜、朱高辉_Agent学习助手";
 const EMPTY_CHAT_PROMPTS = [
   "这个概念怎么理解？",
   "帮我出几道题",
@@ -2039,11 +2037,6 @@ export default function ChatPage() {
           </div>
         </div>
       </header>
-
-      <p className="shrink-0 truncate px-5 py-1 text-[10px] font-bold text-neo-ink/35">
-        {CHAT_TEAM_CREDIT}
-      </p>
-
       {/* ── Messages ── */}
       <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-[132px] pt-2">
         {messages.length === 0 ? (
