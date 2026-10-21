@@ -8,6 +8,15 @@ This document is a **plan**, not authorization to merge, rewrite history or depl
 2. [PR #3 — OSS readiness](https://github.com/Xiaomuw/Learning-assistant/pull/3) must be stacked **on top of PR #6** for review. It adds the Apache-2.0 proposal, maintenance policies, English README, historical 530-ID review ledger and **dual-mode** audit script that also works when all five JSONs are absent.
 3. A combined CI run must verify both the proposed public-data-boundary workflow and the OSS quality workflow against the same tree.
 
+## Separate verified security update
+
+[Draft PR #7 — Next.js 16.4.2 and React 19.3.0 security migration](https://github.com/Xiaomuw/Learning-assistant/pull/7) targets `main` independently. Its GitHub Actions [verified npm/TypeScript/build/proxy checks](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39618628848), **production Docker HTTP check**, and npm production dependency audit (0 vulnerabilities) passed on 2026-10-21. The PR remains unmerged and still requires real FastAPI integration/staging validation.
+
+- PR #7 may be reviewed independently of the corpus removal, but its merge must be explicitly approved, and later PRs should rebase if main changes.
+- If PR #6 and PR #3 are reviewed first, review PR #7's diff again on the resulting main, then run all shared CI. This security PR must not override or reintroduce removed question data.
+- Once PR #7 lands, update README/security documentation that describes **Next.js 14.2.29** as the deployed default.
+- The stacked PR #3 quality workflow now tests its H5 and Taro clients on **Node 22** for forward compatibility with Next.js 16; it still tests React 18 on its own branch until PR #7 is merged.
+
 ## Non-negotiable checks before any merge
 
 - [ ] The combined current tree includes **none** of the five removed JSON banks; the ID-only ledger is not question content.

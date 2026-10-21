@@ -60,6 +60,12 @@ Use [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md): draft PR #6 establishes the data-fre
 - [ ] Triage genuine community issues and record decisions transparently
 - [ ] Track genuine users, external contributors, reuse and adoption without manipulating metrics
 
+## Security upgrade coordination
+
+- [x] [Draft PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7) upgrades the old Next.js to version 16.4.2 and React 19.3.0, with **3/3 CI jobs passed** including production Docker smoke and zero reported production npm vulnerabilities ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39618628848)).
+- [ ] Obtain manual real-backend end-to-end verification, then approve/review merge of PR #7 into `main`; the draft is **not** a released fix.
+- [ ] Remove scoped React Hooks migration exceptions and review remaining lint warnings when safe ([issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8)); this is follow-up maintenance work.
+
 ## 5. OpenAI Codex for Open Source application
 
-Once public licensing, project quality and true adoption are better established, apply through the official [Codex for Open Source form](https://openai.com/form/codex-for-oss/). The program looks at real maintenance, usage, and ecosystem relevance. Avoid representing synthetic metrics or a self-authored showcase as broad adoption.
+See [truthful application draft and evidence checklist](CODEX_FOR_OSS_APPLICATION_DRAFT.md). Once public licensing, project quality and true adoption are better established, apply through the official [Codex for Open Source form](https://openai.com/form/codex-for-oss/). The program looks at real maintenance, usage, and ecosystem relevance. Avoid representing synthetic metrics or a self-authored showcase as broad adoption.
