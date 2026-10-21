@@ -56,3 +56,48 @@ jobs:
       - name: Verification code regression
         working-directory: backend
         run: python -m unittest -v tests.test_auth_verification
+
+  next-fastapi-http:
+    name: Next.js to real FastAPI HTTP authentication
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: ephemeral_ci_only
+          POSTGRES_DB: learning_assistant_web_e2e_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d learning_assistant_web_e2e_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://test_user:ephemeral_ci_only@127.0.0.1:5432/learning_assistant_web_e2e_test
+      LANGGRAPH_POSTGRES_URL: postgresql://test_user:ephemeral_ci_only@127.0.0.1:5432/learning_assistant_web_e2e_test
+      NEXT_TELEMETRY_DISABLED: '1'
+      INTERNAL_API_BASE: http://127.0.0.1:18080/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Reproducible frontend install and build
+        working-directory: frontend
+        run: |
+          npm ci --no-fund --no-audit
+          npm run build
+      - name: Full HTTP auth flow with disposable DB and loopback SMTP sink
+        run: python scripts/smoke_real_auth.py --allow-disposable-db
