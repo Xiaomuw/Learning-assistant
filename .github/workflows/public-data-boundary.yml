@@ -14,7 +14,7 @@ jobs:
     name: Synthetic data and no bundled web-question bank
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -48,7 +48,7 @@ jobs:
       GRAPH_EVAL_LANGSMITH: 'false'
       JWT_SECRET_KEY: ci-only-random-string-longer-than-thirty-two-characters
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
