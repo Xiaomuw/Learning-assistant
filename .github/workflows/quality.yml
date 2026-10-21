@@ -22,6 +22,10 @@ jobs:
         run: python -m compileall -q backend/app backend/tests backend/scripts
       - name: Verify architecture boundaries
         run: python -m unittest discover -s backend/tests -p test_architecture_boundaries.py -v
+      - name: Provenance-audit unit tests (synthetic data only)
+        run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Question-bank structure and pending rights report
+        run: python scripts/audit_question_bank_provenance.py --json
 
   web-lint:
     name: Next.js lint
