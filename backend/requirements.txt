@@ -46,4 +46,4 @@ PyJWT>=2.10.1                 # JWT auth tokens
 loguru==0.7.3
 
 # ---------- Web Search ----------
-tavily-python>=0.5.0            # 知识库不足时的网络搜索回退
+tavily-python>=0.8.5            # 知识库不足时的网络搜索回退
