@@ -2,7 +2,7 @@
 
 一个面向移动端 H5 与微信小程序的 AI 学习助手。当前正式栈是 **FastAPI + LangGraph + LangChain + PostgreSQL/PGVector + Next.js + Taro**。
 
-用户围绕 **notebook / 笔记本** 组织资料和练习：上传 PDF/URL 或使用内置题库后，系统通过 RAG 问答、选择题练习、学习事件和掌握度快照持续辅助学习。后端 wire、数据库和部分历史字段仍保留 `subject_id` 兼容命名；产品和前端语义优先使用 notebook。
+用户围绕 **notebook / 笔记本** 组织资料和练习：上传 PDF/URL 或导入自己有权使用的题库后，系统通过 RAG 问答、选择题练习、学习事件和掌握度快照持续辅助学习。后端 wire、数据库和部分历史字段仍保留 `subject_id` 兼容命名；产品和前端语义优先使用 notebook。
 
 > 当前正式运行时只支持 **PostgreSQL + PGVector**。MySQL / SQLite / Chroma 只作为历史迁移语境保留，不是当前主运行方案。
 
@@ -11,7 +11,7 @@
 - 账号与鉴权：邮箱验证码注册、登录、refresh、logout、修改密码；Web 端使用 HttpOnly Cookie，小程序端使用 Bearer token。
 - Notebook 知识库：支持 PDF、URL、自动章节、题库内容入库，向量检索落在 PGVector。
 - 主问答：`LearningOrchestratorGraph` 做决策边界和子图路由，`QAGraph` 负责解释、教学、证据判断、RAG、工具 fallback 与学习事件。
-- 练习与掌握度：`QuestionGenerationGraph` 生成 4 选 1 单选题，本地题库优先、AI 补题兜底；`MasteryEvaluationGraph` 消费 attempts / learning events 并写入 `mastery_snapshots`。
+- 练习与掌握度：`QuestionGenerationGraph` 生成 4 选 1 单选题，优先使用开发者已授权导入的本地题库、AI 补题兜底；`MasteryEvaluationGraph` 消费 attempts / learning events 并写入 `mastery_snapshots`。
 - 外部增强：联网搜索通过 `web_search` capability 受策略控制，可选 Tavily / HTTP MCP；LangSmith 可选观测，配置缺失时主业务 fail-open。
 - 多端交付：Next.js H5 使用 SSE 流式问答；微信小程序支持 chunked SSE，云托管不可流式时自动降级到同步接口和后台 job 轮询。
 
@@ -80,9 +80,18 @@ backend/
     shared/          # 共享 schema 和契约
 frontend/            # Next.js 14 App Router H5
 frontend-weapp/      # Taro 4 + React 微信小程序
-data/                # 内置 408 题库与导入数据
+data/                # 题库使用说明；不附带来源尚未明确的原 530 道题
 docs/                # 架构、接口、数据库、部署和交接文档
 ```
+
+## 题库数据与授权
+
+公开项目已在本次提议变更中移除通过 AI 联网搜索现有题库后整理的 530 道题（原 `data/practice_questions/` 下 5 个 JSON）。因为原始来源和再分发授权尚未确认，这些题目**不作为开源数据继续提供**。
+
+- **保留** AI 问答、LangGraph 出题、知识点掌握度、练习记录及 CSV/JSON/Excel 导入能力。
+- 提供两道 [重新编写的演示题](examples/practice_questions.json) 验证导入数据格式；不保证已初始化对应的数据库知识点。
+- 将自己拥有使用权限的题库放在 Git 忽略的本机目录，按 [自备题库指引](docs/PUBLIC_DATA_POLICY.md) 显式指定导入路径。不要把教材、线上题库或用户资料直接重新提交公开仓库。
+- 从当前树删除文件**不会抹去 Git 历史、Fork 或外部缓存**；历史处理与版权问题仍待单独审查。本 Draft PR 不会直接修改 `main` 或服务器数据库。
 
 ## 本地启动
 

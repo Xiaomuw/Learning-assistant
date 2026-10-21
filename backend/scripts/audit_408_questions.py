@@ -5,10 +5,9 @@
 2) 按 12% 或自定义比例分层抽检
 3) 输出可解释报告（通过/警告/不建议保留 + 风险 Top）
 
-示例：
-  python scripts/audit_408_questions.py
-  python scripts/audit_408_questions.py --path data/practice_questions/all_408.json --seed 2026
-  python scripts/audit_408_questions.py --path data/practice_questions/all_408.json --sample-size 64 --json
+请仅使用合法取得的私有题库（需显式传入文件路径）：
+  python scripts/audit_408_questions.py --path /secure/authorized-questions.json --seed 2026
+  python scripts/audit_408_questions.py --path /secure/authorized-questions.json --sample-size 64 --json
 """
 
 from __future__ import annotations
@@ -837,8 +836,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="408 题库质量抽检")
     parser.add_argument(
         "--path",
-        default="data/practice_questions/all_408.json",
-        help="题库 JSON 文件路径（默认 data/practice_questions/all_408.json）",
+        required=True,
+        help="显式提供具有合法使用权限的题库 JSON 文件路径",
     )
     parser.add_argument(
         "--sample-size",

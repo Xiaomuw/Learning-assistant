@@ -1,0 +1,48 @@
+[
+  {
+    "question_id": "oss-demo-preorder-01",
+    "subject_id": "data-structure",
+    "subject_name": "数据结构与算法",
+    "chapter_name": "树与二叉树",
+    "topic_name": "二叉树遍历",
+    "concept_id": "data-structure.binary-tree.traversal",
+    "concept_name": "二叉树遍历",
+    "difficulty": "basic",
+    "stem": "按照二叉树的前序遍历规则，访问结点的基本顺序是什么？",
+    "options": {
+      "A": "根结点、左子树、右子树",
+      "B": "左子树、根结点、右子树",
+      "C": "左子树、右子树、根结点",
+      "D": "右子树、左子树、根结点"
+    },
+    "answer": "A",
+    "explanation": "前序遍历先访问根结点，再依次遍历左子树与右子树。",
+    "knowledge_points": [
+      "前序遍历"
+    ],
+    "common_trap": "将前序遍历误认为中序遍历。"
+  },
+  {
+    "question_id": "oss-demo-preorder-02",
+    "subject_id": "data-structure",
+    "subject_name": "数据结构与算法",
+    "chapter_name": "树与二叉树",
+    "topic_name": "二叉树遍历",
+    "concept_id": "data-structure.binary-tree.traversal",
+    "concept_name": "二叉树遍历",
+    "difficulty": "basic",
+    "stem": "一棵二叉树只有根结点 R、左孩子 L 和右孩子 T，它的前序遍历结果是什么？",
+    "options": {
+      "A": "L R T",
+      "B": "R L T",
+      "C": "L T R",
+      "D": "T L R"
+    },
+    "answer": "B",
+    "explanation": "前序遍历依次访问根结点 R、左孩子 L 和右孩子 T。",
+    "knowledge_points": [
+      "二叉树遍历"
+    ],
+    "common_trap": "先访问叶结点而忘记先访问根结点。"
+  }
+]
