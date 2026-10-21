@@ -1,0 +1,24 @@
+name: Public question-data boundary
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  public-data:
+    name: Synthetic data and no bundled web-question bank
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile Python sources and tests
+        run: python -m compileall -q backend/app backend/scripts backend/tests scripts
+      - name: Validate public data boundary and synthetic examples
+        run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
