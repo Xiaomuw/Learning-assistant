@@ -10,6 +10,8 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [ ] Review direct and transitive dependency licenses and generate any required notices.
 - [ ] Scan repository content and Git history for credentials, personal data, tokens, user documents and unsafe sample configuration. Revoke exposed secrets as needed.
 - [ ] Review auth, upload, model tools and request isolation for security-sensitive behavior.
+- [ ] Review development Compose port exposure and default database credentials before network deployment.
+- [ ] Complete [data and release audit](DATA_AND_RELEASE_AUDIT.md).
 
 ## 2. Repository foundation (proposed in the OSS-readiness PR)
 
@@ -19,13 +21,16 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [x] Proposed `SECURITY.md` and structured issue/PR templates
 - [x] Proposed lightweight GitHub Actions CI checks (not a substitute for integration tests)
 - [ ] Confirm the copyright audit before merging the license proposal into `main`
-- [ ] Verify new GitHub Actions jobs on an actual PR run and fix failures
+- [x] Initial PR CI passed for commit `f1e5b66`: Python syntax, Next.js lint and Taro typecheck.
+- [ ] Verify expanded CI checks after the follow-up commit
 
 ## 3. Developer experience and adoption
 
 - [ ] Add an architecture image and screenshots that contain no private information
-- [ ] Provide optional minimal sample data with verified original or reusable licensing
+- [x] Provide two newly drafted synthetic example questions (not a replacement for the 408 bank)
+- [ ] Resolve permission or replace unaudited question-bank material
 - [ ] Run the documented clean-room setup and record successful environment versions
+- [ ] Eliminate the fresh-clone dependency on ignored `backend/storage/data/curriculum/` fixtures in some tests
 - [ ] Provide a reproducible demo, clearly labeled if experimental
 - [ ] Describe target developers, use cases and how this differs from existing LangGraph examples
 - [ ] Set accurate repository description and topics using GitHub settings

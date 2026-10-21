@@ -20,6 +20,8 @@ jobs:
           python-version: '3.13'
       - name: Compile Python sources and tests
         run: python -m compileall -q backend/app backend/tests backend/scripts
+      - name: Verify architecture boundaries
+        run: python -m unittest discover -s backend/tests -p test_architecture_boundaries.py -v
 
   web-lint:
     name: Next.js lint
@@ -36,9 +38,13 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - name: Build Next.js
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
 
   weapp-types:
-    name: Taro typecheck
+    name: Taro lint, types and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,3 +58,8 @@ jobs:
           cache-dependency-path: frontend-weapp/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
+      - name: Build Taro mini-program
+        run: npm run build:weapp
+        env:
+          TARO_APP_ID: touristappid

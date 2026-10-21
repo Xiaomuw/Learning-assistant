@@ -30,6 +30,8 @@ cp backend/.env.example backend/.env
 docker compose up -d --build
 ```
 
+Development host ports (from `docker-compose.yml`) are **5434 for Postgres, 8003 for FastAPI, and 3003 for Next.js**. The production Compose file is different. The developer-only default database password and published host ports are unsafe on an untrusted network; restrict access and never reuse these defaults for production.
+
 For a native backend environment:
 
 ```bash
@@ -43,7 +45,7 @@ python scripts/bootstrap_app_data.py --confirm BOOTSTRAP_APP_DATA
 python -m app.main
 ```
 
-Do not commit real `.env` files, user content, credentials or personal data.
+Do not commit real `.env` files, user content, credentials or personal data. The mini-program uses a generic `touristappid` by default; set `TARO_APP_ID` or `WECHAT_MINI_APP_ID` locally for your own WeChat application and keep `project.private.config.json` ignored.
 
 ## Validation
 
@@ -57,7 +59,7 @@ make check-frontend
 make check-weapp
 ```
 
-These commands have different environment requirements; see the [main README](README.md). The initial GitHub Actions workflow only provides lightweight syntax/lint/type checks. It does **not** replace authenticated smoke tests, live Postgres integration tests or deployment verification.
+These commands have different environment requirements; see the [main README](README.md). GitHub Actions also checks architecture boundaries and builds the web/mini-program clients; these checks still do not exercise the complete backend. It does **not** replace authenticated smoke tests, live Postgres integration tests or deployment verification.
 
 ## Open source and contributing
 
@@ -65,7 +67,8 @@ These commands have different environment requirements; see the [main README](RE
 - [Contributing](CONTRIBUTING.md) and [maintenance process](MAINTAINERS.md)
 - [Security reporting](SECURITY.md)
 - [Third-party dependency notice](THIRD_PARTY.md)
-- [Open-source readiness checklist](docs/OPEN_SOURCE_READINESS.md)
+- [Open-source readiness checklist](docs/OPEN_SOURCE_READINESS.md) and [data/release audit](docs/DATA_AND_RELEASE_AUDIT.md)
+- [Synthetic practice-question example](examples/README.md) (not a replacement for the full bank)
 
 **Important:** The bundled 408 practice-question datasets are *not* covered by this project's Apache-2.0 grant. Their provenance and public redistribution permissions remain unverified; see the [dataset README](data/practice_questions/README.md).
 

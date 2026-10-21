@@ -139,11 +139,13 @@ cp backend/.env.example backend/.env
 docker compose up -d --build
 ```
 
-默认映射：
+默认映射（根目录 `docker-compose.yml` 开发环境；与生产 Compose 不同）：
 
-- PostgreSQL: `127.0.0.1:5433`
-- Backend: `127.0.0.1:8002`
-- Frontend: `127.0.0.1:3001`
+- PostgreSQL: `127.0.0.1:5434`
+- Backend: `127.0.0.1:8003`
+- Frontend: `127.0.0.1:3003`
+
+开发 Compose 将这些端口绑定到宿主机，数据库默认凭据仅供隔离开发环境使用。请限制网络访问，生产环境不得沿用默认数据库密码或开发配置。
 
 生产部署参考 [docs/DEPLOY.md](docs/DEPLOY.md) 与 `docker-compose.prod.yml`。
 
