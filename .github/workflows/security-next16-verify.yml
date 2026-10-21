@@ -36,6 +36,8 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
           INTERNAL_API_BASE: http://127.0.0.1:18080/api
         run: npm run build
+      - name: Verify committed configuration remains unchanged
+        run: git diff --exit-code -- tsconfig.json package.json package-lock.json
       - name: HTTP routing and API/SSE smoke
         env:
           NEXT_TELEMETRY_DISABLED: "1"
