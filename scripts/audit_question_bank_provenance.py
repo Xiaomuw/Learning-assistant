@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Check question-bank structure and review metadata without printing question text.
+"""Audit current question-bank files and a separate historical provenance ledger.
 
-This is an inventory and mechanical release gate, NOT a copyright determination.
-Default mode checks JSON shape/mirror consistency and reports uncleared data.
---release-gate fails unless every present question has documented human clearance.
+This is a structural and bookkeeping checker, NOT a copyright determination.
+The public source tree may contain the old question corpus (legacy PR state) or
+may have removed all five files (after the data-separation PR). In both cases,
+the 530-ID historical review ledger must remain readable and truthful.
+
+--release-gate deliberately fails on a retired/uncleared historical corpus:
+absence from HEAD is not proof that Git history or third-party copies are safe.
 """
 from __future__ import annotations
 
@@ -39,9 +43,7 @@ REQUIRED_LEDGER_KEYS = frozenset(
         "notes",
     }
 )
-VALID_STATUSES = frozenset(
-    {"REVIEW_REQUIRED", "CLEARED", "REPLACE", "REMOVE"}
-)
+VALID_STATUSES = frozenset({"REVIEW_REQUIRED", "CLEARED", "REPLACE", "REMOVE"})
 
 
 def _read_questions(path: Path, problems: list[str]) -> list[dict]:
@@ -61,16 +63,30 @@ def audit(
     mirror_dir: Path = DATA_DIR,
     ledger_path: Path = LEDGER,
 ) -> dict:
-    """Return structural findings and owner-entered licensing-review state.
+    """Check file boundaries and historical review bookkeeping.
 
-    A CLEARED row indicates a documented human claim, NOT a legal certification.
-    No question wording, search URLs, or private evidence is printed.
+    An owner-entered CLEARED state is not proof of copyright permission.
+    Only identifiers/statuses are shown; no question wording or evidence files
+    are printed.
     """
     problems: list[str] = []
-    canonical = _read_questions(canonical_path, problems)
+    canonical_present = canonical_path.is_file()
+    mirror_paths = [mirror_dir / name for name in MIRRORS]
+    any_mirror_present = any(p.exists() for p in mirror_paths)
+    retired_from_current_tree = not canonical_present and not any_mirror_present
+
+    if not canonical_present and any_mirror_present:
+        problems.append("Canonical question file is missing while a mirror still exists")
+    expected_paths = {canonical_path.resolve(), *(p.resolve() for p in mirror_paths)}
+    if mirror_dir.exists():
+        for path in sorted(mirror_dir.glob("*.json")):
+            if path.resolve() not in expected_paths:
+                problems.append(f"Unexpected public JSON corpus in question directory: {path.name}")
+
+    canonical = _read_questions(canonical_path, problems) if canonical_present else []
     question_by_id: dict[str, dict] = {}
     subjects: Counter[str] = Counter()
-    missing_provenance_keys = 0
+    without_provenance = 0
     for index, question in enumerate(canonical, start=1):
         qid = str(question.get("question_id") or "").strip()
         if not qid:
@@ -83,17 +99,21 @@ def audit(
         if missing:
             problems.append(f"{qid}: missing required keys {sorted(missing)}")
         subjects[str(question.get("concept_id") or "unknown").split(".")[0]] += 1
-        provenance = (
+        keys = (
             "source_url", "source_name", "source_title", "rights_holder",
-            "license", "license_or_permission", "prompt", "model_id"
+            "license", "license_or_permission", "prompt", "model_id",
         )
-        if not any(str(question.get(key) or "").strip() for key in provenance):
-            missing_provenance_keys += 1
+        if not any(str(question.get(key) or "").strip() for key in keys):
+            without_provenance += 1
 
     mirror_ids: set[str] = set()
     mirror_count = 0
-    for name in MIRRORS:
-        rows = _read_questions(mirror_dir / name, problems)
+    for path in mirror_paths:
+        if not path.is_file():
+            if canonical_present:
+                problems.append(f"Missing expected subject mirror: {path.name}")
+            continue
+        rows = _read_questions(path, problems)
         for row in rows:
             mirror_count += 1
             qid = str(row.get("question_id") or "").strip()
@@ -101,7 +121,7 @@ def audit(
                 problems.append(f"Duplicate ID across mirrors: {qid}")
             mirror_ids.add(qid)
             if qid not in question_by_id:
-                problems.append(f"Mirror {name} has an unknown ID: {qid}")
+                problems.append(f"Mirror {path.name} has an unknown ID: {qid}")
             elif row != question_by_id[qid]:
                 problems.append(f"Mirror mismatch for ID: {qid}")
     for qid in question_by_id.keys() - mirror_ids:
@@ -136,35 +156,56 @@ def audit(
     except (OSError, UnicodeError, csv.Error) as exc:
         problems.append(f"Could not read review ledger: {type(exc).__name__}")
 
-    for qid in question_by_id.keys() - ledger_rows.keys():
-        problems.append(f"Missing ledger row: {qid}")
-    for qid in ledger_rows.keys() - question_by_id.keys():
-        problems.append(f"Ledger references removed/unknown ID: {qid}")
+    # When the current corpus exists, every ID must have a matching ledger
+    # entry. Once all five corpus files are removed, the 530-ID ledger remains
+    # historical metadata and must NOT be treated as orphaned source data.
+    if not retired_from_current_tree:
+        for qid in question_by_id.keys() - ledger_rows.keys():
+            problems.append(f"Missing ledger row: {qid}")
+        for qid in ledger_rows.keys() - question_by_id.keys():
+            problems.append(f"Ledger references unknown current ID: {qid}")
 
-    cleared = sum(
-        1
-        for row in ledger_rows.values()
+    cleared_ids = {
+        qid for qid, row in ledger_rows.items()
         if row.get("review_status") == "CLEARED"
         and str(row.get("license_or_permission") or "").strip()
         and str(row.get("evidence_ref") or "").strip()
+    }
+    cleared_current = len(cleared_ids & question_by_id.keys())
+    unresolved_historical = len(ledger_rows.keys() - cleared_ids)
+    current_boundary_passes = not problems and (
+        retired_from_current_tree
+        or (bool(question_by_id) and cleared_current == len(question_by_id))
     )
-    total = len(question_by_id)
-    review_complete = total > 0 and cleared == total and not problems
+
+    # A broader release declaration requires separate history/legal/dependency
+    # review, which this script cannot prove. Keep it blocked when the old
+    # corpus is retired and the historical review ledger is unresolved.
+    release_gate_passes = (
+        bool(question_by_id)
+        and cleared_current == len(question_by_id)
+        and not problems
+    )
     return {
+        "dataset_state": "retired_from_current_tree" if retired_from_current_tree
+                         else "present_or_partially_removed",
         "canonical_questions": len(canonical),
-        "unique_question_ids": total,
+        "unique_question_ids": len(question_by_id),
         "mirror_questions": mirror_count,
         "concept_count": len({str(x.get("concept_id") or "") for x in canonical}),
         "subjects": dict(sorted(subjects.items())),
-        "canonical_rows_without_provenance": missing_provenance_keys,
+        "canonical_rows_without_provenance": without_provenance,
         "ledger_rows": len(ledger_rows),
         "review_statuses": dict(sorted(statuses.items())),
-        "documented_clearances": cleared,
-        "uncleared_questions": total - cleared,
+        "documented_clearances": len(cleared_ids),
+        "uncleared_questions": len(question_by_id) - cleared_current,
+        "unresolved_historical_ledger_entries": unresolved_historical,
+        "historical_review_required": bool(ledger_rows) and retired_from_current_tree,
+        "current_tree_data_boundary_passes": current_boundary_passes,
         "structural_error_count": len(problems),
         "structural_errors_preview": problems[:20],
         "human_review_required": True,
-        "release_gate_passes": review_complete,
+        "release_gate_passes": release_gate_passes,
     }
 
 
@@ -181,10 +222,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         print(
-            f"Questions={report['canonical_questions']} "
+            f"state={report['dataset_state']} "
+            f"current={report['canonical_questions']} "
             f"ledger={report['ledger_rows']} "
-            f"cleared={report['documented_clearances']} "
-            f"uncleared={report['uncleared_questions']} "
+            f"historical_unresolved={report['unresolved_historical_ledger_entries']} "
             f"errors={report['structural_error_count']} "
             f"release_ready={report['release_gate_passes']}"
         )

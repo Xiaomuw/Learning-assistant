@@ -69,6 +69,42 @@ class SourceReviewAuditTests(unittest.TestCase):
         self.assertEqual(report["uncleared_questions"], 1)
         self.assertFalse(report["release_gate_passes"])
 
+    def retire_corpus(self) -> None:
+        self.canonical.unlink()
+        for name in MIRRORS:
+            (self.data_dir / name).unlink()
+
+    def test_removed_current_corpus_keeps_history_ledger_without_orphan_errors(self) -> None:
+        self.retire_corpus()
+        report = self.report()
+        self.assertEqual(report["dataset_state"], "retired_from_current_tree")
+        self.assertEqual(report["canonical_questions"], 0)
+        self.assertEqual(report["ledger_rows"], 1)
+        self.assertEqual(report["unresolved_historical_ledger_entries"], 1)
+        self.assertEqual(report["structural_error_count"], 0)
+        self.assertTrue(report["current_tree_data_boundary_passes"])
+        self.assertTrue(report["historical_review_required"])
+        self.assertFalse(report["release_gate_passes"])
+
+    def test_partial_deletion_is_rejected(self) -> None:
+        self.canonical.unlink()
+        report = self.report()
+        self.assertGreater(report["structural_error_count"], 0)
+        self.assertFalse(report["current_tree_data_boundary_passes"])
+
+    def test_unexpected_public_json_is_rejected_even_when_originals_removed(self) -> None:
+        self.retire_corpus()
+        (self.data_dir / "unreviewed-extra.json").write_text("[]", encoding="utf-8")
+        report = self.report()
+        self.assertGreater(report["structural_error_count"], 0)
+        self.assertFalse(report["current_tree_data_boundary_passes"])
+
+    def test_missing_historical_ledger_is_not_silently_accepted(self) -> None:
+        self.retire_corpus()
+        self.ledger.unlink()
+        report = self.report()
+        self.assertGreater(report["structural_error_count"], 0)
+
     def test_mirror_drift_is_detected(self) -> None:
         changed = {**self.question, "answer": "B"}
         (self.data_dir / MIRRORS[0]).write_text(
