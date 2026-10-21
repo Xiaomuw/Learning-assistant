@@ -4,7 +4,7 @@
 
 Learning Assistant is an experimental, multi-client AI study assistant built with **FastAPI, LangGraph, LangChain, PostgreSQL/PGVector, Next.js and Taro**. It combines notebook-based retrieval-augmented question answering, multiple-choice practice, learning events, and knowledge-mastery tracking.
 
-> **Project status:** Open-source readiness work is in progress. This is not a claim of production readiness, independent security review, or established public adoption. Check [current project status](docs/project-current-status.md) before deploying.
+> **Project status:** Open-source readiness work is in progress. This is not a claim of production readiness, independent security review, or established public adoption. The pinned **Next.js 14.2.29** is within public security-advisory affected ranges: do not expose this build publicly before upgrading and validating compatibility ([issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4)). Check [current project status](docs/project-current-status.md) before deploying.
 
 ## Features and architecture
 

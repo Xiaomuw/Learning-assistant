@@ -10,6 +10,7 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [ ] Review direct and transitive dependency licenses and generate any required notices.
 - [ ] Scan repository content and Git history for credentials, personal data, tokens, user documents and unsafe sample configuration. Revoke exposed secrets as needed.
 - [ ] Review auth, upload, model tools and request isolation for security-sensitive behavior.
+- [ ] Upgrade the affected Next.js 14.2.29 dependency and regression-test the web client ([issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4)).
 - [ ] Review development Compose port exposure and default database credentials before network deployment.
 - [ ] Complete [data and release audit](DATA_AND_RELEASE_AUDIT.md).
 
@@ -22,13 +23,13 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [x] Proposed lightweight GitHub Actions CI checks (not a substitute for integration tests)
 - [ ] Confirm the copyright audit before merging the license proposal into `main`
 - [x] Initial PR CI passed for commit `f1e5b66`: Python syntax, Next.js lint and Taro typecheck.
-- [ ] Verify expanded CI checks after the follow-up commit
+- [x] Expanded CI passed on commit `11a217b` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39600371744)): architecture tests, Next.js lint/build, Taro lint/type/build.
 
 ## 3. Developer experience and adoption
 
 - [ ] Add an architecture image and screenshots that contain no private information
 - [x] Provide two newly drafted synthetic example questions (not a replacement for the 408 bank)
-- [ ] Resolve permission or replace unaudited question-bank material
+- [ ] Resolve permission or replace unaudited question-bank material ([issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5))
 - [ ] Run the documented clean-room setup and record successful environment versions
 - [ ] Eliminate the fresh-clone dependency on ignored `backend/storage/data/curriculum/` fixtures in some tests
 - [ ] Provide a reproducible demo, clearly labeled if experimental

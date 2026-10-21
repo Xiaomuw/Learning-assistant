@@ -11,7 +11,10 @@
 | Dev configuration | `docker-compose.yml` publishes Postgres 5434, backend 8003, frontend 3003 and uses a predictable database fallback password. | Restrict host access or bind loopback; never reuse defaults in production. |
 | Mini-program | The tracked project config included a specific developer AppID; this PR proposes `touristappid`. | Provide a local AppID via `TARO_APP_ID` / `WECHAT_MINI_APP_ID`, with private configuration ignored. |
 | Third-party code and packages | A complete resolved dependency-license/vulnerability and embedded-asset review has not been run. | Audit direct/transitive dependency licenses, advisories, assets and attribution. |
+| Known Next.js dependency vulnerability range | `frontend/package.json` pins `next@14.2.29`, a version included in publicly disclosed affected ranges. Actual exploitability depends on deployment/features. | Track [security upgrade #4](https://github.com/Xiaomuw/Learning-assistant/issues/4); upgrade to an actively patched major release with regression checks. |
 | Credentials and ownership | A comprehensive historical secret scan and code-contributor ownership review has not been verified. | Audit authorized repository and Git history; revoke any exposed secrets. |
+
+Tracked dataset rights: [issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5).
 
 ## Dataset provenance register (owner-completed)
 
@@ -28,6 +31,7 @@ Excluding a dataset from the repository Apache-2.0 scope does **not** authorize 
 ## Minimum release gates
 
 - [ ] Audit dataset provenance, upstream ownership and rights of all original/borrowed code and assets.
+- [ ] Upgrade Next.js and validate App Router compatibility ([issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4)).
 - [ ] Review licenses and active advisories of resolved direct/transitive dependencies.
 - [ ] Scan current tree and Git history for credentials and sensitive data, remediate if discovered.
 - [ ] Run a fresh-clone build with independent, redistributable test fixtures.
