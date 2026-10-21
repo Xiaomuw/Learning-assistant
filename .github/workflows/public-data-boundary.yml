@@ -1,0 +1,61 @@
+name: Public question-data boundary
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  public-data:
+    name: Synthetic data and no bundled web-question bank
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile Python sources and tests
+        run: python -m compileall -q backend/app backend/scripts backend/tests scripts
+      - name: Validate public data boundary and synthetic examples
+        run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
+  backend-postgres:
+    name: Authorized sample import and rebuild safety (isolated PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_only_password
+          POSTGRES_DB: learning_assistant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d learning_assistant_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://test_user:test_only_password@127.0.0.1:5432/learning_assistant_test
+      POSTGRES_TEST_STRICT: 'true'
+      LANGSMITH_TRACING: 'false'
+      GRAPH_EVAL_LANGSMITH: 'false'
+      JWT_SECRET_KEY: ci-only-random-string-longer-than-thirty-two-characters
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend test dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Test synthetic question import and rebuild safety
+        working-directory: backend
+        run: python -m unittest -v tests.test_practice_question_import tests.test_rebuild_408_project_data

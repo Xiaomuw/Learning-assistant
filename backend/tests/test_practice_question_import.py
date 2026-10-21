@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 import sys
 import unittest
-from collections import Counter
 from pathlib import Path
 
 
@@ -138,21 +137,33 @@ class PracticeQuestionImportTest(unittest.TestCase):
         self.assertEqual(items[0].source_name, "practice_question")
         self.assertEqual(items[0].concept_mapping_status, "matched")
 
-    def test_all_408_json_covers_53_concepts_with_ten_questions_each(self) -> None:
-        path = BACKEND_ROOT.parent / "data" / "practice_questions" / "all_408.json"
+    def test_synthetic_fixture_is_accepted_by_import_validator(self) -> None:
+        path = BACKEND_ROOT.parent / "examples" / "practice_questions.json"
         raw_items = self.repo.load_practice_question_json(path)
         result = self.repo.validate_practice_questions(raw_items, source_file=str(path))
 
         self.assertTrue(result.valid, [issue.as_dict() for issue in result.issues[:5]])
-        self.assertEqual(len(result.questions), 530)
-        counts = Counter(item["concept_id"] for item in result.questions)
-        difficulties = Counter((item["concept_id"], item["difficulty"]) for item in result.questions)
-        self.assertEqual(len(counts), 53)
-        self.assertEqual(set(counts.values()), {10})
-        for concept_id in counts:
-            self.assertEqual(difficulties[(concept_id, "basic")], 3)
-            self.assertEqual(difficulties[(concept_id, "medium")], 5)
-            self.assertEqual(difficulties[(concept_id, "hard")], 2)
+        self.assertEqual(len(result.questions), 2)
+        self.assertEqual(
+            {item["question_id"] for item in result.questions},
+            {"oss-demo-preorder-01", "oss-demo-preorder-02"},
+        )
+        self.assertEqual({item["concept_id"] for item in result.questions}, {CONCEPT_ID})
+        self.assertTrue(all(item["difficulty"] == "basic" for item in result.questions))
+
+    def test_rebuild_validator_accepts_small_authorized_fixture(self) -> None:
+        # Regression: a permitted local corpus no longer needs exactly 530
+        # questions, 53 concepts, or the old fixed difficulty distribution.
+        rebuild = importlib.import_module("scripts.rebuild_408_project_data")
+        path = BACKEND_ROOT.parent / "examples" / "practice_questions.json"
+        summary = rebuild._validate_question_file(path)
+
+        self.assertEqual(summary["question_count"], 2)
+        self.assertEqual(summary["concept_count"], 1)
+        self.assertEqual(summary["per_concept"], {"min": 2, "max": 2})
+        self.assertEqual(
+            summary["difficulty_distribution"], {"basic": 2, "medium": 0, "hard": 0}
+        )
 
 
 if __name__ == "__main__":

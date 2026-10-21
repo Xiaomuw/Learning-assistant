@@ -1,23 +1,22 @@
-# 408 Practice Question Data
+# Practice-question data / 题库数据说明
 
-This directory contains the committed 408 practice question source data.
+**This public source tree intentionally contains no web-collected practice-question JSON.**
 
-## Files
+The project owner confirmed that the previous 530 questions were collected through AI-assisted searches of existing online question banks, then reorganized. Their original source licenses and redistribution permissions are not established. As a precaution, the proposed public tree removes the five former JSON files rather than declaring them original or broadly reusable.
 
-- `all_408.json` is the authoritative import file used by backend scripts and tests. A backend test expects 530 questions across 53 concepts, but this count does not establish rights.
-- `data_structure.json`, `operating_system.json`, `computer_network.json`, and `computer_organization.json` are exact subject-level mirrors of `all_408.json`.
+**本仓库不再随代码附赠这批来源未核实的 530 道题**，但仍保留题库数据格式与导入程序。原有题目的来源、授权和历史传播问题需要另外处理；当前删除不代表已从 Git 历史或现有 Fork 中清除。
 
-## Maintenance
+## How to use your own authorized dataset
 
-- Keep `all_408.json` as the source of truth for bulk import and rebuild flows.
-- Keep the subject files synchronized with `all_408.json` when the question bank changes.
-- Do not commit generated review artifacts here or in the repository root, including files such as `b15r.json`, `408_review_result.json`, `preview.json`, or temporary merge/filter scripts.
-- Use `backend/scripts/audit_408_questions.py` for future question quality audits.
+- Small, newly drafted example: [examples/practice_questions.json](../../examples/practice_questions.json).
+- Put legally permitted private data under the ignored `data/private/` (or another non-public directory); do not `git add -f` web-collected materials.
+- Structured `practice_question` JSON import: `backend/scripts/import_questions.py` (requires an initialized local Postgres database and matching `kb_concept` IDs).
+- General CSV/JSON/Excel question-bank import: `backend/scripts/import_question_bank.py`.
+- For a quality audit, pass an explicit `--path` to `backend/scripts/audit_408_questions.py`.
+- Data rebuild/cleanup is a **destructive maintenance operation**. `backend/scripts/rebuild_408_project_data.py` requires an explicit `--questions-path` and, in confirmed mode, `--import-questions`. Do not run cleanup against production or user data.
 
-## Licensing and provenance — pending review
+See [public data policy and safe testing notes](../../docs/PUBLIC_DATA_POLICY.md), [Apache license scope](../../LICENSE-SCOPE.md) and the [historical ID-only review ledger](../provenance/408-source-review.csv). The ledger is a review record, **not** a substitute for the removed JSON files.
 
-The owner has confirmed that AI performed **web searches of existing online question banks and reorganized the results** into the committed practice data. Exact source URLs, authorship and redistribution permissions have **not** been established. These files are **explicitly excluded** from the project's root Apache-2.0 license grant. Do not assume this project's code license permits copying, remixing, or redistributing the question bank.
+## Rights and prior Git history
 
-Before bundling this dataset with releases or reusing it elsewhere, the maintainer must document legitimate sources and permissions for each dataset (and for third-party questions as necessary), or replace/remove material for which redistribution cannot be justified. Merely marking data as excluded does not cure any existing public distribution rights issue. See [LICENSE-SCOPE.md](../../LICENSE-SCOPE.md), the [530-ID source-review ledger](../provenance/408-source-review.csv), the [remediation plan](../../docs/QUESTION_BANK_REMEDIATION.md) and the [release audit](../../docs/DATA_AND_RELEASE_AUDIT.md).
-
-**中文提醒：**用户已确认 AI 联网搜索现有题库后整理成 530 道题，原始网址及再分发权限尚不明确；根目录 Apache-2.0 许可证**不授权**这些题库。若缺乏公开分发权利，应依法移除、替换或取得授权，不能把本说明当成合法分发证明。
+Removal from a draft branch does **not** erase older public commits, downloads, caches, forks or separately deployed databases. Do not claim full erasure or that legal status has been resolved. Treat any original corpus copies as unverified third-party material, preserve evidence in private storage only as lawfully appropriate, and assess history remediation separately.

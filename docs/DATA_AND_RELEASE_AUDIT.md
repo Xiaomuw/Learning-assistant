@@ -6,7 +6,7 @@
 
 | Area | Finding | Next action |
 | --- | --- | --- |
-| 408 practice bank | `data/practice_questions/` contains the canonical `all_408.json` and subject mirrors; an existing test expects 530 questions / 53 concepts. | Identify authors/rightsholders and permission to publicly redistribute all included questions and explanations, or remove/replace unauthorized material. |
+| Former 408 practice bank | The *main/legacy snapshot* contained `all_408.json` and four subject mirrors (530 questions / 53 concepts). [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) removes them from its current tree, **not from Git history**. | Keep the five files absent from the proposed public source tree; review the historic copies, rights and downstream mirrors. |
 | Untracked curriculum | `backend/app/application/notebooks/curriculum_seed.py` loads packages from `backend/storage/data/curriculum/`, under the ignored `backend/storage/` path. | Make fresh-clone tests independent of unpublished data, or supply legally redistributable fixtures. |
 | Dev configuration | `docker-compose.yml` publishes Postgres 5434, backend 8003, frontend 3003 and uses a predictable database fallback password. | Restrict host access or bind loopback; never reuse defaults in production. |
 | Mini-program | The tracked project config included a specific developer AppID; this PR proposes `touristappid`. | Provide a local AppID via `TARO_APP_ID` / `WECHAT_MINI_APP_ID`, with private configuration ignored. |
@@ -20,7 +20,7 @@ Tracked dataset rights: [issue #5](https://github.com/Xiaomuw/Learning-assistant
 
 **Owner-confirmed method:** AI searched existing online question banks and reorganized the retrieved material into 530 questions. The use of third-party online banks is confirmed; exact original URLs, rightsholders and redistribution permissions have **not** been established. Do not classify these records as independently AI-authored original questions.
 
-Repository inspection of `data/practice_questions/all_408.json` and its four subject mirrors:
+Historical inventory from the **earlier `main` tree, before the removal proposed in PR #6**, of `data/practice_questions/all_408.json` and its four subject mirrors:
 
 | Finding | Verified result |
 | --- | --- |
@@ -41,7 +41,13 @@ Repository inspection of `data/practice_questions/all_408.json` and its four sub
 
 ## Mechanical checks (not legal clearance)
 
-Use `python scripts/audit_question_bank_provenance.py --json` to validate canonical/mirror agreement and the per-question review ledger. The `--release-gate` mode intentionally fails while any question remains uncleared, even if structural CI passes. The checker only validates metadata and cannot grant licenses or certify copyright compliance.
+Use `python scripts/audit_question_bank_provenance.py --json`. When the old files still exist, it validates the canonical/subject mirrors and matching ledger. Once **all five** files have been removed, it checks that no partial mirror or newly unreviewed JSON has appeared and retains the 530-ID ledger solely as **historical review metadata**, rather than reporting those entries as missing source files. The report separates `current_tree_data_boundary_passes` from the broader `release_gate_passes`; the latter **remains false** for the historically uncleared retired corpus. The `--release-gate` mode intentionally blocks a release and does not establish legal compliance.
+
+The combined candidate must be reviewed and tested against [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6). Removing files in a proposal cannot by itself remove them from the default branch or prior history.
+
+## Historical exposure and merge coordination
+
+See [historical Git exposure review](GIT_HISTORY_EXPOSURE_REVIEW.md) and [two-PR integration sequence](MERGE_SEQUENCE.md). Do **not** rewrite Git history, move protected refs or force-push as part of this audit PR.
 
 ## Dataset provenance register (owner-completed)
 

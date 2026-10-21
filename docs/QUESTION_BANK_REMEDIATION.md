@@ -6,7 +6,7 @@
 
 The project owner states the 530 questions were **collected through AI web searches of existing question banks, and subsequently organized**. This is not the same as independent creation from abstract educational concepts.
 
-Existing `data/practice_questions/all_408.json` has 530 rows across 53 concepts; four per-subject JSON mirrors match it. The JSON does **not** identify source websites, owners, reuse permissions, or prompt and tool histories. Exact text comparisons against the open web have not established the original rightsholders. No confirmed license should be inferred from discoverability or AI-assisted rewriting.
+The former `main` snapshot of `data/practice_questions/all_408.json` had 530 rows across 53 concepts; four per-subject JSON mirrors matched it. [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) removes all five files from its **proposed** current tree; `main` and old commits have not yet been changed. The JSON does **not** identify source websites, owners, reuse permissions, or prompt and tool histories. Exact text comparisons against the open web have not established the original rightsholders. No confirmed license should be inferred from discoverability or AI-assisted rewriting.
 
 This is a provenance risk, **not a finding that any particular question is infringing**. Factual knowledge and terminology can be freely used; original expressive wording or compilation may carry separate rights depending on jurisdiction and circumstances.
 
@@ -22,7 +22,7 @@ This is a provenance risk, **not a finding that any particular question is infri
 
 1. **Preserve evidence privately.** Keep your own existing question JSON and any search/prompt logs in private, access-controlled storage as needed for a legitimate provenance review. Do not post the question text again in public PRs or issues.
 2. **Prevent additional public redistribution.** Check active deployments, archives, release artifacts and future build packages for bundled source material. Refrain from redistributing uncleared questions.
-3. **Plan prompt public-tree cleanup.** Because the data is already on `main`, a warning on this draft PR alone does not remove public exposure. Once changes are approved, remove or replace unapproved JSON in the default branch and adjust the tests that assume 530 bundled questions.
+3. **Complete the reviewed public-tree cleanup.** [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) proposes deleting the five JSON banks and replaces the fixed 530-question test with synthetic data. After explicit maintainer review, it must be merged **before** this stacked governance PR. Current `main` has not been changed.
 4. **Protect working functionality.** Retain generic import APIs and schemas; replace tests that depend on a fixed licensed corpus with small synthetic fixtures, or use authorized private test data strictly outside the public repo.
 5. **Evaluate history separately.** Deleting current files does not remove them from prior Git commits, forks or cached references. Coordinate any history rewrite with collaborators, and check GitHub's documentation and applicable policies before attempting it. Do not force-push as part of this draft PR.
 6. **If seeking restoration:** determine source URLs, author/rightsholder, exact license, permission for redistribution/modification, attribution requirements and any evidence for each question or source set. Review individually where necessary.
@@ -32,12 +32,12 @@ This is a provenance risk, **not a finding that any particular question is infri
 
 `data/provenance/408-source-review.csv` contains **question IDs and status only**, not question wording. All 530 entries currently start as `REVIEW_REQUIRED` with acquisition method `AI_WEB_SEARCH_REORGANIZED`. No source URLs or permission are invented.
 
-The included standard-library-only tool verifies canonical/mirror structure and status coverage:
+The standard-library-only tool now has **two modes**: while the old bank remains, it verifies canonical/mirror correspondence; after all five files disappear from the current tree, it verifies no partial/unexpected bank exists while preserving the 530-entry ledger as historical bookkeeping (not live question content):
 
 ```bash
 python scripts/audit_question_bank_provenance.py --json
 
-# Release gate (expected to fail until all entries are independently reviewed):
+# Broader release gate (remains blocked for historical clearance, even after current-tree deletion):
 python scripts/audit_question_bank_provenance.py --release-gate --json
 
 # Unit tests for the checker use only synthetic data:
@@ -47,6 +47,10 @@ python -m unittest discover -s scripts/tests -p 'test_*.py' -v
 Review columns: `question_id`, `acquisition_method`, `source_url`, `source_title`, `rights_holder`, `license_or_permission`, `evidence_ref`, `review_status`, `notes`.
 
 Set `CLEARED` **only after human review**, with a valid permission basis and an evidence reference. Merely entering `CLEARED` cannot establish legal rights; the script checks bookkeeping, **not copyright law**. If a source cannot be cleared, use `REPLACE` or `REMOVE`, and remove that entry from the distributed corpus only after replacing/removing the actual underlying question.
+
+## Next-step review and integration
+
+[PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) and this OSS-readiness PR are coordinated via [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md). When both changes are combined, public CI should pass with no old question JSON; the source ledger must not be treated as an active corpus. A passing current-tree data check is **not** a statement that earlier forks/commits were erased or legally cleared.
 
 ## Out-of-scope decisions pending owner approval
 

@@ -6,7 +6,8 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 
 - [ ] Establish ownership and the right to license original code and any copied snippets. Resolve existing contributors' or employers' rights if applicable.
 - [x] Confirm collection method: AI web-searched existing question banks and reorganized results; this is **not** proof of distribution rights.
-- [ ] Trace original sources and redistribution permissions for all 530 records, or promptly remove/replace uncleared materials. The Apache license exclusion does **not** cure public exposure. See [remediation plan](QUESTION_BANK_REMEDIATION.md).
+- [x] Prepare [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) to remove all five JSON banks from the **proposed** current tree and keep imports working (16 targeted tests passed); not merged into `main`.
+- [ ] Resolve the **existing `main` and historic Git exposure**, including third-party licenses/redistribution rights as applicable. A draft deletion and Apache license exclusion do **not** cure prior public exposure. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [historical exposure review](GIT_HISTORY_EXPOSURE_REVIEW.md).
 - [ ] Audit third-party code, images, diagrams and UI assets; retain upstream attributions and licenses.
 - [ ] Review direct and transitive dependency licenses and generate any required notices.
 - [ ] Scan repository content and Git history for credentials, personal data, tokens, user documents and unsafe sample configuration. Revoke exposed secrets as needed.
@@ -25,14 +26,15 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [ ] Confirm the copyright audit before merging the license proposal into `main`
 - [x] Initial PR CI passed for commit `f1e5b66`: Python syntax, Next.js lint and Taro typecheck.
 - [x] Expanded CI passed on commit `11a217b` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39600371744)): architecture tests, Next.js lint/build, Taro lint/type/build.
-- [ ] Verify added provenance-audit structural job and its synthetic-fixture tests on the current PR head.
+- [x] Dual-mode provenance-audit tests passed for corpus-present baseline on commit `ecf2488` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39608895451)).
+- [ ] Verify combined CI **after** stacking on PR #6 without reintroducing the old dataset.
 
 ## 3. Developer experience and adoption
 
 - [ ] Add an architecture image and screenshots that contain no private information
 - [x] Provide two newly drafted synthetic example questions (not a replacement for the 408 bank)
 - [x] Add 530-ID provenance ledger and a structure/review-status audit (all 530 remain REVIEW_REQUIRED)
-- [ ] Resolve permission or replace unaudited question-bank material ([issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5))
+- [ ] Get the five unverified corpus JSON files off the public default branch after owner review/PR merge; [issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5) tracks their unresolved **historical** rights.
 - [ ] Run the documented clean-room setup and record successful environment versions
 - [ ] Eliminate the fresh-clone dependency on ignored `backend/storage/data/curriculum/` fixtures in some tests
 - [ ] Provide a reproducible demo, clearly labeled if experimental
@@ -44,6 +46,10 @@ Suggested repository description:
 
 Suggested topics (only if they remain accurate):
 `langgraph`, `langchain`, `rag`, `fastapi`, `pgvector`, `nextjs`, `taro`, `ai-learning`.
+
+## PR ordering
+
+Use [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md): draft PR #6 establishes the data-free base; PR #3 adds Apache license and governance as a stacked, reviewed change. Neither is merged automatically. Avoid any history rewrite during this process.
 
 ## 4. Versioning and maintenance
 
