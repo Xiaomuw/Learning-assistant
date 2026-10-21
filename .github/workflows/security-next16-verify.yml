@@ -1,0 +1,55 @@
+name: Next 16 migration verification
+
+on:
+  push:
+    branches:
+      - chore/security-next16-upgrade-2026-10
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/security-next16-verify.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Next 16 install, lint, typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm ci
+        run: npm ci --no-fund --no-audit
+      - name: ESLint
+        run: npm run lint
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Next.js production build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          INTERNAL_API_BASE: http://127.0.0.1:8000/api
+        run: npm run build
+
+  dependency-audit:
+    name: Production dependency advisory audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
