@@ -1,8 +1,10 @@
 """
 Rebuild 408 project data.
 
-默认只做 dry-run。真正清理必须显式传入：
-  python scripts/rebuild_408_project_data.py --confirm CLEAN_408_REBUILD --import-questions
+默认只做 dry-run，且不再内置待核实来源的 408 题库。
+仅在隔离的数据库中使用自备、持有相应使用权限的题库。真实清理会删除数据：
+  python scripts/rebuild_408_project_data.py --questions-path /secure/authorized.json
+  python scripts/rebuild_408_project_data.py --questions-path /secure/authorized.json --confirm CLEAN_408_REBUILD --import-questions
 """
 
 from __future__ import annotations
@@ -44,7 +46,6 @@ from app.infrastructure.db.database import session_scope  # noqa: E402
 
 CONFIRM_TOKEN = "CLEAN_408_REBUILD"
 EXPECTED_ALEMBIC_REVISION = "0011_practice_finalizer"
-DEFAULT_QUESTION_FILE = PROJECT_ROOT / "data" / "practice_questions" / "all_408.json"
 DEFAULT_BACKUP_DIR = PROJECT_ROOT / "backups"
 
 STRUCTURED_CLEAR_TABLES = (
@@ -81,7 +82,7 @@ PRESERVED_TABLES = (
 @dataclass(frozen=True)
 class RebuildOptions:
     confirm: str = ""
-    questions_path: Path = DEFAULT_QUESTION_FILE
+    questions_path: Path | None = None
     import_questions: bool = False
     index_questions: bool = False
     backup_file: Path | None = None
@@ -93,6 +94,12 @@ class RebuildOptions:
 
 
 def rebuild(options: RebuildOptions) -> dict[str, Any]:
+    # Fail closed BEFORE any database interaction in destructive mode.
+    # No default public question corpus is distributed with this repository.
+    if options.import_questions and options.questions_path is None:
+        raise ValueError("导入题库必须显式提供 --questions-path")
+    if not options.dry_run and (not options.import_questions or options.questions_path is None):
+        raise ValueError("真实清理必须同时提供 --import-questions 和 --questions-path")
     report: dict[str, Any] = {
         "dry_run": options.dry_run,
         "expected_revision": EXPECTED_ALEMBIC_REVISION,
@@ -100,7 +107,11 @@ def rebuild(options: RebuildOptions) -> dict[str, Any]:
     }
     report["alembic"] = _assert_alembic_current()
     report["taxonomy"] = _taxonomy_health()
-    report["questions"] = _validate_question_file(options.questions_path)
+    report["questions"] = (
+        _validate_question_file(options.questions_path)
+        if options.questions_path is not None
+        else {"skipped": True, "reason": "no_external_questions_path"}
+    )
 
     if options.dry_run:
         report["cleanup"] = _cleanup_project_data(dry_run=True)
@@ -170,37 +181,25 @@ def _taxonomy_health() -> dict[str, Any]:
 
 
 def _validate_question_file(path: Path) -> dict[str, Any]:
+    """Validate any permitted question file without the legacy 530-item quota."""
     raw_items = load_practice_question_json(path)
+    if not raw_items:
+        raise ValueError("不能导入空题库；请提供非空且具有使用权限的题库文件")
     validation = validate_practice_questions(raw_items, source_file=str(path.resolve()))
     validation.raise_for_errors()
     counts: dict[str, int] = {}
-    difficulties: dict[str, dict[str, int]] = {}
+    difficulties: dict[str, int] = {"basic": 0, "medium": 0, "hard": 0}
     for item in validation.questions:
         concept_id = str(item["concept_id"])
         counts[concept_id] = counts.get(concept_id, 0) + 1
-        difficulty_counts = difficulties.setdefault(concept_id, {"basic": 0, "medium": 0, "hard": 0})
-        difficulty_counts[str(item["difficulty"])] += 1
-    invalid_counts = {
-        concept_id: count
-        for concept_id, count in counts.items()
-        if count != 10
-    }
-    invalid_difficulties = {
-        concept_id: value
-        for concept_id, value in difficulties.items()
-        if value != {"basic": 3, "medium": 5, "hard": 2}
-    }
-    if len(counts) != 53 or invalid_counts or invalid_difficulties:
-        raise RuntimeError(
-            "all_408 题库分布不符合要求："
-            f"concept_count={len(counts)}, invalid_counts={invalid_counts}, invalid_difficulties={invalid_difficulties}"
-        )
+        difficulty = str(item["difficulty"])
+        difficulties[difficulty] = difficulties.get(difficulty, 0) + 1
     return {
         "path": str(path),
         "question_count": len(validation.questions),
         "concept_count": len(counts),
         "per_concept": {"min": min(counts.values()), "max": max(counts.values())},
-        "difficulty_distribution": {"basic": 159, "medium": 265, "hard": 106},
+        "difficulty_distribution": difficulties,
     }
 
 
@@ -383,7 +382,7 @@ def _index_imported_questions(*, strict: bool) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="清理并重建 408 项目学习数据")
     parser.add_argument("--confirm", default="", help=f"真实清理必须传入 {CONFIRM_TOKEN}")
-    parser.add_argument("--questions-path", type=Path, default=DEFAULT_QUESTION_FILE)
+    parser.add_argument("--questions-path", type=Path, default=None, help="显式指定有权使用的本地题库；不再提供默认题库")
     parser.add_argument("--backup-file", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", help="兼容显式 dry-run；不传 confirm 时也默认 dry-run")
     parser.add_argument("--import-questions", action="store_true")
