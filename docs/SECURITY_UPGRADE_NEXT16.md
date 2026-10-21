@@ -27,6 +27,17 @@ The React 19 ESLint integration flags pre-existing synchronous `setState` calls 
 
 The package lock must be regenerated from actual npm registry metadata. A narrowly scoped branch-only GitHub Actions workflow updates **only** `frontend/package-lock.json`, automatically committing to this draft branch. This avoids hand-editing integrity hashes; GitHub Actions might be blocked from pushing by repository permission settings. Do not merge without a committed, verified lockfile that passes `npm ci`.
 
+## Verified evidence — 2026-10-21
+
+GitHub Actions [run 39618628848](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39618628848) completed **all three jobs successfully** for commit `6c147e7`:
+
+- npm install and `npm ci` with a committed lockfile; patched Next.js 16.4.2 and React 19.3.0.
+- ESLint (0 errors, 12 warnings), TypeScript, Next.js production build, and local HTTP smoke for login route, protected route, cookie-mediated access, mocked API forwarding and mocked SSE delivery.
+- Production dependency `npm audit --omit=dev --audit-level=high`: **0 vulnerabilities found**.
+- Production Docker build with Node 22 and public assets; container started and `GET /login` returned HTTP 200.
+
+Still unverified: actual registration/login with a real FastAPI service, token rotation and logout, real SSE streaming, production proxy/TLS/CORS, full responsive UI, and deployment/staging acceptance. These remain release blockers; this draft PR is not a production deployment.
+
 ## Verification matrix
 
 - [x] `npm ci` with package/lock consistency (CI run 39618147118)
@@ -37,6 +48,6 @@ The package lock must be regenerated from actual npm registry metadata. A narrow
 - [x] Verify `/api/:path*` internal proxy and SSE response behavior against a local mock backend; real backend still needs end-to-end testing
 - [ ] Verify `next/image` usages, mobile layout and 404 handling
 - [x] `npm audit --omit=dev --audit-level=high` returned **0 production vulnerabilities** on 2026-10-21 after overriding source-map-js to >=1.2.2 and baseline-browser-mapping to >=2.11.0
-- [ ] Clean build of `frontend/Dockerfile.prod` with correctly configured API routing (now covered by a separate GitHub Actions job; awaiting verification)
+- [x] Built `frontend/Dockerfile.prod` using Next.js 16.4.2 and Node 22, launched the resulting image, and confirmed `/login` HTTP 200 in CI; this does not establish production endpoint parity
 
 CI build passing does not replace these manual behavioral tests. Avoid public deployment until all outstanding security issues are independently reviewed.
