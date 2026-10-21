@@ -12,7 +12,7 @@ function isProtectedPath(pathname: string) {
   );
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const hasAuthCookie =
     Boolean(request.cookies.get("la_access_token")?.value) ||
