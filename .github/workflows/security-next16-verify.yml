@@ -1,9 +1,6 @@
 name: Next 16 migration verification
 
 on:
-  push:
-    branches:
-      - chore/security-next16-upgrade-2026-10
   pull_request:
     paths:
       - "frontend/**"
