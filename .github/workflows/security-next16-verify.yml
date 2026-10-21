@@ -2,9 +2,10 @@ name: Next 16 migration verification
 
 on:
   pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/security-next16-verify.yml"
+
+concurrency:
+  group: next16-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
