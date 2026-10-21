@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible issue without posting secrets or private user data
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "Please remove API keys, tokens, personal data and private notebook content. For security vulnerabilities, follow SECURITY.md instead."
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Backend / FastAPI
+        - LangGraph / RAG
+        - Web / Next.js
+        - Mini-program / Taro
+        - Docker / Deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and reproduction steps
+      placeholder: "1. Start with ...\n2. Execute ...\n3. Observe ..."
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and redacted logs
+      placeholder: OS, Python/Node version, deployment mode, commit hash, sanitized logs
