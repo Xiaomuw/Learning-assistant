@@ -48,6 +48,6 @@ Because the old questions are already committed on `main`, merging a deletion on
 
 ## Coordination with the other draft PR
 
-[OSS readiness PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3) contains a provenance script and a 530-row review ledger which currently assume the old corpus still exists. **It must be updated/reconciled before merging alongside this change**, so that no check attempts to recreate the removed dataset or incorrectly reports the new source tree as invalid.
+[OSS readiness PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3) has been updated with dual-mode provenance checks: they distinguish the old corpus being present from its complete absence in the proposed current tree. The 530-ID ledger remains **historical review metadata**, not redistributed question text. Both draft PRs must still pass **combined** CI and receive final review before either is merged.
 
 No deployment, release, merge or Git-history rewrite is performed by this draft proposal.

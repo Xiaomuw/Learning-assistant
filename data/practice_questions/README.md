@@ -15,7 +15,7 @@ The project owner confirmed that the previous 530 questions were collected throu
 - For a quality audit, pass an explicit `--path` to `backend/scripts/audit_408_questions.py`.
 - Data rebuild/cleanup is a **destructive maintenance operation**. `backend/scripts/rebuild_408_project_data.py` requires an explicit `--questions-path` and, in confirmed mode, `--import-questions`. Do not run cleanup against production or user data.
 
-See [public data policy and safe testing notes](../../docs/PUBLIC_DATA_POLICY.md).
+See [public data policy and safe testing notes](../../docs/PUBLIC_DATA_POLICY.md), [Apache license scope](../../LICENSE-SCOPE.md) and the [historical ID-only review ledger](../provenance/408-source-review.csv). The ledger is a review record, **not** a substitute for the removed JSON files.
 
 ## Rights and prior Git history
 

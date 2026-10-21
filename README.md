@@ -148,11 +148,13 @@ cp backend/.env.example backend/.env
 docker compose up -d --build
 ```
 
-默认映射：
+默认映射（根目录 `docker-compose.yml` 的开发环境；与生产 Compose 不同）：
 
-- PostgreSQL: `127.0.0.1:5433`
-- Backend: `127.0.0.1:8002`
-- Frontend: `127.0.0.1:3001`
+- PostgreSQL: `127.0.0.1:5434`
+- Backend: `127.0.0.1:8003`
+- Frontend: `127.0.0.1:3003`
+
+注意：开发 Compose 使用可预测的数据库默认凭据，且端口公开绑定；仅用于可信隔离环境，请勿直接暴露至公网。
 
 生产部署参考 [docs/DEPLOY.md](docs/DEPLOY.md) 与 `docker-compose.prod.yml`。
 
@@ -248,3 +250,13 @@ cd backend
 - 当前活动模型选择统一走 `backend/app/services/runtime_models.py`。
 - 前端页面和组件使用 `Notebook / notebookId`；`subject_id` 只留在 API wire 兼容边界。
 - Learning events、practice finalizer、chat async jobs 都不能只依赖进程内存；移动端轮询必须返回 `retry_after_ms` 并遵守服务端过期。
+
+---
+
+## Open source / 开源维护
+
+- [English README](README.en.md) · [Contributing](CONTRIBUTING.md) · [Maintainers](MAINTAINERS.md) · [Security](SECURITY.md)
+- [Apache-2.0](LICENSE) · [License scope](LICENSE-SCOPE.md) · [Third-party notices](THIRD_PARTY.md)
+- [Readiness checklist](docs/OPEN_SOURCE_READINESS.md) · [Question-bank remediation](docs/QUESTION_BANK_REMEDIATION.md)
+
+本仓库拥有合法授权的原创代码计划按 Apache-2.0 开源。**此前的 530 道网络检索整理题目已从本提议版本当前文件树剥离，但旧提交历史中的数据仍然存在且授权未核实。** 这不代表历史内容可自由再分发。请参阅 [公开数据政策](docs/PUBLIC_DATA_POLICY.md) 与 [历史暴露核查](docs/GIT_HISTORY_EXPOSURE_REVIEW.md)。
