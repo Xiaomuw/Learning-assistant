@@ -41,11 +41,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (isLoading || !userId) return;
-    void loadProfile();
-  }, [isLoading, userId]);
-
   async function loadProfile() {
     setLoading(true);
     setError("");
@@ -64,12 +59,17 @@ export default function ProfilePage() {
 
       fetchUserProfile(userId).then(setProfile).catch(() => {});
       fetchPracticeRecommendations(userId).then((r) => setRecommendedPractice(r.items)).catch(() => setRecommendedPractice([]));
-    } catch (err: any) {
-      setError(err?.message || "加载失败");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "加载失败");
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (isLoading || !userId) return;
+    void loadProfile();
+  }, [isLoading, userId]);
 
   async function handleSaveDisplayName() {
     const nextName = draftName.trim();

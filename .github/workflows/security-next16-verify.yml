@@ -1,0 +1,88 @@
+name: Next 16 migration verification
+
+on:
+  pull_request:
+
+concurrency:
+  group: next16-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Next 16 install, lint, typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm ci
+        run: npm ci --no-fund --no-audit
+      - name: ESLint
+        run: npm run lint
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Next.js production build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          INTERNAL_API_BASE: http://127.0.0.1:18080/api
+        run: npm run build
+      - name: Verify committed configuration remains unchanged
+        run: git diff --exit-code -- tsconfig.json package.json package-lock.json
+      - name: HTTP routing and API/SSE smoke
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          INTERNAL_API_BASE: http://127.0.0.1:18080/api
+        run: npm run smoke:proxy
+
+  dependency-audit:
+    name: Production dependency advisory audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+  docker-production:
+    name: Next 16 production Docker build and HTTP health
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production frontend image
+        run: |
+          docker build -f frontend/Dockerfile.prod \
+            --build-arg INTERNAL_API_BASE=http://127.0.0.1:18080/api \
+            --build-arg NEXT_PUBLIC_API_BASE=/api \
+            -t learning-assistant-frontend:review frontend
+      - name: Verify container can serve the public login route
+        run: |
+          set -eu
+          cid="$(docker run -d -p 127.0.0.1:3106:3000 learning-assistant-frontend:review)"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 40); do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3106/login || true)"
+            if [ "$code" = "200" ]; then
+              echo "Production Docker /login HTTP 200"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$cid"
+          exit 1

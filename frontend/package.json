@@ -6,24 +6,33 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "smoke:proxy": "node scripts/smoke-proxy.mjs"
   },
   "dependencies": {
-    "next": "14.2.29",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "next": "16.4.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "lucide-react": "^0.475.0",
     "clsx": "^2.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "typescript": "^5.7.3",
     "tailwindcss": "^3.4.17",
     "postcss": "^8.5.3",
     "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.29"
+    "eslint": "^9.0.0",
+    "eslint-config-next": "16.4.2"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "overrides": {
+    "source-map-js": "^1.2.2",
+    "baseline-browser-mapping": "^2.11.0"
   }
 }
