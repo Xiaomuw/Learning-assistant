@@ -21,7 +21,7 @@ Official references:
 
 ## Narrow React Hooks lint migration exceptions
 
-The React 19 ESLint integration flags pre-existing synchronous `setState` calls in a few component effects. This security-focused PR keeps a **file-scoped** exception for `react-hooks/set-state-in-effect` in login, register, practice and the process panel; the rest of the React Hooks rules remain enabled. A separate follow-up should refactor these state initialization patterns and remove the exception. The profile component's function-order warning and `any` catch binding are fixed directly without weakening global rules.
+The React 19 ESLint integration flags pre-existing synchronous `setState` calls in a few component effects. This security-focused PR keeps a **file-scoped** exception for `react-hooks/set-state-in-effect` in login, register, practice, profile and the process panel; the rest of the React Hooks rules remain enabled. A separate follow-up should refactor these state initialization patterns and remove the exception. The profile component's function-order warning and `any` catch binding are fixed directly without weakening global rules.
 
 ## Dependency lockfile
 
@@ -29,14 +29,14 @@ The package lock must be regenerated from actual npm registry metadata. A narrow
 
 ## Verification matrix
 
-- [ ] `npm ci` with package/lock consistency
-- [ ] `npm run lint`
-- [ ] `npm run typecheck`
-- [ ] `npm run build` (Turbopack and/or an intentional webpack fallback)
+- [x] `npm ci` with package/lock consistency (CI run 39618147118)
+- [x] `npm run lint` (0 errors, 12 pre-existing warnings; limited React Hooks migration exception)
+- [x] `npm run typecheck` (async `cookies()` API migrated)
+- [x] `npm run build` using Next.js 16 Turbopack
 - [ ] Tests for protected route redirect, login, logout, and cookie refresh
-- [ ] Verify `/api/:path*` internal proxy and SSE response behavior
+- [x] Verify `/api/:path*` internal proxy and SSE response behavior against a local mock backend; real backend still needs end-to-end testing
 - [ ] Verify `next/image` usages, mobile layout and 404 handling
-- [ ] `npm audit --omit=dev` and remaining advisory review
-- [ ] Clean build of `frontend/Dockerfile.prod` with correctly configured API routing
+- [x] `npm audit --omit=dev --audit-level=high` returned **0 production vulnerabilities** on 2026-10-21 after overriding source-map-js to >=1.2.2 and baseline-browser-mapping to >=2.11.0
+- [ ] Clean build of `frontend/Dockerfile.prod` with correctly configured API routing (now covered by a separate GitHub Actions job; awaiting verification)
 
 CI build passing does not replace these manual behavioral tests. Avoid public deployment until all outstanding security issues are independently reviewed.

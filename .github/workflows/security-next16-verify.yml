@@ -55,3 +55,31 @@ jobs:
           node-version: "22"
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
+
+  docker-production:
+    name: Next 16 production Docker build and HTTP health
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production frontend image
+        run: |
+          docker build -f frontend/Dockerfile.prod \
+            --build-arg INTERNAL_API_BASE=http://127.0.0.1:18080/api \
+            --build-arg NEXT_PUBLIC_API_BASE=/api \
+            -t learning-assistant-frontend:review frontend
+      - name: Verify container can serve the public login route
+        run: |
+          set -eu
+          cid="$(docker run -d -p 127.0.0.1:3106:3000 learning-assistant-frontend:review)"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 40); do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3106/login || true)"
+            if [ "$code" = "200" ]; then
+              echo "Production Docker /login HTTP 200"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$cid"
+          exit 1
