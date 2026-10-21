@@ -37,7 +37,7 @@
     "@tarojs/webpack5-runner": "^4.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.2",
     "@typescript-eslint/parser": "^8.0.0",
     "babel-preset-taro": "^4.2.0",
     "eslint": "^8.57.0",
