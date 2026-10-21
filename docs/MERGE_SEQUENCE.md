@@ -21,6 +21,6 @@ This document is a **plan**, not authorization to merge, rewrite history or depl
 
 First merge PR #6 into `main`, then **retarget PR #3 from the temporary PR #6 branch to `main`** after confirming a clean diff and successful checks. Merge PR #3 only when its copyright and configuration review has been approved.
 
-Next address [historical exposure](GIT_HISTORY_EXPOSURE_REVIEW.md), the remaining [dataset-rights issue](https://github.com/Xiaomuw/Learning-assistant/issues/5), and the [Next.js security upgrade](https://github.com/Xiaomuw/Learning-assistant/issues/4). Do not tag a public release while material release blockers remain.
+Next address [historical and other-branch exposure](GIT_HISTORY_EXPOSURE_REVIEW.md), including `mian` and older `codex/` branches that still carry question JSONs, the remaining [dataset-rights issue](https://github.com/Xiaomuw/Learning-assistant/issues/5), and the [Next.js security upgrade](https://github.com/Xiaomuw/Learning-assistant/issues/4). Do not tag a public release while material release blockers remain.
 
 Nothing in this plan constitutes a completed legal determination, external-security audit or a version release.

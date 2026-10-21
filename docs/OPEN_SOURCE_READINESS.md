@@ -7,7 +7,7 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [ ] Establish ownership and the right to license original code and any copied snippets. Resolve existing contributors' or employers' rights if applicable.
 - [x] Confirm collection method: AI web-searched existing question banks and reorganized results; this is **not** proof of distribution rights.
 - [x] Prepare [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) to remove all five JSON banks from the **proposed** current tree and keep imports working (16 targeted tests passed); not merged into `main`.
-- [ ] Resolve the **existing `main` and historic Git exposure**, including third-party licenses/redistribution rights as applicable. A draft deletion and Apache license exclusion do **not** cure prior public exposure. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [historical exposure review](GIT_HISTORY_EXPOSURE_REVIEW.md).
+- [ ] Resolve the **existing `main`, historical and other active-branch exposure**, including `codex/docker-production-deploy`, `codex/qa-408-flow-web-toggle` and `mian` (42 JSONs at current head; not yet content-audited). A draft deletion and Apache license exclusion do **not** cure prior public exposure. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md).
 - [ ] Audit third-party code, images, diagrams and UI assets; retain upstream attributions and licenses.
 - [ ] Review direct and transitive dependency licenses and generate any required notices.
 - [ ] Scan repository content and Git history for credentials, personal data, tokens, user documents and unsafe sample configuration. Revoke exposed secrets as needed.
@@ -27,7 +27,7 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [x] Initial PR CI passed for commit `f1e5b66`: Python syntax, Next.js lint and Taro typecheck.
 - [x] Expanded CI passed on commit `11a217b` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39600371744)): architecture tests, Next.js lint/build, Taro lint/type/build.
 - [x] Dual-mode provenance-audit tests passed for corpus-present baseline on commit `ecf2488` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39608895451)).
-- [ ] Verify combined CI **after** stacking on PR #6 without reintroducing the old dataset.
+- [x] Verified combined stacked CI: **5/5 jobs passed** on `5cc85ad` ([quality](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39609831876), [public-data/Postgres](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39609831829)). Question corpus absent from combined tree; historical review still blocked.
 
 ## 3. Developer experience and adoption
 

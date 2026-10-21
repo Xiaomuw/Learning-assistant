@@ -6,7 +6,7 @@
 
 | Area | Finding | Next action |
 | --- | --- | --- |
-| Former 408 practice bank | The *main/legacy snapshot* contained `all_408.json` and four subject mirrors (530 questions / 53 concepts). [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) removes them from its current tree, **not from Git history**. | Keep the five files absent from the proposed public source tree; review the historic copies, rights and downstream mirrors. |
+| Former 408 practice bank and other branches | The current `main` and two older topic branches each retain five source JSONs; `mian` has **42 JSON files**, including additional batch and v2 files (not individually reviewed). The two draft PR heads have **zero** question-bank JSONs. | Keep current distribution clear, audit other branches and historical copies separately before claiming repository-wide remediation. [Branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md). |
 | Untracked curriculum | `backend/app/application/notebooks/curriculum_seed.py` loads packages from `backend/storage/data/curriculum/`, under the ignored `backend/storage/` path. | Make fresh-clone tests independent of unpublished data, or supply legally redistributable fixtures. |
 | Dev configuration | `docker-compose.yml` publishes Postgres 5434, backend 8003, frontend 3003 and uses a predictable database fallback password. | Restrict host access or bind loopback; never reuse defaults in production. |
 | Mini-program | The tracked project config included a specific developer AppID; this PR proposes `touristappid`. | Provide a local AppID via `TARO_APP_ID` / `WECHAT_MINI_APP_ID`, with private configuration ignored. |
