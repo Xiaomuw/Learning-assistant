@@ -38,7 +38,7 @@ python-dotenv==1.1.0
 pydantic==2.11.1
 pydantic-settings==2.9.1
 PyYAML>=6.0
-email-validator>=2.2.0        # EmailStr validation
+email-validator>=2.3.0        # EmailStr validation
 passlib[bcrypt]>=1.7.4        # Password hashing
 PyJWT>=2.10.1                 # JWT auth tokens
 
