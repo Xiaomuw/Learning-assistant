@@ -16,7 +16,7 @@ const mockBackend = createServer((req, res) => {
     res.end(JSON.stringify({ status: "ok", method: req.method }));
   } else if (req.url === "/api/__oss_sse") {
     res.writeHead(200, { "content-type": "text/event-stream" });
-    res.end("data: smoke-pass\\n\\n");
+    res.end("data: smoke-pass\n\n");
   } else {
     res.writeHead(404);
     res.end("not found");
