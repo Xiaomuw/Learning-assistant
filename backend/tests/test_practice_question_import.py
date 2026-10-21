@@ -151,6 +151,20 @@ class PracticeQuestionImportTest(unittest.TestCase):
         self.assertEqual({item["concept_id"] for item in result.questions}, {CONCEPT_ID})
         self.assertTrue(all(item["difficulty"] == "basic" for item in result.questions))
 
+    def test_rebuild_validator_accepts_small_authorized_fixture(self) -> None:
+        # Regression: a permitted local corpus no longer needs exactly 530
+        # questions, 53 concepts, or the old fixed difficulty distribution.
+        rebuild = importlib.import_module("scripts.rebuild_408_project_data")
+        path = BACKEND_ROOT.parent / "examples" / "practice_questions.json"
+        summary = rebuild._validate_question_file(path)
+
+        self.assertEqual(summary["question_count"], 2)
+        self.assertEqual(summary["concept_count"], 1)
+        self.assertEqual(summary["per_concept"], {"min": 2, "max": 2})
+        self.assertEqual(
+            summary["difficulty_distribution"], {"basic": 2, "medium": 0, "hard": 0}
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
