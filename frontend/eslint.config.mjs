@@ -13,6 +13,7 @@ export default defineConfig([
       "app/login/page.tsx",
       "app/register/page.tsx",
       "app/practice/page.tsx",
+      "app/profile/page.tsx",
       "components/MessageProcessPanel.tsx",
     ],
     rules: { "react-hooks/set-state-in-effect": "off" },
