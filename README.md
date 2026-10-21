@@ -239,3 +239,13 @@ cd backend
 - 当前活动模型选择统一走 `backend/app/services/runtime_models.py`。
 - 前端页面和组件使用 `Notebook / notebookId`；`subject_id` 只留在 API wire 兼容边界。
 - Learning events、practice finalizer、chat async jobs 都不能只依赖进程内存；移动端轮询必须返回 `retry_after_ms` 并遵守服务端过期。
+
+---
+
+## English documentation and open source
+
+- [English README](README.en.md) · [Contributing](CONTRIBUTING.md) · [Maintainers](MAINTAINERS.md) · [Security](SECURITY.md)
+- [Apache-2.0 license](LICENSE) · [License scope and excluded material](LICENSE-SCOPE.md) · [Third-party content](THIRD_PARTY.md)
+- [Open-source readiness checklist](docs/OPEN_SOURCE_READINESS.md)
+
+仓库原创代码及有权授权的原创文档使用 Apache-2.0。**注意：`data/practice_questions/` 下的 408 题库尚未完成版权与再分发授权核查，不包含在本仓库 Apache-2.0 授权中。** 这不表示当前已公开的数据必然具备合法分发权。请阅读 [题库说明](data/practice_questions/README.md) 和 [许可证适用范围](LICENSE-SCOPE.md)。

@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a change and describe the actual use case
+title: "[Feature] "
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Problem / user need
+      description: Describe the problem before suggesting an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Include possible architectural or compatibility impacts.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and references
+      description: Link comparable implementations if useful.

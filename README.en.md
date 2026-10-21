@@ -1,0 +1,72 @@
+# Learning Assistant
+
+[简体中文](README.md) | **English**
+
+Learning Assistant is an experimental, multi-client AI study assistant built with **FastAPI, LangGraph, LangChain, PostgreSQL/PGVector, Next.js and Taro**. It combines notebook-based retrieval-augmented question answering, multiple-choice practice, learning events, and knowledge-mastery tracking.
+
+> **Project status:** Open-source readiness work is in progress. This is not a claim of production readiness, independent security review, or established public adoption. Check [current project status](docs/project-current-status.md) before deploying.
+
+## Features and architecture
+
+| Area | Implementation described in this repository |
+| --- | --- |
+| Knowledge | Notebook-based PDF/URL ingestion and PGVector retrieval |
+| Orchestration | LearningOrchestratorGraph with dedicated QAGraph, QuestionGenerationGraph and MasteryEvaluationGraph |
+| Practice | Multiple-choice questions, attempts and mastery snapshots |
+| Web client | Next.js H5, including streamed responses |
+| WeChat mini-program | Taro + React, with streaming and sync/polling fallback |
+| Infrastructure | Docker Compose, PostgreSQL, configuration checks and test scripts |
+
+The orchestrator decides which operation to perform; question answering, practice generation and mastery updates have distinct responsibilities. Consult [graph overview](docs/langgraph-overview.md) and [feature flows](docs/feature-flows.md) for details.
+
+## Quick start (local development)
+
+Prerequisites include Python 3.13, Node.js, PostgreSQL with PGVector, and provider credentials for any external model or service you enable. See the full [Chinese setup instructions](README.md) and [deployment guide](docs/DEPLOY.md) for details.
+
+```bash
+# From repository root:
+cp backend/.env.example backend/.env
+# Configure local credentials and database URLs in backend/.env.
+docker compose up -d --build
+```
+
+For a native backend environment:
+
+```bash
+cd backend
+python3.13 -m venv .venv313
+source .venv313/bin/activate
+pip install -r requirements.txt
+python scripts/check_environment.py
+python scripts/run_migrations_with_diagnostics.py
+python scripts/bootstrap_app_data.py --confirm BOOTSTRAP_APP_DATA
+python -m app.main
+```
+
+Do not commit real `.env` files, user content, credentials or personal data.
+
+## Validation
+
+The repository includes backend, graph and frontend tests. To run the existing local test targets after installing dependencies:
+
+```bash
+make test-backend
+make test-graphs
+make eval-graphs
+make check-frontend
+make check-weapp
+```
+
+These commands have different environment requirements; see the [main README](README.md). The initial GitHub Actions workflow only provides lightweight syntax/lint/type checks. It does **not** replace authenticated smoke tests, live Postgres integration tests or deployment verification.
+
+## Open source and contributing
+
+- [Apache-2.0 license text](LICENSE) and [precise license scope](LICENSE-SCOPE.md)
+- [Contributing](CONTRIBUTING.md) and [maintenance process](MAINTAINERS.md)
+- [Security reporting](SECURITY.md)
+- [Third-party dependency notice](THIRD_PARTY.md)
+- [Open-source readiness checklist](docs/OPEN_SOURCE_READINESS.md)
+
+**Important:** The bundled 408 practice-question datasets are *not* covered by this project's Apache-2.0 grant. Their provenance and public redistribution permissions remain unverified; see the [dataset README](data/practice_questions/README.md).
+
+Project owner: [@Xiaomuw](https://github.com/Xiaomuw). Contributions and genuine user feedback are welcome.
