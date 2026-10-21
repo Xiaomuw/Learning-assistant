@@ -1,53 +1,76 @@
-# Next.js security migration — Draft PR
+# Next.js migration and real authentication verification — Draft PR #7
 
-**Review-only status: no production deployments and no merge into main.**
+**Review-only status: no production deployment, release, or merge into main.**
 
-## Reason
+## Candidate versions and scope
 
-The existing web client pins Next.js `14.2.29`, an unsupported major version affected by published security advisories. This branch proposes **Next.js 16.4.2** (released 2026-10-15, after the 16.4.1 security fixes) and **React 19.3.0**, updating the Next.js ESLint integration as well. Do not claim a vulnerability is exploited in this project simply because its version falls in an affected range.
+The web client on the original default branch pins Next.js `14.2.29`. This proposal uses **Next.js 16.4.2**, **React / React DOM 19.3.0**, Node 22 and updated ESLint/TypeScript tooling. Version changes and passing CI do not establish the absence of all vulnerabilities.
 
-Official references:
+Upstream references for independent review:
 - https://nextjs.org/support-policy
 - https://github.com/vercel/next.js/security/advisories
 - https://github.com/vercel/next.js/releases/tag/v16.4.2
 - https://nextjs.org/docs/app/guides/upgrading/version-16
 
-## Breaking changes addressed
+## Stacked review order
 
-- Removed `next lint`; use the ESLint 9 CLI with the Next.js 16 flat ESLint config.
-- Move `middleware.ts` to `proxy.ts` and export `proxy` to use the supported Node runtime convention.
-- Use Node 22 in the CI/npm resolution workflow and the two production/development Dockerfiles.
-- Use TypeScript type declarations compatible with React 19.
+This security PR is now stacked on the **data-free OSS candidate**, not the old default branch:
 
-## Narrow React Hooks lint migration exceptions
+1. [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6): remove the five web-collected question-bank JSON files from the proposed current tree.
+2. [Draft PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3): proposed license, governance, documentation and historical provenance ledger.
+3. [Draft PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7): Next.js migration, real authentication regression and HTTP integration.
 
-The React 19 ESLint integration flags pre-existing synchronous `setState` calls in a few component effects. This security-focused PR keeps a **file-scoped** exception for `react-hooks/set-state-in-effect` in login, register, practice, profile and the process panel; the rest of the React Hooks rules remain enabled. A separate follow-up should refactor these state initialization patterns and remove the exception. The profile component's function-order warning and `any` catch binding are fixed directly without weakening global rules.
+After separate owner approval, merge in dependency order, retarget dependent PRs to `main` as appropriate, and recheck their final diff and CI. Nothing here authorizes an automatic merge, old-branch deletion or history rewrite.
 
-## Dependency lockfile
+## Migration changes
 
-The package lock must be regenerated from actual npm registry metadata. A narrowly scoped branch-only GitHub Actions workflow updates **only** `frontend/package-lock.json`, automatically committing to this draft branch. This avoids hand-editing integrity hashes; GitHub Actions might be blocked from pushing by repository permission settings. Do not merge without a committed, verified lockfile that passes `npm ci`.
+- Replace `next lint` with ESLint 9 flat configuration.
+- Move `middleware.ts` to `proxy.ts` and export `proxy`.
+- Await Next.js asynchronous `cookies()` calls.
+- Use Node 22 Docker base images and copy `public/` assets into the production image.
+- Update React 19 TypeScript declarations.
+- Use a committed npm lockfile generated from registry metadata rather than fabricated integrity fields. The temporary branch-only lockfile generation workflow has been removed.
+- Preserve limited file-scoped `react-hooks/set-state-in-effect` exceptions for five existing components. Refactoring and the remaining lint warnings are tracked in [Issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8), not declared resolved here.
 
-## Verified evidence — 2026-10-21
+## Verified evidence on commit `684fa0b` — 2026-10-21
 
-GitHub Actions [run 39618628848](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39618628848) completed **all three jobs successfully** for commit `6c147e7`:
+All four workflows completed successfully on the same integrated candidate:
 
-- npm install and `npm ci` with a committed lockfile; patched Next.js 16.4.2 and React 19.3.0.
-- ESLint (0 errors, 12 warnings), TypeScript, Next.js production build, and local HTTP smoke for login route, protected route, cookie-mediated access, mocked API forwarding and mocked SSE delivery.
-- Production dependency `npm audit --omit=dev --audit-level=high`: **0 vulnerabilities found**.
-- Production Docker build with Node 22 and public assets; container started and `GET /login` returned HTTP 200.
+| Workflow | Evidence and scope |
+| --- | --- |
+| [Quality checks](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39632733852) | Python/architecture/provenance checks and web/mini-program lint/build checks |
+| [Next 16 migration verification](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39632733862) | Reproducible npm install, TypeScript, production build, mock-backend HTTP/SSE smoke, production dependency audit, Docker build and login-route health |
+| [Public question-data boundary](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39632733838) | Removed-corpus boundary and synthetic-question import/rebuild tests using disposable PostgreSQL |
+| [Real backend authentication regression](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39632733869) | 22 existing authentication regressions plus 18 new real HTTP assertions described below |
 
-Still unverified: actual registration/login with a real FastAPI service, token rotation and logout, real SSE streaming, production proxy/TLS/CORS, full responsive UI, and deployment/staging acceptance. These remain release blockers; this draft PR is not a production deployment.
+Earlier migration run [39618628848](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39618628848) reported zero production npm advisory findings and successful Docker `/login` HTTP 200. This is a point-in-time package advisory check, **not** a full application or backend security audit.
 
-## Verification matrix
+### Existing authentication regression: 22 tests
 
-- [x] `npm ci` with package/lock consistency (CI run 39618147118)
-- [x] `npm run lint` (0 errors, 12 pre-existing warnings; limited React Hooks migration exception)
-- [x] `npm run typecheck` (async `cookies()` API migrated)
-- [x] `npm run build` using Next.js 16 Turbopack
-- [ ] Tests for protected route redirect, login, logout, and cookie refresh
-- [x] Verify `/api/:path*` internal proxy and SSE response behavior against a local mock backend; real backend still needs end-to-end testing
-- [ ] Verify `next/image` usages, mobile layout and 404 handling
-- [x] `npm audit --omit=dev --audit-level=high` returned **0 production vulnerabilities** on 2026-10-21 after overriding source-map-js to >=1.2.2 and baseline-browser-mapping to >=2.11.0
-- [x] Built `frontend/Dockerfile.prod` using Next.js 16.4.2 and Node 22, launched the resulting image, and confirmed `/login` HTTP 200 in CI; this does not establish production endpoint parity
+The authentication job runs `tests.test_auth_api` (12), `tests.test_auth_refresh_replay` (4), and `tests.test_auth_verification` (6), separately. The API tests use an isolated real PostgreSQL database and FastAPI TestClient; some external email/WeChat calls and unit-test dependencies are intentionally mocked. The 22 tests are not all live-network end-to-end tests.
 
-CI build passing does not replace these manual behavioral tests. Avoid public deployment until all outstanding security issues are independently reviewed.
+### New HTTP integration: 18 assertions
+
+`scripts/smoke_real_auth.py` starts the actual complete FastAPI application under Uvicorn and a built Next.js production server. All authentication requests go through Next.js to FastAPI and a disposable PostgreSQL/PGVector database. The normal migration chain and bootstrap run successfully before startup; the test does not bypass application readiness.
+
+Checks passed for anonymous page redirects and API rejection; verification-code delivery; registration persistence; forwarding both HttpOnly authentication cookies; current-user lookup; protected page access; refresh-token rotation; logout and cookie deletion; post-logout rejection; wrong-password rejection; valid login; password change; old-password rejection; new-password login; and rejection of a forged frontend cookie by the actual backend API.
+
+The only external-service replacement in this HTTP test is a **loopback SMTP sink**. The application's real SMTP client sends a real MIME message to that local server, but no email leaves the CI runner. Authentication routes, token generation, cookie processing and persistence are not mocked in this test.
+
+## Safety constraints
+
+- The smoke requires `--allow-disposable-db`, a loopback database host and the exact database name `learning_assistant_web_e2e_test`.
+- It refuses a checkout with actual root/backend `.env` files and requires a built frontend.
+- It uses fresh synthetic identities and randomly generated test secrets, and shuts down local services afterward.
+- It does not use production databases, external mail accounts, LLM credentials, private datasets or a live deployment.
+- A forged cookie may pass the frontend's presence-only navigation gate; it **does not** authorize the backend API, as verified by the HTTP test.
+
+## Still not verified / release limitations
+
+- Real LLM-backed chat, RAG retrieval quality and actual backend SSE response delivery. The existing SSE smoke still uses a mock backend.
+- Browser-click flows, responsive layouts, `next/image`, external SMTP delivery, public TLS, production proxy/CORS settings and full staging acceptance.
+- The full backend suite, all dependency licenses/advisories, source ownership, historical Git content and other active branches holding old question JSON.
+- A clean install/build currently allows Next.js to normalize TypeScript configuration; persist that normalization in a focused follow-up to avoid build-time configuration drift.
+- Genuine third-party adoption and an approved public release. CI success is not OpenAI program acceptance or proof of ecosystem impact.
+
+Keep the PR in Draft until the remaining review items and owner approval are addressed. Related: [Issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4), [Issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5).
