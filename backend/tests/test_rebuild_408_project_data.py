@@ -44,7 +44,7 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
         with (
             patch.object(self.script, "_assert_alembic_current", return_value={"current_revision": "head"}),
             patch.object(self.script, "_taxonomy_health", return_value={"db_concept_count": 53}),
-            patch.object(self.script, "_validate_question_file", return_value={"question_count": 530}),
+            patch.object(self.script, "_validate_question_file", return_value={"question_count": 2}) as validate,
             patch.object(self.script, "_cleanup_project_data", return_value={"tables": {}}) as cleanup,
             patch.object(self.script, "_backup_database") as backup,
             patch.object(self.script, "import_practice_questions") as import_questions,
@@ -53,6 +53,8 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
 
         self.assertTrue(report["dry_run"])
         cleanup.assert_called_once_with(dry_run=True)
+        validate.assert_not_called()
+        self.assertEqual(report["questions"]["reason"], "no_external_questions_path")
         backup.assert_not_called()
         import_questions.assert_not_called()
         self.assertEqual(report["import"]["reason"], "dry_run")
@@ -71,12 +73,12 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
 
         def import_questions(_raw, **_kwargs):
             order.append("import")
-            return _ImportResult(total=530, inserted=530)
+            return _ImportResult(total=2, inserted=2)
 
         with (
             patch.object(self.script, "_assert_alembic_current", return_value={"current_revision": self.script.EXPECTED_ALEMBIC_REVISION}),
             patch.object(self.script, "_taxonomy_health", return_value={"db_concept_count": 53}),
-            patch.object(self.script, "_validate_question_file", return_value={"question_count": 530}),
+            patch.object(self.script, "_validate_question_file", return_value={"question_count": 2}),
             patch.object(self.script, "_backup_database", side_effect=backup),
             patch.object(self.script, "sync_knowledge_taxonomy", return_value=53),
             patch.object(self.script, "_cleanup_project_data", side_effect=cleanup),
@@ -86,13 +88,34 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
             report = self.script.rebuild(
                 self.script.RebuildOptions(
                     confirm=self.script.CONFIRM_TOKEN,
+                    questions_path=Path("/tmp/approved-synthetic-questions.json"),
                     import_questions=True,
                 )
             )
 
         self.assertFalse(report["dry_run"])
         self.assertEqual(order, ["backup", "cleanup", "import"])
-        self.assertEqual(report["import"]["inserted"], 530)
+        self.assertEqual(report["import"]["inserted"], 2)
+
+    def test_confirmed_cleanup_rejects_missing_external_question_file(self) -> None:
+        with (
+            patch.object(self.script, "_assert_alembic_current") as alembic,
+            patch.object(self.script, "_backup_database") as backup,
+            patch.object(self.script, "_cleanup_project_data") as cleanup,
+        ):
+            with self.assertRaisesRegex(ValueError, "--import-questions"):
+                self.script.rebuild(
+                    self.script.RebuildOptions(confirm=self.script.CONFIRM_TOKEN)
+                )
+            with self.assertRaisesRegex(ValueError, "--questions-path"):
+                self.script.rebuild(
+                    self.script.RebuildOptions(
+                        confirm=self.script.CONFIRM_TOKEN, import_questions=True
+                    )
+                )
+            alembic.assert_not_called()
+            backup.assert_not_called()
+            cleanup.assert_not_called()
 
     def test_clear_table_scope_preserves_auth_users_and_taxonomy(self) -> None:
         clear_tables = set(self.script.STRUCTURED_CLEAR_TABLES)
