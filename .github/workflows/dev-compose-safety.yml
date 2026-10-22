@@ -1,0 +1,21 @@
+name: Development Compose isolation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  compose-loopback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker Compose configuration
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+      - name: Check ports cannot bind the public host
+        run: python -m unittest discover -s scripts/tests -p 'test_dev_compose_safety.py' -v
