@@ -167,6 +167,33 @@ def exercise_auth(sink: LocalSMTP) -> list[str]:
         response = client.get("/api/auth/me")
         check(response.status_code == 200 and response.json()["user"]["email"] == email_address,
               "authenticated current-user request passes through Next.js to FastAPI")
+        # Deterministic arithmetic exercises the actual graph and SSE endpoint,
+        # without a provider key, fake backend, or mocked stream implementation.
+        user_id = response.json()["user"]["id"]
+        events: list[tuple[str, dict]] = []
+        with client.stream("POST", "/api/chat", json={
+            "user_id": user_id, "session_id": "ci-sse-" + secrets.token_hex(8),
+            "question": "1+1等于几", "allow_web": False, "auto_web_fallback": False,
+        }) as stream:
+            check(stream.status_code == 200, "authenticated real chat stream opens through Next.js")
+            check("text/event-stream" in stream.headers.get("content-type", ""),
+                  "real backend SSE content type survives the proxy")
+            event_name = "message"
+            data: list[str] = []
+            for line in stream.iter_lines():
+                if line.startswith("event:"):
+                    event_name = line[6:].strip()
+                elif line.startswith("data:"):
+                    data.append(line[5:].lstrip())
+                elif not line and data:
+                    events.append((event_name, json.loads("\n".join(data))))
+                    event_name, data = "message", []
+        check(bool(events) and events[-1][0] == "done", "actual SSE terminates with done")
+        check(all(name != "error" for name, _ in events), "actual SSE contains no error event")
+        check(any("2" in str(payload.get("final_answer", "")) for _, payload in events),
+              "actual LangGraph arithmetic answer reaches the HTTP client")
+        check(not any(payload.get("web_search_used") or payload.get("external_tool_calls")
+                      for _, payload in events), "deterministic SSE does not use external tools")
         check(client.get("/practice").status_code == 200, "real authentication cookie opens protected page")
         old_refresh = client.cookies.get("la_refresh_token")
         response = client.post("/api/auth/refresh")
