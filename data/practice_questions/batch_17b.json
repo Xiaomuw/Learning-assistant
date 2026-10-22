@@ -1,3 +1,0 @@
-[
-  {"question_id":"pq-os-bank-016","concept_id":"operating-system.deadlock.banker","difficulty":"medium","stem":"银行家算法中 Available 向量表示的含义是（ ）。","options":{"A":"系统当前可用的各类资源的数量","B":"每个进程已获得的资源总量","C":"每个进程的最大资源需求量","D":"系统中所有资源的初始总量"},"answer":"A","explanation":"根据银行家算法的数据结构，Available 向量记录了系统中各类资源当前空闲可分配的数量。因为每次分配或回收资源时 Available 都会动态更新，所以安全性检查时用 Available 判断能否满足进程的剩余需求。选项 B 已获得量由 Allocation 矩阵记录；选项 C 最大需求由 Max 矩阵记录；选项 D 初始总量不等于当前可用量。","knowledge_points":["Available","银行家算法","资源管理"],"common_trap":"混淆 Available、Allocation、Max 和 Need 的含义。"}
-]
