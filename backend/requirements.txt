@@ -5,7 +5,7 @@
 # ---------- Web 框架 ----------
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
-python-multipart==0.0.20       # 文件上传支持
+python-multipart==0.0.32       # 文件上传支持
 sse-starlette==2.2.1           # SSE 流式响应
 
 # ---------- LLM / Agent 框架 ----------
@@ -21,7 +21,7 @@ langchain-postgres>=0.0.17,<0.1
 psycopg[binary,pool]>=3.2.9
 
 # ---------- 文档解析 ----------
-pypdf==5.4.0                   # PDF 解析
+pypdf==6.21.2                   # PDF 解析
 langchain-text-splitters>=1.0,<2.0
 beautifulsoup4==4.13.3         # Web scraping / URL doc ingestion
 requests==2.32.3               # Web requests
