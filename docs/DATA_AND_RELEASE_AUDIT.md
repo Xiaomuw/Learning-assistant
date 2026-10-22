@@ -6,7 +6,7 @@
 
 | Area | Finding | Next action |
 | --- | --- | --- |
-| Former 408 practice bank and other branches | The current `main` and two older topic branches each retain five source JSONs; `mian` has **42 JSON files**, including additional batch and v2 files (not individually reviewed). The two draft PR heads have **zero** question-bank JSONs. | Keep current distribution clear, audit other branches and historical copies separately before claiming repository-wide remediation. [Branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md). |
+| Former 408 practice bank and other branches | After PR #6 and cleanup PRs #23–#25 merged, the current main, mian, codex/docker-production-deploy and codex/qa-408-flow-web-toggle branch heads contain **zero question-bank JSON files** under data/practice_questions/. | Keep current trees clear and separately assess historical Git commits, external copies and source rights. [Branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md). |
 | Untracked curriculum | `backend/app/application/notebooks/curriculum_seed.py` loads packages from `backend/storage/data/curriculum/`, under the ignored `backend/storage/` path. | Make fresh-clone tests independent of unpublished data, or supply legally redistributable fixtures. |
 | Dev configuration | `docker-compose.yml` publishes Postgres 5434, backend 8003, frontend 3003 and uses a predictable database fallback password. | Restrict host access or bind loopback; never reuse defaults in production. |
 | Mini-program | The tracked project config included a specific developer AppID; this PR proposes `touristappid`. | Provide a local AppID via `TARO_APP_ID` / `WECHAT_MINI_APP_ID`, with private configuration ignored. |
@@ -20,7 +20,7 @@ Tracked dataset rights: [issue #5](https://github.com/Xiaomuw/Learning-assistant
 
 **Owner-confirmed method:** AI searched existing online question banks and reorganized the retrieved material into 530 questions. The use of third-party online banks is confirmed; exact original URLs, rightsholders and redistribution permissions have **not** been established. Do not classify these records as independently AI-authored original questions.
 
-Historical inventory from the **earlier `main` tree, before the removal proposed in PR #6**, of `data/practice_questions/all_408.json` and its four subject mirrors:
+Historical inventory from the **pre-PR #6 main tree** of `data/practice_questions/all_408.json` and its four subject mirrors:
 
 | Finding | Verified result |
 | --- | --- |
@@ -43,7 +43,7 @@ Historical inventory from the **earlier `main` tree, before the removal proposed
 
 Use `python scripts/audit_question_bank_provenance.py --json`. When the old files still exist, it validates the canonical/subject mirrors and matching ledger. Once **all five** files have been removed, it checks that no partial mirror or newly unreviewed JSON has appeared and retains the 530-ID ledger solely as **historical review metadata**, rather than reporting those entries as missing source files. The report separates `current_tree_data_boundary_passes` from the broader `release_gate_passes`; the latter **remains false** for the historically uncleared retired corpus. The `--release-gate` mode intentionally blocks a release and does not establish legal compliance.
 
-The combined candidate must be reviewed and tested against [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6). Removing files in a proposal cannot by itself remove them from the default branch or prior history.
+PR #6 and cleanup PRs #23–#25 are merged; all checked current branch heads are clear of question-bank JSON. The remaining release blocker is the unresolved provenance/rights of historical content in older Git commits and any external copies; see [GIT_HISTORY_EXPOSURE_REVIEW.md](GIT_HISTORY_EXPOSURE_REVIEW.md).
 
 ## Historical exposure and merge coordination
 
@@ -64,7 +64,8 @@ Excluding a dataset from the repository Apache-2.0 scope does **not** authorize 
 ## Minimum release gates
 
 - [ ] Audit dataset provenance, upstream ownership and rights of all original/borrowed code and assets.
-- [ ] Upgrade Next.js and validate App Router compatibility ([issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4)).
+- [x] Merge the Next.js 16.4.2 / React 19.3.0 security migration; its CI, Docker login-route check, production dependency audit and real auth regression jobs passed before merge ([PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7)).
+- [ ] Complete remaining browser/mobile, real-model RAG/SSE, public TLS/CORS/proxy and staging checks ([issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4)).
 - [ ] Review licenses and active advisories of resolved direct/transitive dependencies.
 - [ ] Scan current tree and Git history for credentials and sensitive data, remediate if discovered.
 - [ ] Run a fresh-clone build with independent, redistributable test fixtures.

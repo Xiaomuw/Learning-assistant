@@ -1,37 +1,39 @@
 # Historic Git Exposure — decision record (not a remediation execution)
 
-**Review state: NOT RESOLVED.** This document inventories likely exposure and presents choices; it does not rewrite repository history or delete any private data.
+**Review state: PARTIALLY MITIGATED, NOT RESOLVED (checked 2026-10-22).** PRs #6, #3 and #7 are merged into main. The five original question JSONs are absent from the current default tree, but historical commits and other active branches still contain unreviewed question-bank material. This document records evidence and options; it does not rewrite history or delete private data.
 
 ## What can be verified
 
-- The original [`main` tree](https://github.com/Xiaomuw/Learning-assistant/tree/main/data/practice_questions) had five publicly committed JSON files containing a 530-question corpus gathered using AI-assisted web searches of existing third-party question banks.
+- The pre-remediation main tree had five publicly committed JSON files containing a 530-question corpus gathered using AI-assisted web searches of existing third-party question banks. [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) removed their current versions from main in merge commit a0dc819e8d4ff9db481ac8877b67105570829b8c; the current directory retains only its README. Earlier commit objects remain.
 - The owner has confirmed the collection method. The individual upstream rights, licenses and redistribution permissions have not been established.
-- [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) removes those five files from the proposed **current** tree and protects local imports; until a deliberate merge, `main` is unchanged.
-- [Draft PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3) documents Apache-2.0's limited scope and retains an **ID-only** historical review ledger. No question wording is copied into that ledger.
+- [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) is merged. It removes the five JSON files from the current main tree and preserves generic import and AI-practice logic. It does not remove historical commits or other branch copies.
+- [PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3) is merged. Main now has Apache-2.0 and its scope statement, while the ID-only 530-record ledger remains historical review metadata; it contains no question wording and grants no rights to the original content.
 - Earlier commit objects, branch histories, referenced pull requests, forks, clones and third-party caches are **not** automatically erased by a normal deletion commit. Full inventory of all copies has **not** been established.
 
-## Public branch inventory — checked 2026-10-21
+## Public branch inventory — checked 2026-10-22
 
-This is a **current-file-tree listing**, not a complete Git history scan or legal-content review. The authenticated GitHub repository API returned eight active branches; the following counts are for JSON files directly in `data/practice_questions/` at each branch head:
+This is a current-file-tree listing, not a complete Git history scan or legal-content review. The repository had 26 branch heads at the time of review. After PRs #23–#25 merged, all checked current branch heads have **zero JSON files** under data/practice_questions/.
 
-| Branch | JSON files in that directory | Notes |
+| Branch / group | JSON files in current directory | Notes |
 | --- | ---: | --- |
-| `main` | **5** | Original canonical file + four subject mirrors still publicly in the default branch |
-| `codex/docker-production-deploy` | **5** | Older active PR/deployment branch retains the five JSONs |
-| `codex/qa-408-flow-web-toggle` | **5** | Older topic branch retains the five JSONs |
-| `mian` | **42** | Contains `all_408_v2.json`, a cleanup-report JSON and many `batch_*.json`; individual contents and licensing **not reviewed** |
-| `chore/separate-unverified-question-bank-2026-10` | **0** | Draft PR #6 proposed data-free tree |
-| `chore/oss-readiness-2026-10` | **0** | Stacked Draft PR #3 current tree |
-| `codex-release-2026-05-08` | No such directory at branch head | **Not** proof of clean prior history |
-| `codex-release-main-2026-05-08` | No such directory at branch head | **Not** proof of clean prior history |
+| main | **0** | PR #6 removed the five original question-bank files; README remains |
+| codex/docker-production-deploy | **0** | PR #24 merged; branch directory no longer contains question JSON |
+| codex/qa-408-flow-web-toggle | **0** | PR #25 merged; only README remains |
+| mian | **0** | PR #23 merged; the previous 42 JSON files were removed from the current branch head |
+| chore/separate-unverified-question-bank-2026-10 | **0** | Branch used for merged PR #6 |
+| chore/oss-readiness-2026-10 | **0** | Branch used for merged PR #3 |
+| chore/security-next16-upgrade-2026-10 | **0** | Branch used for merged PR #7 |
+| cleanup/* branches | **0** | Branches used to prepare PRs #23–#25; their current trees have no question JSON |
+| codex-release-2026-05-08 and codex-release-main-2026-05-08 | No such directory at branch head | Not proof of clean prior history |
+| Dependabot, docs and migration-fix branches | **0** | Current branch trees checked; no question JSON found |
 
-Across the 42 `mian` JSON objects, GitHub reports approximately **2.2 MB** of files. The count includes supporting JSON reports and **does not mean there are 42 independently copyrighted question banks**. No blanket conclusion about their provenance or redistribution rights has been made.
+Before cleanup, mian contained 42 JSON files (approximately 2.2 MB according to GitHub metadata), including all_408_v2.json, batch files and a cleanup report containing deleted question records. The two older codex branches each had five question-bank JSON files. PRs #23, #24 and #25 removed these files from their current branch heads.
 
-GitHub repository metadata showed **0 recorded forks** and the releases API returned **no published Releases** at the time checked. These observations **cannot** establish that third-party clones, downloaded ZIPs, cached copies or older commits do not exist. Tag enumeration was not verified.
+GitHub repository metadata previously showed 0 recorded forks and no published Releases at the time checked. These observations cannot establish that third-party clones, downloaded ZIPs, cached copies or older commits do not exist. No comprehensive historical path/blob scan has yet been completed.
 
 ### Impact on remediation
 
-**Merging PR #6 to `main` will not clean `codex/docker-production-deploy`, `codex/qa-408-flow-web-toggle`, or `mian`.** Before declaring public cleanup complete, determine whether those branches are still needed and how to remove or replace the unreviewed files without losing legitimate development work. Do **not** delete these branches automatically. Any coordinated history rewrite remains a separate high-impact decision.
+**All currently checked branch heads are clear of question-bank JSON files, but historical Git exposure remains unresolved.** PRs #23–#25 only delete current files from the relevant branch heads; they do not rewrite older commits or remove copies held by other people. Do not delete branches automatically. Any coordinated history rewrite remains a separate high-impact decision.
 
 ## Practical options (maintainer decision, not action)
 
@@ -53,4 +55,4 @@ GitHub's [official guidance on removing sensitive data](https://docs.github.com/
 - [ ] Obtain a separate deliberate owner decision on changing history, repo visibility or the legacy repository's fate.
 - [ ] After any authorized change, verify branch/tag refs and historical accessibility, and update publicly stated limitations honestly.
 
-**No force-push, history rewrite, visibility change, repository deletion or GitHub Support ticket has been performed by these draft PRs.**
+**No force-push, history rewrite, visibility change, repository deletion or GitHub Support ticket has been performed by PRs #3, #6 or #7.** Current-tree cleanup is not historical erasure.

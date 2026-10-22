@@ -6,13 +6,13 @@
 
 The project owner states the 530 questions were **collected through AI web searches of existing question banks, and subsequently organized**. This is not the same as independent creation from abstract educational concepts.
 
-The former `main` snapshot of `data/practice_questions/all_408.json` had 530 rows across 53 concepts; four per-subject JSON mirrors matched it. [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) removes all five files from its **proposed** current tree; `main` and old commits have not yet been changed. The JSON does **not** identify source websites, owners, reuse permissions, or prompt and tool histories. Exact text comparisons against the open web have not established the original rightsholders. No confirmed license should be inferred from discoverability or AI-assisted rewriting.
+The former main snapshot of data/practice_questions/all_408.json had 530 rows across 53 concepts; four per-subject JSON mirrors matched it. [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) is merged and the five files are absent from the current main tree. PRs [#23](https://github.com/Xiaomuw/Learning-assistant/pull/23), [#24](https://github.com/Xiaomuw/Learning-assistant/pull/24), and [#25](https://github.com/Xiaomuw/Learning-assistant/pull/25) have also cleaned the current heads of mian and both older codex branches. Earlier Git commits and external copies remain. The JSON did not identify source websites, owners, reuse permissions, or prompt/tool histories. No confirmed license should be inferred from discoverability or AI-assisted rewriting.
 
 This is a provenance risk, **not a finding that any particular question is infringing**. Factual knowledge and terminology can be freely used; original expressive wording or compilation may carry separate rights depending on jurisdiction and circumstances.
 
 ## Maintainer decision: separate code from data
 
-- Keep original application code and original docs under the proposed Apache-2.0 terms to the extent the project can lawfully license them.
+- Keep original application code and original docs under the merged Apache-2.0 terms only to the extent the relevant holders can lawfully grant them.
 - Treat all existing web-collected questions as **REVIEW_REQUIRED**. The code license does not grant redistribution rights to them.
 - Keep the public sample questions in `examples/practice_questions.json`; those are separate, newly drafted examples.
 - Provide JSON/CSV import tooling so authorized datasets may be deployed privately without adding them to a public Git tree.
@@ -22,7 +22,7 @@ This is a provenance risk, **not a finding that any particular question is infri
 
 1. **Preserve evidence privately.** Keep your own existing question JSON and any search/prompt logs in private, access-controlled storage as needed for a legitimate provenance review. Do not post the question text again in public PRs or issues.
 2. **Prevent additional public redistribution.** Check active deployments, archives, release artifacts and future build packages for bundled source material. Refrain from redistributing uncleared questions.
-3. **Complete the reviewed public-tree cleanup.** [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) proposes deleting the five JSON banks and replaces the fixed 530-question test with synthetic data. After explicit maintainer review, it must be merged **before** this stacked governance PR. Current `main` has not been changed.
+3. **Maintain the clean current trees.** PR #6 removed the five JSON banks from main; PRs #23–#25 removed question JSONs from the three older branch heads. The remaining issue is historical Git exposure and any external copies; see [GIT_HISTORY_EXPOSURE_REVIEW.md](GIT_HISTORY_EXPOSURE_REVIEW.md).
 4. **Protect working functionality.** Retain generic import APIs and schemas; replace tests that depend on a fixed licensed corpus with small synthetic fixtures, or use authorized private test data strictly outside the public repo.
 5. **Evaluate history separately.** Deleting current files does not remove them from prior Git commits, forks or cached references. Coordinate any history rewrite with collaborators, and check GitHub's documentation and applicable policies before attempting it. Do not force-push as part of this draft PR.
 6. **If seeking restoration:** determine source URLs, author/rightsholder, exact license, permission for redistribution/modification, attribution requirements and any evidence for each question or source set. Review individually where necessary.
@@ -50,7 +50,7 @@ Set `CLEARED` **only after human review**, with a valid permission basis and an 
 
 ## Next-step review and integration
 
-[PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) and this OSS-readiness PR are coordinated via [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md). When both changes are combined, public CI should pass with no old question JSON; the source ledger must not be treated as an active corpus. A passing current-tree data check is **not** a statement that earlier forks/commits were erased or legally cleared.
+[PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) and [PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3) are merged. The current main tree contains no question-bank JSON, and the source ledger is historical metadata only. A passing current-tree data check is **not** a statement that earlier branches, commits, forks or caches were erased or legally cleared.
 
 ## Out-of-scope decisions pending owner approval
 

@@ -1,6 +1,6 @@
 # Codex for Open Source — truthful application draft
 
-**Current status (2026-10-21): NOT YET READY FOR SUBMISSION.** This is a template for the actual maintainer to review and update, not an application, admission claim, or guarantee. Do not submit until the listed evidence and licensing/security blockers have been reviewed.
+**Current status (2026-10-22): NOT YET READY FOR SUBMISSION.** This is a template for the actual maintainer to review and update, not an application, admission claim, or guarantee. Do not submit until the listed evidence and licensing/security blockers have been reviewed.
 
 Official application: https://openai.com/form/codex-for-oss/
 
@@ -27,19 +27,19 @@ Use Codex/API credits for maintaining LangGraph workflow tests and evaluations, 
 
 ## Draft response: Anything else we should know? (max 500 characters)
 
-This is an early-stage public project. We are reviewing license ownership and historical dataset provenance, replacing unverified third-party question banks with independent examples, and validating security and deployment. No broad adoption, downloads, or external contributors are claimed.
+This is an early-stage public project. The main branch now excludes the unverified question-bank JSON and provides independent examples, and the Apache-2.0 code license is in place. Older branches and Git history still need review, and real-model, browser and staging acceptance remain incomplete. No broad adoption, downloads, or external contributors are claimed.
 
 **Characters:** 291/500.
 
-## Evidence snapshot (2026-10-21, must refresh before submission)
+## Evidence snapshot (2026-10-22, must refresh before submission)
 
 - Public GitHub repo with owner/maintainer write access: **yes**.
 - Stars: **0**; forks: **0**; published Releases: **0** according to the verified public repository snapshot. No verified external usage/download metrics were available; do **not** invent them.
-- Draft PR #6: public data removal and authorization-independent synthetic test corpus; **not merged**.
-- Draft PR #3: Apache-2.0 proposal, English README, governance templates, CI and historical provenance ledger; **not merged**.
-- Draft PR #7: patched Next.js migration; verified CI/Docker tests; **not merged**.
-- Remaining rights issues: old `main`, `mian` and two old `codex/` branches contain web-collected question JSON; historical exposure is not cleared.
-- Next steps: approve/merge reviewed safe changes, resolve historical rights, test a clean deployment and end-user flows, publish an accurate version, and collect genuine third-party adoption/feedback.
+- PR #6 merged: the five original question JSONs are absent from the current main tree; generic import and AI practice remain.
+- PR #3 merged: Apache-2.0, license scope, English README, governance templates, Dependabot, CI and historical provenance ledger are on main.
+- PR #7 merged: Next.js 16.4.2 / React 19.3.0 migration, Docker login-route smoke and real auth regression CI are on main.
+- Remaining rights issues: PRs #23–#25 have cleaned the current heads of `mian`, `codex/docker-production-deploy`, and `codex/qa-408-flow-web-toggle`; all checked branch heads are now clear of question-bank JSON. Historical Git exposure, rights for any content in older commits, and external copies remain unresolved.
+- Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The Alembic-head fix was merged as PR #22 after all four CI workflows passed.
 
 ## Mandatory accuracy checks before using these draft answers
 
