@@ -1,6 +1,6 @@
-# Next.js migration and real authentication verification — Draft PR #7
+# Next.js 16 migration and real authentication verification — merged PR #7
 
-**Review-only status: no production deployment, release, or merge into main.**
+**Current status (2026-10-22): merged into main; no production deployment or version release has been performed.** The tests below are evidence of the verified scope, not a full production security certification.
 
 ## Candidate versions and scope
 
@@ -16,9 +16,9 @@ Upstream references for independent review:
 
 This security PR is now stacked on the **data-free OSS candidate**, not the old default branch:
 
-1. [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6): remove the five web-collected question-bank JSON files from the proposed current tree.
-2. [Draft PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3): proposed license, governance, documentation and historical provenance ledger.
-3. [Draft PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7): Next.js migration, real authentication regression and HTTP integration.
+1. [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) merged: removes the five question-bank JSON files from the current main tree.
+2. [PR #3](https://github.com/Xiaomuw/Learning-assistant/pull/3) merged: adds Apache-2.0 scope, governance, documentation and the historical provenance ledger.
+3. [PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7) merged: adds the Next.js migration, real authentication regression and HTTP integration.
 
 After separate owner approval, merge in dependency order, retarget dependent PRs to `main` as appropriate, and recheck their final diff and CI. Nothing here authorizes an automatic merge, old-branch deletion or history rewrite.
 
@@ -73,4 +73,4 @@ The only external-service replacement in this HTTP test is a **loopback SMTP sin
 - A clean install/build currently allows Next.js to normalize TypeScript configuration; persist that normalization in a focused follow-up to avoid build-time configuration drift.
 - Genuine third-party adoption and an approved public release. CI success is not OpenAI program acceptance or proof of ecosystem impact.
 
-Keep the PR in Draft until the remaining review items and owner approval are addressed. Related: [Issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4), [Issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5).
+Remaining items are real-model RAG/chat/SSE, browser/mobile acceptance, external email delivery, public TLS/CORS/proxy, staging, full dependency/ownership review, and historical/other-branch question data. These are not represented as completed by the merged PR. Related: [Issue #4](https://github.com/Xiaomuw/Learning-assistant/issues/4), [Issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5).
