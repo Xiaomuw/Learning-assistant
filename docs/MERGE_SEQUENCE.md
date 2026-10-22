@@ -19,7 +19,7 @@ The auth test set includes 22 regression tests and 18 HTTP assertions through Ne
 
 ## Remaining release blockers
 
-- [ ] Remove or review current question-bank copies on codex/docker-production-deploy, codex/qa-408-flow-web-toggle, and mian (42 JSON files at its checked branch head).
+- [x] Merged [PR #23](https://github.com/Xiaomuw/Learning-assistant/pull/23), [PR #24](https://github.com/Xiaomuw/Learning-assistant/pull/24), and [PR #25](https://github.com/Xiaomuw/Learning-assistant/pull/25); all three legacy branch heads now contain zero question-bank JSON files.
 - [ ] Assess historical Git exposure separately. A normal deletion commit does not remove prior commits, clones, forks or caches. No history rewrite has been performed.
 - [ ] Resolve source-rights/provenance concerns for the web-collected 530-question bank; it remains outside the Apache-2.0 grant.
 - [ ] Fix the hard-coded Alembic revision in backend/scripts/rebuild_408_project_data.py (tracked by review PR #22) and rerun the isolated PostgreSQL suite before merging that fix.
