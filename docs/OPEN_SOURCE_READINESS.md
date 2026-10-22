@@ -7,7 +7,8 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [ ] Establish ownership and the right to license original code and any copied snippets. Resolve existing contributors' or employers' rights if applicable.
 - [x] Confirm collection method: AI web-searched existing question banks and reorganized results; this is **not** proof of distribution rights.
 - [x] Merged [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6): all five original JSON banks are absent from the current main tree; generic imports and AI-practice features remain. Historical commits and older branches are not cleaned by this merge.
-- [ ] Resolve **remaining historical and active-branch exposure**: main is clean at its current tree, but codex/docker-production-deploy and codex/qa-408-flow-web-toggle still have five JSONs each, and mian has 42 JSON files not individually rights-audited. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md).
+- [x] Merged [PR #23](https://github.com/Xiaomuw/Learning-assistant/pull/23), [PR #24](https://github.com/Xiaomuw/Learning-assistant/pull/24) and [PR #25](https://github.com/Xiaomuw/Learning-assistant/pull/25): the current heads of mian and both older codex branches now contain no question-bank JSON files.
+- [ ] Resolve **historical Git exposure**: old commits may still contain the web-collected corpus; no history rewrite or external-copy cleanup has been performed. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md).
 - [ ] Audit third-party code, images, diagrams and UI assets; retain upstream attributions and licenses.
 - [ ] Review direct and transitive dependency licenses and generate any required notices.
 - [ ] Scan repository content and Git history for credentials, personal data, tokens, user documents and unsafe sample configuration. Revoke exposed secrets as needed.
