@@ -49,8 +49,9 @@ class LearningCyclePostgresTest(unittest.TestCase):
 
     @contextmanager
     def session_scope(self):
-        with self.sessions.begin() as session:
+        with self.sessions() as session:
             yield session
+            session.commit()
 
     def test_generation_attempt_mastery_and_replay_use_persisted_facts(self) -> None:
         questions = SqlQuestionItemRepository(self.session_scope)
@@ -73,6 +74,7 @@ class LearningCyclePostgresTest(unittest.TestCase):
                 "answer_key": saved.answer_key, "rubric": saved.rubric,
                 "primary_concept_id": saved.primary_concept_id,
                 "source_refs": saved.source_refs, "difficulty": saved.difficulty,
+                "quality_report": saved.quality_report,
             })
         self.assertEqual(item.primary_concept_id, CONCEPT)
         self.assertEqual(item.source_refs[0].evidence_id, "original-fixture")

@@ -409,7 +409,7 @@ class SqlQuestionItemRepository(QuestionItemRepository):
                         primary_concept_id=_text(payload.get("primary_concept_id") or payload.get("concept_id"), 160),
                         graph_run_id=_text(payload.get("graph_run_id"), 100),
                         stem=_text(payload.get("stem") or payload.get("question"), 4000),
-                        options_json=_summary(payload.get("options") or payload.get("options_json") or []),
+                        options_json=_question_options(payload.get("options") or payload.get("options_json") or []),
                         difficulty=_text(payload.get("difficulty") or "基础", 30),
                         source_refs=_summary(payload.get("source_refs") or []),
                         answer_key=_summary(payload.get("answer_key") or {}),
@@ -421,7 +421,7 @@ class SqlQuestionItemRepository(QuestionItemRepository):
                 )
             else:
                 existing.stem = _text(payload.get("stem") or payload.get("question") or existing.stem, 4000)
-                existing.options_json = _summary(payload.get("options") or payload.get("options_json") or existing.options_json or [])
+                existing.options_json = _question_options(payload.get("options") or payload.get("options_json") or existing.options_json or [])
                 existing.answer_key = _summary(payload.get("answer_key") or existing.answer_key or {})
                 existing.rubric = _summary(payload.get("rubric") or existing.rubric or {})
                 existing.quality_report = _summary(payload.get("quality_report") or existing.quality_report or {})
@@ -695,6 +695,12 @@ def _concept_from_row(row: GraphConceptModel) -> dict[str, Any]:
         "created_at": _iso(row.created_at),
         "updated_at": _iso(row.updated_at),
     }
+
+
+def _question_options(value: Any) -> list[dict[str, str]]:
+    # These are learner-facing domain records, not execution traces. The trace
+    # summarizer deliberately redacts keys named "text" and must not be used here.
+    return [{"key": _text(option.get("key"), 1), "text": _text(option.get("text"), 300)} for option in value]
 
 
 def _summary(value: Any, *, depth: int = 5) -> Any:
