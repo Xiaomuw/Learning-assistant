@@ -63,6 +63,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - name: Mini-program stream client regression
+        run: npm run test:chat-stream
       - name: Build Taro mini-program
         run: npm run build:weapp
         env:
