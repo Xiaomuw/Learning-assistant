@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Docker Compose configuration
         run: |
+          install -m 600 /dev/null backend/.env
           docker compose -f docker-compose.yml config --quiet
       - name: Check ports cannot bind the public host
         run: python -m unittest discover -s scripts/tests -p 'test_dev_compose_safety.py' -v
