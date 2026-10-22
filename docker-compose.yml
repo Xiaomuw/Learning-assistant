@@ -1,7 +1,7 @@
 # ============================================================
 # 多 Agent 学习问答助手 — Docker Compose
 # ============================================================
-# 服务：
+# 安全提醒：开发环境的宿主机端口只监听 127.0.0.1；不要直接作为公网生产配置。\n# 容器之间仍通过 Compose 网络的服务名通信。\n# 服务：
 #   postgres — PostgreSQL + pgvector
 #   backend  — FastAPI (port 8000)
 #   frontend — Next.js (port 3000)
@@ -13,7 +13,7 @@ services:
     container_name: la-postgres
     restart: unless-stopped
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-learning_assistant}
       - POSTGRES_USER=${POSTGRES_USER:-learning_user}
@@ -33,7 +33,7 @@ services:
     container_name: la-backend
     restart: unless-stopped
     ports:
-      - "8003:8000"
+      - "127.0.0.1:8003:8000"
     env_file:
       - ./backend/.env
     environment:
@@ -62,7 +62,7 @@ services:
     container_name: la-frontend
     restart: unless-stopped
     ports:
-      - "3003:3000"
+      - "127.0.0.1:3003:3000"
     environment:
       - INTERNAL_API_BASE=http://backend:8000/api
       - NEXT_PUBLIC_API_BASE=/api
