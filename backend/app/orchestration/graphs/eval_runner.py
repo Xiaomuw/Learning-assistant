@@ -196,14 +196,15 @@ def _cases() -> list[GraphEvalCase]:
                 _assert_final_response,
                 _assert_non_empty_answer,
                 _assert_concept_filtered_tool_request,
-                _assert_no_web_fallback_planned,
+                # OPEN_TOOLS permits automatic web fallback after empty internal retrieval.
+                _assert_web_fallback_planned_without_provider,
                 _assert_has_learning_event("question_answered"),
             ],
             expected_metrics={
                 "non_empty_response": True,
-                "tool_requests": 1,
+                "tool_requests": 2,
                 "concept_filtered_retrieval": True,
-                "empty_notebook_web_fallback": False,
+                "empty_notebook_web_fallback": True,
             },
         ),
         GraphEvalCase(
