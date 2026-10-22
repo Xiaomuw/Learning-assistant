@@ -79,4 +79,4 @@ jobs:
         run: python scripts/bootstrap_app_data.py --confirm BOOTSTRAP_APP_DATA
       - name: Run every backend unittest module
         working-directory: backend
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+        run: python scripts/run_isolated_unittests.py
