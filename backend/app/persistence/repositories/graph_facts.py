@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from contextlib import AbstractContextManager
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -397,6 +398,8 @@ class SqlQuestionItemRepository(QuestionItemRepository):
     session_factory: SessionFactory = session_scope
 
     def create_question_item(self, payload: dict[str, Any]) -> str:
+        # Validated question fields are learner-facing records, not traces. Keep
+        # their JSON shape and content; only metadata uses the trace summarizer.
         item_id = str(payload.get("id") or payload.get("question_item_id") or uuid4())
         with self.session_factory() as session:
             existing = session.get(GraphQuestionItemModel, item_id)
@@ -409,22 +412,22 @@ class SqlQuestionItemRepository(QuestionItemRepository):
                         primary_concept_id=_text(payload.get("primary_concept_id") or payload.get("concept_id"), 160),
                         graph_run_id=_text(payload.get("graph_run_id"), 100),
                         stem=_text(payload.get("stem") or payload.get("question"), 4000),
-                        options_json=_question_options(payload.get("options") or payload.get("options_json") or []),
+                        options_json=deepcopy(payload.get("options") or payload.get("options_json") or []),
                         difficulty=_text(payload.get("difficulty") or "基础", 30),
-                        source_refs=_summary(payload.get("source_refs") or []),
-                        answer_key=_summary(payload.get("answer_key") or {}),
-                        rubric=_summary(payload.get("rubric") or {}),
-                        quality_report=_summary(payload.get("quality_report") or {}),
+                        source_refs=deepcopy(payload.get("source_refs") or []),
+                        answer_key=deepcopy(payload.get("answer_key") or {}),
+                        rubric=deepcopy(payload.get("rubric") or {}),
+                        quality_report=deepcopy(payload.get("quality_report") or {}),
                         generation_source=_text(payload.get("generation_source"), 120),
                         metadata_json=_summary(payload.get("metadata") or {}),
                     )
                 )
             else:
                 existing.stem = _text(payload.get("stem") or payload.get("question") or existing.stem, 4000)
-                existing.options_json = _question_options(payload.get("options") or payload.get("options_json") or existing.options_json or [])
-                existing.answer_key = _summary(payload.get("answer_key") or existing.answer_key or {})
-                existing.rubric = _summary(payload.get("rubric") or existing.rubric or {})
-                existing.quality_report = _summary(payload.get("quality_report") or existing.quality_report or {})
+                existing.options_json = deepcopy(payload.get("options") or payload.get("options_json") or existing.options_json or [])
+                existing.answer_key = deepcopy(payload.get("answer_key") or existing.answer_key or {})
+                existing.rubric = deepcopy(payload.get("rubric") or existing.rubric or {})
+                existing.quality_report = deepcopy(payload.get("quality_report") or existing.quality_report or {})
                 existing.updated_at = _utcnow()
         return item_id
 
@@ -695,12 +698,6 @@ def _concept_from_row(row: GraphConceptModel) -> dict[str, Any]:
         "created_at": _iso(row.created_at),
         "updated_at": _iso(row.updated_at),
     }
-
-
-def _question_options(value: Any) -> list[dict[str, str]]:
-    # These are learner-facing domain records, not execution traces. The trace
-    # summarizer deliberately redacts keys named "text" and must not be used here.
-    return [{"key": _text(option.get("key"), 1), "text": _text(option.get("text"), 300)} for option in value]
 
 
 def _summary(value: Any, *, depth: int = 5) -> Any:

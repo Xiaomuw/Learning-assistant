@@ -459,6 +459,7 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
                 "options": [{"key": "A", "text": "80"}],
                 "answer_key": {"correct_option": "A"},
                 "rubric": {"criteria": ["single_correct_option"]},
+                "quality_report": {"reviewer": {"checks": [f"check-{i}" for i in range(9)]}},
             }
         )
 
@@ -469,6 +470,7 @@ class GraphPersistenceRepositoryTest(unittest.TestCase):
         self.assertEqual(matches[0]["id"], "qitem-1")
         self.assertEqual(matches[0]["primary_concept_id"], "HTTP")
         self.assertEqual(matches[0]["options"], [{"key": "A", "text": "80"}])
+        self.assertEqual(matches[0]["quality_report"]["reviewer"]["checks"], [f"check-{i}" for i in range(9)])
         repo.create_question_item({"id": item_id, "options": [{"key": "A", "text": "443"}]})
         updated = repo.find_similar({"stem": "HTTP 的默认端口是什么？"}, limit=5)
         self.assertEqual(updated[0]["options"], [{"key": "A", "text": "443"}])
