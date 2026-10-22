@@ -21,16 +21,18 @@ flowchart TD
     C --> D["application/chat/orchestrator_runtime.py"]
     D --> O["LearningOrchestratorGraph"]
     O --> R["request_guard"]
-    R --> L["load_learner_context"]
-    L --> I["intent_router"]
-    I -->|QA| QA["QAGraph"]
-    I -->|Generate Question| QG["QuestionGenerationGraph"]
-    I -->|Evaluate Mastery| ME["MasteryEvaluationGraph"]
-    I -->|Fallback| F["fallback_response"]
-    QA --> RC["response_composer"]
-    QG --> RC
-    ME --> RC
-    F --> RC
+    R --> RT["load_runtime_context"]
+    RT --> L["load_learner_context"]
+    L --> I["graph_router"]
+    I -->|QA| QA["qa_graph / QAGraph"]
+    I -->|Generate Question| QG["question_generation_graph / QuestionGenerationGraph"]
+    I -->|Evaluate Mastery| ME["mastery_evaluation_graph / MasteryEvaluationGraph"]
+    I -->|Fallback| F["top_level_clarify_or_refuse"]
+    QA --> PE["persist_learning_events"]
+    QG --> PE
+    ME --> PE
+    F --> PE
+    PE --> RC["response_composer"]
     RC --> P["persist_audit_event"]
     P --> E["END"]
 ```

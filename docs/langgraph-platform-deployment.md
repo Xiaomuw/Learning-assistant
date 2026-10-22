@@ -26,7 +26,7 @@ cd backend
 验证重点：
 
 - Studio 能看到 `learning_assistant`
-- 节点包含 `request_guard / load_learner_context / intent_router / invoke_child_graph / response_composer / persist_audit_event`
+- 节点包含：`request_guard`、`load_runtime_context`、`load_learner_context`、`graph_router`、`qa_graph`、`question_generation_graph`、`mastery_evaluation_graph`、`top_level_clarify_or_refuse`、`persist_learning_events`、`response_composer`、`persist_audit_event`
 - `concept / problem / review / practice / mastery` 都能启动 run
 - 模拟子图异常时由 Orchestrator 进入 fallback / response composer
 
@@ -85,5 +85,5 @@ Cloud 不能访问本机 `127.0.0.1:5432`。`DATABASE_URL` 必须指向 LangSmit
 
 - 图结构清晰可见
 - trace 中能看到节点耗时 `node_timings`
-- 错误路径能进入 `graph_error_node`
+- 错误路径能进入 `top_level_clarify_or_refuse` 或安全响应组合路径；`graph_error_node` 只作为历史 presenter 兼容语义理解
 - 现有 FastAPI 前端链路不受影响

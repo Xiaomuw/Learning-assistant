@@ -39,8 +39,8 @@
 - 已完成：只有 MasteryEvaluationGraph 写 `MasterySnapshotRepository`。
 - 已完成：新增历史 knowledge stats 兼容 repository adapter，默认只读。
 - 已完成：新增幂等 backfill CLI，把旧 `practice_attempts / user_knowledge_stats / question_bank_items` 映射到 graph-era facts。
-- 待完成：先消费已落库 attempt，再更新 mastery 的生产提交流程接入。
-- 待完成：旧 repository 需要补齐安全的 recent attempts read adapter。
+- 已完成：生产提交路径已通过 finalizer / repository adapter 把兼容 `practice_attempts` 转成 graph-era attempt，再交给 mastery 路径消费。
+- 已完成：旧 repository 已补齐安全的 recent attempts read adapter，供组合仓储兼容读取。
 
 ## 三者合并前检查项
 

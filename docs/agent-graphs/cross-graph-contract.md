@@ -125,8 +125,9 @@
 request_guard
   -> load_runtime_context
   -> load_learner_context
-  -> intent_router
-  -> qa | generate_question | evaluate_mastery | fallback
+  -> graph_router
+  -> qa_graph | question_generation_graph | mastery_evaluation_graph | top_level_clarify_or_refuse
+  -> persist_learning_events
   -> response_composer
   -> persist_audit_event
 ```
