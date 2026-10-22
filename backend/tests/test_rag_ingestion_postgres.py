@@ -159,6 +159,17 @@ class RagIngestionPostgresTest(unittest.TestCase):
         rows = self.mappings()
         self.assertEqual(len(rows), first["total_chunks"] + second["total_chunks"])
         self.assertEqual({row.metadata_json["user_id"] for row in rows}, {"synthetic-alice", "synthetic-bob"})
+        # Replacing a shared copy of the same source must preserve both private mappings.
+        for _ in range(2):
+            shared = self.store.upsert_documents_with_summary(
+                [self.lesson], metadatas=[{"source": self.url, "source_id": self.url, "doc_type": "url"}],
+                subject_id=self.subject,
+            )
+            self.assertEqual(len(self.mappings()), first["total_chunks"] + second["total_chunks"] + shared.inserted_chunks)
+            self.assertEqual(
+                {row.metadata_json.get("user_id") for row in self.mappings()},
+                {"synthetic-alice", "synthetic-bob", None},
+            )
         alice = self.retrieve("synthetic-alice")
         self.assertTrue(alice)
         self.assertTrue(all("amber" not in doc["content"] for doc in alice))
