@@ -22,11 +22,12 @@ The auth test set includes 22 regression tests and 18 HTTP assertions through Ne
 - [x] Merged [PR #23](https://github.com/Xiaomuw/Learning-assistant/pull/23), [PR #24](https://github.com/Xiaomuw/Learning-assistant/pull/24), and [PR #25](https://github.com/Xiaomuw/Learning-assistant/pull/25); all three legacy branch heads now contain zero question-bank JSON files.
 - [ ] Assess historical Git exposure separately. A normal deletion commit does not remove prior commits, clones, forks or caches. No history rewrite has been performed.
 - [ ] Resolve source-rights/provenance concerns for the web-collected 530-question bank; it remains outside the Apache-2.0 grant.
-- [ ] Fix the hard-coded Alembic revision in backend/scripts/rebuild_408_project_data.py (tracked by review PR #22) and rerun the isolated PostgreSQL suite before merging that fix.
+- [x] Alembic expected-head check is implemented dynamically in `backend/scripts/rebuild_408_project_data.py`; PR #22 merged and isolated PostgreSQL checks passed.
 - [ ] Finish full third-party dependency/license, embedded-asset, code ownership and authorized secret/history review.
+- [x] PR #28 merged: development ports are loopback-only; clean-clone Compose smoke checks backend `/health`, frontend `/login`, anonymous auth rejection and port bindings.
 - [ ] Test real LLM/RAG answers and backend SSE, browser/mobile flows, external email delivery, HTTPS/TLS, CORS/proxy and staging deployment.
 - [ ] Address React Hooks lint exceptions and warnings tracked in [issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
-- [ ] Publish a reproducible, owner-reviewed release only after these checks; no release has been published yet.
+- [ ] Publish a reproducible, owner-reviewed release only after these checks; no Release has been published yet.
 
 Related trackers: [question-bank rights #5](https://github.com/Xiaomuw/Learning-assistant/issues/5), [Next.js/release follow-up #4](https://github.com/Xiaomuw/Learning-assistant/issues/4), [React Hooks debt #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
 
