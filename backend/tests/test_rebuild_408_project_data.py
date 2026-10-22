@@ -42,7 +42,7 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
 
     def test_rebuild_defaults_to_dry_run_and_does_not_backup_or_import(self) -> None:
         with (
-            patch.object(self.script, "_assert_alembic_current", return_value={"current_revision": "head"}),
+            patch.object(self.script, "_assert_alembic_current", return_value={"current_revisions": ["head"], "expected_heads": ["head"]}),
             patch.object(self.script, "_taxonomy_health", return_value={"db_concept_count": 53}),
             patch.object(self.script, "_validate_question_file", return_value={"question_count": 2}) as validate,
             patch.object(self.script, "_cleanup_project_data", return_value={"tables": {}}) as cleanup,
