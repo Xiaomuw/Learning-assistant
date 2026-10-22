@@ -6,7 +6,7 @@
 
 | Area | Finding | Next action |
 | --- | --- | --- |
-| Former 408 practice bank and other branches | After merged PR #6, current `main` has **0 question-bank JSONs** under `data/practice_questions/`. The older `codex/docker-production-deploy` and `codex/qa-408-flow-web-toggle` branches each still have five; `mian` has **42 JSON files**, including batch/v2 content and a cleanup report. | Keep current main clear; review/remove unverified content from other branch heads and separately assess historical Git copies. [Branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md). |
+| Former 408 practice bank and other branches | After PR #6 and cleanup PRs #23–#25 merged, the current main, mian, codex/docker-production-deploy and codex/qa-408-flow-web-toggle branch heads contain **zero question-bank JSON files** under data/practice_questions/. | Keep current trees clear and separately assess historical Git commits, external copies and source rights. [Branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md). |
 | Untracked curriculum | `backend/app/application/notebooks/curriculum_seed.py` loads packages from `backend/storage/data/curriculum/`, under the ignored `backend/storage/` path. | Make fresh-clone tests independent of unpublished data, or supply legally redistributable fixtures. |
 | Dev configuration | `docker-compose.yml` publishes Postgres 5434, backend 8003, frontend 3003 and uses a predictable database fallback password. | Restrict host access or bind loopback; never reuse defaults in production. |
 | Mini-program | The tracked project config included a specific developer AppID; this PR proposes `touristappid`. | Provide a local AppID via `TARO_APP_ID` / `WECHAT_MINI_APP_ID`, with private configuration ignored. |
@@ -43,7 +43,7 @@ Historical inventory from the **pre-PR #6 main tree** of `data/practice_question
 
 Use `python scripts/audit_question_bank_provenance.py --json`. When the old files still exist, it validates the canonical/subject mirrors and matching ledger. Once **all five** files have been removed, it checks that no partial mirror or newly unreviewed JSON has appeared and retains the 530-ID ledger solely as **historical review metadata**, rather than reporting those entries as missing source files. The report separates `current_tree_data_boundary_passes` from the broader `release_gate_passes`; the latter **remains false** for the historically uncleared retired corpus. The `--release-gate` mode intentionally blocks a release and does not establish legal compliance.
 
-PR #6 has now been merged and the current main tree is clean. The remaining release blocker is the unreviewed material on older branch heads and in historical commits; see [GIT_HISTORY_EXPOSURE_REVIEW.md](GIT_HISTORY_EXPOSURE_REVIEW.md).
+PR #6 and cleanup PRs #23–#25 are merged; all checked current branch heads are clear of question-bank JSON. The remaining release blocker is the unresolved provenance/rights of historical content in older Git commits and any external copies; see [GIT_HISTORY_EXPOSURE_REVIEW.md](GIT_HISTORY_EXPOSURE_REVIEW.md).
 
 ## Historical exposure and merge coordination
 
