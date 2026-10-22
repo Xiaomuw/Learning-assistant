@@ -22,7 +22,10 @@
 - [#33](https://github.com/Xiaomuw/Learning-assistant/pull/33): prevent chunk mapping overwrite across users/notebooks and shared cleanup deleting personal mappings; exercise URL ingestion and real PGVector with controlled embeddings. Existing lost mappings require owner-reviewed reimport from lawful originals.
 - [#34](https://github.com/Xiaomuw/Learning-assistant/pull/34): upgrade FastAPI/Starlette together, enforce URL-encoded form limits, and verify multipart plus real HTTP SSE completion/disconnect compatibility. Combined local Python dependency audit with #31/#32 has no matched advisories; this does not clear the release gate.
 
+Additional proposals: [#35](https://github.com/Xiaomuw/Learning-assistant/pull/35) patches compatible Web transitives and adds project CSS-pipeline regressions; [#36](https://github.com/Xiaomuw/Learning-assistant/pull/36) patches four Taro tooling transitives and runs the existing stream-client tests in CI. Both full npm audits still report unresolved findings; no framework major upgrade or audit suppression is included.
+
 ### Known limitations and migration notes
+
 
 Live LLM/embedding quality, browser/device acceptance and production deployment remain unverified. RAG unit/fake tests do not demonstrate real retrieval quality. Python requirements are not fully transitively locked. Dependency alerts, license/asset review and historical question-bank rights remain open. The old question bank is outside the Apache-2.0 grant. React Hooks lint debt remains in issue #8.
 

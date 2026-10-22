@@ -51,6 +51,7 @@ The project is early-stage, with no verified external adoption. Apache-2.0 cover
 - Draft #32 adds parser security updates and real multipart/PDF regressions; Draft #33 adds controlled-embedding PostgreSQL retrieval tests and fixes two reproduced mapping-isolation defects. Exact-head outcomes and test limitations are in the verification ledger; these are maintenance evidence, not adoption or release claims.
 - Draft #34 adds a coordinated FastAPI/Starlette security update, reproduced form-limit regressions and actual loopback HTTP SSE disconnect cleanup. A fresh local combination of #31/#32/#34 requirements passes 103 focused tests and reports no known Python dependency vulnerabilities; this is scoped evidence, not a comprehensive audit or merged release.
 - Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The project still has no published Release and no verified external adoption metrics.
+- Drafts #35/#36 reduce compatible Web/Taro transitive dependency findings and extend existing CI with project CSS-pipeline and stream-client regressions. Both full JavaScript audits still fail; these proposed mitigations are maintenance evidence, not a completed security audit.
 
 ## Mandatory accuracy checks before using these draft answers
 

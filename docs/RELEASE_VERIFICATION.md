@@ -6,7 +6,7 @@
 
 The initial fresh clone was clean at main `712c0538571d01129c0f8b1fb5488b35c9df6058` (merge of #27). There were 30 remote branch heads, no Git tags, no published GitHub Releases, and 14 open PRs: docs #2/#29 plus Dependabot #9–#16 and #18–#21. #17 was not an open upgrade. Issues #4 (deployment/live acceptance), #5 (question rights/history) and #8 (Hooks lint debt) remain open.
 
-PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seven workflows were green. This task updates that branch instead of opening duplicate release-readiness docs. It does not auto-accept Dependabot major upgrades or merge #2. New Draft PRs #30–#34 are independent branches from the baseline, not evidence of changes already on main.
+PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seven workflows were green. This task updates that branch instead of opening duplicate release-readiness docs. It does not auto-accept Dependabot major upgrades or merge #2. New Draft PRs #30–#36 are independent branches from the baseline, not evidence of changes already on main.
 
 | Requirement / finding | Status | Evidence and remaining boundary |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seve
 | Documentation state | Corrected in #29 | Removed stale Next 14, proposed-license/deletion and all-interface-port claims; exact evidence scope added |
 | Persisted generated-question JSON | Reproduced bug; fix under review in #30 | Trace summarizer changed option text/list shapes; schema round-trip regression now protects it |
 | Real DB learning cycle / actual SSE / empty-volume restart | Added in #30 | Deterministic generation/arithmetic; no external model claim |
-| Third-party vulnerabilities | Partial mitigation in #31/#32/#34 | Six reviewed Python pins have a clean combined local audit; changes remain unmerged. Web/Taro/image issues remain |
+| Third-party vulnerabilities | Partial mitigation in #31/#32/#34/#35/#36 | Six Python pins have a clean combined local audit; compatible Web/Taro fixes reduce findings. All remain unmerged; unresolved JS/image issues remain |
 | Complete RAG upload→parse→embed→retrieve→citation pipeline | Controlled-embedding PGVector integration proposed in #33 | Actual URL parsing, chunking, vector storage/search and source metadata; real-provider quality and browser citation rendering remain unverified |
 | Python transitive lock / immutable images / image scanning | Not complete | Fresh installation success is date/environment-specific |
 | Licenses, copied assets and history | Partial inventory, unresolved | See dedicated reviews; not lawful-redistribution clearance |
@@ -224,7 +224,7 @@ python -m pip freeze > /tmp/la-six-pin-resolved.txt
 
 Audit result: exit **0**, 97 distributions, no matched known vulnerabilities. The framework-only environment had 96 distributions and still exited **1** for four packages patched independently by #31/#32. [Normalized snapshots](DEPENDENCY_SECURITY_REVIEW.md) retain both results, duplicate-aware counts and requirements checksums. Dependency ranges, other languages, image packages, historical rights and live/staging gates remain open.
 
-#34 hosted workflows at the head above: six workflows passed. The full-suite job log confirms **70/70 modules** passed (including all six new tests), fresh migrations and bootstrap succeeded; the workflow API still reports in progress at this checkpoint. Authentication separately passed 22 PostgreSQL regression tests and 18 real FastAPI-through-Next HTTP assertions. The latter are authentication checks; real SSE through Next remains the separate #30 scope.
+#34 hosted workflows at the head above: **all seven workflows passed**, verified in the subsequent follow-up. The full-suite job log confirms **70/70 modules** passed (including all six new tests), with fresh migrations and bootstrap. The previous in-progress API status has now resolved to success. Authentication separately passed 22 PostgreSQL regression tests and 18 real FastAPI-through-Next HTTP assertions. The latter are authentication checks; real SSE through Next remains the separate #30 scope.
 
 | Workflow | Run |
 | --- | --- |
@@ -239,3 +239,66 @@ Audit result: exit **0**, 97 distributions, no matched known vulnerabilities. Th
 Documentation checks: all 18 changed-file local Markdown links and both new audit JSON snapshots validated; 12 public-data/Compose/provenance tests and `git diff --check` passed. The release-gate command still exits 2: current questions 0, historical ledger 530 unresolved.
 
 No changes were merged. Resolve requirements overlap without dropping reviewed pins, then repeat all workflow gates on the eventual combined candidate SHA. **Release remains NO-GO.**
+
+## Follow-up: Web and Taro transitive dependencies
+
+Main remained `712c0538571d01129c0f8b1fb5488b35c9df6058`; #29–#34 remained open Drafts. #34's previously pending backend run completed successfully. #29 at `66573e3c6bb7b191e50828c3a58dc82becb3de24` also passed all seven workflows, including [69/69 backend modules](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814959827), [quality](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814959822), [Next](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814959884), [auth](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814959867), [Compose](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814959826), [public data](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814959914) and [isolation](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814959792). Earlier failures/skips remain documented above.
+
+### Web patch #35
+
+Head: `2238f3e6f67cda6966891dd961e78ad8ef3b7419`. Fresh worktree on main; Node 24.19.0 / npm 11.9.0, fresh npm cache and no existing node_modules or production build output:
+
+```bash
+cd frontend
+npm audit --package-lock-only --json
+npm update brace-expansion browserslist postcss-selector-parser --package-lock-only --ignore-scripts --no-audit
+npm ci --cache <new-cache>
+npm run test:css
+npm run lint
+npm run typecheck
+NEXT_TELEMETRY_DISABLED=1 INTERNAL_API_BASE=http://127.0.0.1:18080/api npm run build
+npm run smoke:proxy
+npm audit --package-lock-only --json
+npm audit --omit=dev --package-lock-only --json
+```
+
+All install/build/test commands passed. Lint retains 12 existing warnings. Three new CSS tests run real Tailwind/PostCSS/Autoprefixer against original temporary sources, using the project's theme/content globs; they verify custom/arbitrary utilities, responsive/hover/dark conditions and a fixed test browser prefix target. The proxy smoke uses a synthetic upstream/SSE, not a real model. The generated next-env.d.ts change was reverted in this newly created worktree; unrelated existing worktrees were untouched.
+
+Full audit exits **1** before and after: 10 → 9 affected package nodes, 11 → 2 distinct direct advisory IDs. The after state has 7 high and 2 moderate affected nodes. New propagation to the already-present postcss-nested explains why the aggregate reduction differs from removed direct advisories. Production audit exits **0**, no findings. Seven locked versions change within existing ranges; direct framework versions remain unchanged. See the [snapshot and remaining chains](audits/web-transitives-2026-10-22.json).
+
+All seven hosted workflows passed. The [Next job](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817698550) log confirms all three CSS regressions and HTTP proxy smoke passed on Node 22; production Docker login and production advisory checks also passed. This is build/transport evidence, not browser visual acceptance.
+
+### Taro patch #36
+
+Head: `5c7b992ea290e342649783e5a27a1f31f60a43e2`. Independent fresh worktree/cache on the same main baseline:
+
+```bash
+cd frontend-weapp
+npm audit --package-lock-only --json
+npm update proxy-addr shell-quote websocket-driver vm2 --package-lock-only --ignore-scripts --no-audit
+npm ci --cache <new-cache>
+npm run typecheck
+npm run lint
+npm run test:chat-stream
+npm run build:weapp
+npm audit --package-lock-only --json
+npm explain vm2 proxy-addr shell-quote websocket-driver --json
+```
+
+Install, typecheck, lint, existing stream-client tests and mini-program build passed. Only four locked package versions change; npm recalculates peer metadata for other entries without changing their versions. The existing stream test is now included in the Taro quality workflow. Both full audits exit **1**: affected package nodes 83 → 79, critical nodes 8 → 4, distinct direct advisory IDs 162 → 118. The remaining distribution is 4 critical / 51 high / 23 moderate / 1 low. See the [snapshot](audits/taro-transitives-2026-10-22.json). No claim is made that optional prerender/dev-server paths, live WeChat/device behavior or production bundle reachability have all been tested.
+
+All seven hosted workflows passed at the #36 head above. The Taro job log confirms the existing stream-client regression and tourist build passed on Node 22. Both #35 and #36 backend logs confirm **69/69 modules** passed with disposable PostgreSQL. These completed runs are not evidence for a future combined candidate.
+
+| Workflow | #35 | #36 |
+| --- | --- | --- |
+| Backend full suite | [39817697973](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817697973) | [39818031199](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39818031199) |
+| Authentication | [39817697993](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817697993) | [39818031223](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39818031223) |
+| Clean Compose | [39817698030](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817698030) | [39818031170](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39818031170) |
+| Quality | [39817698011](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817698011) | [39818031355](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39818031355) |
+| Next migration | [39817698550](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817698550) | [39818031221](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39818031221) |
+| Public data | [39817698028](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817698028) | [39818031149](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39818031149) |
+| Compose isolation | [39817698012](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39817698012) | [39818031166](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39818031166) |
+
+Documentation follow-up: 17 local links and both new audit snapshots/counts validated; 12 public-data/Compose/provenance tests and `git diff --check` passed.
+
+Both lockfiles were generated by npm and their Git blob hashes verified byte-for-byte before publication. No direct Dependabot major update, force audit fix, new production dependency, ignored audit failure, merge, release or live deployment was performed. Owner review, combined-candidate CI, unresolved dependencies, license/asset/history clearance and live/staging acceptance remain required. **NO-GO remains in effect.**
