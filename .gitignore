@@ -48,3 +48,10 @@ backend/storage/
 backups/
 docs/pdf/
 .codex-pet-runs/
+
+# Keep private or source-unverified question-bank data out of public branches.
+data/practice_questions/*
+!data/practice_questions/README.md
+data/private/
+data/imports/
+data/external/
