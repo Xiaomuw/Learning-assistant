@@ -73,6 +73,14 @@ class RepositoryInitTest(unittest.TestCase):
             db_database.ensure_postgres_extensions()
             bootstrap_repos.init_database()
 
+            created_user = auth_repos.create_auth_user_record(
+                email="repo-test@example.com",
+                password_hash="hashed-password-for-tests",
+                display_name="仓储用户",
+            )
+            self.assertEqual(created_user.email, "repo-test@example.com")
+            self.assertEqual(auth_repos.get_user_auth_record_by_email("repo-test@example.com").id, created_user.id)
+
             subjects = [item.model_dump() for item in subjects_repos.list_subject_records()]
             self.assertGreaterEqual(len(subjects), len(DEFAULT_SUBJECTS))
 
@@ -88,7 +96,7 @@ class RepositoryInitTest(unittest.TestCase):
             self.assertEqual(updated["name"], "测试笔记本-已更新")
 
             saved_memory = users_repos.save_user_memory_record(
-                "user_test",
+                created_user.id,
                 UserMemoryRecord.model_validate({
                     "weak_points": ["HTTP"],
                     "error_count": {"HTTP": 2},
@@ -99,9 +107,9 @@ class RepositoryInitTest(unittest.TestCase):
             self.assertEqual(saved_memory["error_count"]["HTTP"], 2)
 
             profile = users_repos.save_user_profile_record(
-                "user_test",
+                created_user.id,
                 UserProfileRecord(
-                    user_id="user_test",
+                    user_id=created_user.id,
                     display_name="测试用户",
                     agent_style_name="严格导师",
                     agent_style_prompt="回答时要先指出关键概念。",
@@ -109,14 +117,6 @@ class RepositoryInitTest(unittest.TestCase):
                 ),
             ).model_dump()
             self.assertTrue(profile["onboarding_completed"])
-
-            created_user = auth_repos.create_auth_user_record(
-                email="repo-test@example.com",
-                password_hash="hashed-password-for-tests",
-                display_name="仓储用户",
-            )
-            self.assertEqual(created_user.email, "repo-test@example.com")
-            self.assertEqual(auth_repos.get_user_auth_record_by_email("repo-test@example.com").id, created_user.id)
 
             refresh_row = auth_repos.save_refresh_token_record(
                 user_id=created_user.id,
@@ -127,7 +127,7 @@ class RepositoryInitTest(unittest.TestCase):
             self.assertEqual(refresh_row["token_jti"], "jti-test-1")
 
             session = session_repos.append_chat_turn_record(
-                user_id="user_test",
+                user_id=created_user.id,
                 session_id="session-1",
                 subject_id=created["id"],
                 title="测试会话",
@@ -169,12 +169,12 @@ class RepositoryInitTest(unittest.TestCase):
                 },
             ).model_dump()
             self.assertEqual(session["id"], "session-1")
-            latest_sessions = [item.model_dump() for item in session_repos.list_chat_session_records(user_id="user_test", limit=20)]
+            latest_sessions = [item.model_dump() for item in session_repos.list_chat_session_records(user_id=created_user.id, limit=20)]
             self.assertEqual((latest_sessions[0]["latest_quiz"] or [])[0]["question"], "HTTP 默认端口是？")
             self.assertEqual(session["session_memory"]["active_topic"], "HTTP")
 
             updated_session = session_repos.append_chat_turn_record(
-                user_id="user_test",
+                user_id=created_user.id,
                 session_id="session-1",
                 subject_id="computer-network",
                 title="继续出题",
@@ -267,7 +267,7 @@ class RepositoryInitTest(unittest.TestCase):
             recommendations = [
                 item.model_dump()
                 for item in practice_repos.list_practice_recommendation_records(
-                    users_repos.get_user_memory_record("user_test"),
+                    users_repos.get_user_memory_record(created_user.id),
                     subject_id=created["id"],
                     limit=2,
                 )
@@ -276,7 +276,7 @@ class RepositoryInitTest(unittest.TestCase):
             self.assertEqual(recommendations[0]["correct_option"], "D")
 
             attempt = practice_repos.create_practice_attempt_record(
-                user_id="user_test",
+                user_id=created_user.id,
                 session_id="session-1",
                 subject_id=created["id"],
                 question_id="q-http-2024-1",
@@ -290,20 +290,20 @@ class RepositoryInitTest(unittest.TestCase):
             self.assertEqual(attempt["selected_option"], "D")
 
             exposure_stat = knowledge_stats_repos.record_knowledge_exposure(
-                user_id="user_test",
+                user_id=created_user.id,
                 subject_id=created["id"],
                 knowledge_point="HTTP",
             )
             self.assertIsNotNone(exposure_stat)
             attempt_stat = knowledge_stats_repos.record_knowledge_attempt(
-                user_id="user_test",
+                user_id=created_user.id,
                 subject_id=created["id"],
                 knowledge_point="HTTP",
                 is_correct=True,
             )
             self.assertIsNotNone(attempt_stat)
             mastery_rows = knowledge_stats_repos.list_knowledge_mastery_records(
-                user_id="user_test",
+                user_id=created_user.id,
                 subject_id=created["id"],
             )
             self.assertEqual(mastery_rows[0].knowledge_point, "HTTP")
