@@ -56,7 +56,7 @@ class RagIngestionPostgresTest(unittest.TestCase):
                 raise AssertionError("Application engine escaped the disposable database")
         cls.models = importlib.import_module("app.infrastructure.db.models")
         subjects = importlib.import_module("app.infrastructure.db.repositories.subjects")
-        cls.subject = subjects.create_subject_record("Synthetic vector notebook").id
+        cls.subject = subjects.create_subject_record("computer-network").id
         cls.store = importlib.import_module("app.services.rag.vector_store")
         profile = importlib.import_module("app.services.rag.embedding_profile").EmbeddingProfile(
             provider="synthetic-test", model_id="controlled-three-dimensions", dimension=3,
