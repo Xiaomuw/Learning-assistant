@@ -6,7 +6,7 @@
 
 The initial fresh clone was clean at main `712c0538571d01129c0f8b1fb5488b35c9df6058` (merge of #27). There were 30 remote branch heads, no Git tags, no published GitHub Releases, and 14 open PRs: docs #2/#29 plus Dependabot #9–#16 and #18–#21. #17 was not an open upgrade. Issues #4 (deployment/live acceptance), #5 (question rights/history) and #8 (Hooks lint debt) remain open.
 
-PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seven workflows were green. This task updates that branch instead of opening duplicate release-readiness docs. It does not auto-accept Dependabot major upgrades or merge #2. New Draft PRs #30 and #31 are independent branches from the baseline, not evidence of changes already on main.
+PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seven workflows were green. This task updates that branch instead of opening duplicate release-readiness docs. It does not auto-accept Dependabot major upgrades or merge #2. New Draft PRs #30–#33 are independent branches from the baseline, not evidence of changes already on main.
 
 | Requirement / finding | Status | Evidence and remaining boundary |
 | --- | --- | --- |
@@ -17,8 +17,8 @@ PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seve
 | Documentation state | Corrected in #29 | Removed stale Next 14, proposed-license/deletion and all-interface-port claims; exact evidence scope added |
 | Persisted generated-question JSON | Reproduced bug; fix under review in #30 | Trace summarizer changed option text/list shapes; schema round-trip regression now protects it |
 | Real DB learning cycle / actual SSE / empty-volume restart | Added in #30 | Deterministic generation/arithmetic; no external model claim |
-| Third-party vulnerabilities | Partial mitigation in #31 | Two patched Python pins; three Python packages and Web/Taro audit findings remain |
-| Complete RAG upload→parse→embed→retrieve→citation pipeline | Implemented components; partially tested | Existing fake/contract tests; no complete real embedding pipeline or relevance evaluation accepted |
+| Third-party vulnerabilities | Partial mitigation in #31/#32 | Four patched Python pins; the combined local audit still flags Starlette. Web/Taro/image issues remain |
+| Complete RAG upload→parse→embed→retrieve→citation pipeline | Controlled-embedding PGVector integration proposed in #33 | Actual URL parsing, chunking, vector storage/search and source metadata; real-provider quality and browser citation rendering remain unverified |
 | Python transitive lock / immutable images / image scanning | Not complete | Fresh installation success is date/environment-specific |
 | Licenses, copied assets and history | Partial inventory, unresolved | See dedicated reviews; not lawful-redistribution clearance |
 | Live model/embedding, SMTP, WeChat and staging | Credentials/resources needed; not run | Owner sandbox keys, explicit spending authorization, real app configuration and disposable deployment target |
@@ -113,7 +113,7 @@ These were run from the clean baseline clone using new virtual environments and 
 | Path | Existing / added evidence | Still missing |
 | --- | --- | --- |
 | Question → route → QA | Router/orchestrator/QA graph unit and contract tests; #30 arithmetic through real HTTP/SSE | Live model answer quality and actual-browser interaction |
-| Legal source → parser → chunks → vector retrieval → citation | Synthetic ingest/retrieval/vector-contract tests; #31 actual local HTML extraction; PG schema/migration checks | One complete ingestion/retrieval/citation integration using real PGVector with controlled embeddings, then separate real-provider evaluation |
+| Legal source → parser → chunks → vector retrieval → citation | #32 real multipart/PDF parsing with fake storage; #33 real URL parsing/PGVector with controlled embeddings and source metadata; see exact-head results below | Separate real-provider evaluation and browser citation rendering |
 | Concept → question → validation → save | Graph unit tests; #30 actual compiled deterministic graph and real PostgreSQL schema round-trip | Live-model generation/quality; user answer submission connected to this graph-generated item through HTTP |
 | Answer → event/attempt → mastery → query | Practice/mastery tests; #30 persisted events, idempotent attempts, mastery update/replay and user isolation | Full browser exercise flow and combined HTTP answer-to-mastery acceptance |
 | FastAPI SSE → Next proxy → consumer | Existing fake-proxy tests and Taro parser tests; #30 actual authenticated server-to-proxy SSE | Browser/mobile rendering, reconnect/cancellation under deployed proxies, live-model latency/backpressure |
@@ -123,3 +123,64 @@ These were run from the clean baseline clone using new virtual environments and 
 Use owner-approved sandbox credentials and synthetic documents for a live model/embedding run; record provider/model versions, cost budget, expected citations, refusal behavior and errors without keys or private content. On an isolated staging target, exercise registration/external email, login/refresh/logout, upload/retrieval/citations, generated practice/answer/mastery, SSE cancellation/reconnect, CORS, secure cookies, TLS and trusted proxies. Test WeChat with the real AppID in its developer tools/device. Rehearse backup restoration and startup from a clean volume. None of these are marked passed here.
 
 Historical rights remediation, real credential rotation, history rewriting, publishing and application submission remain explicit owner decisions. No request for those permissions is needed to review these Draft PRs.
+
+## Follow-up: parser dependencies and PGVector isolation
+
+Main remained `712c0538571d01129c0f8b1fb5488b35c9df6058`; #29–#31 remained open Drafts when this follow-up began. #32/#33 were added for distinct parser-dependency and RAG-isolation scopes. No PR was merged.
+
+### Parser patch #32
+
+Head: `bf29dc5e870514b4a0db7907b99e2287af5e5c8c`. All seven workflows passed:
+
+| Workflow | Run |
+| --- | --- |
+| Backend full suite, 70 modules incl. seven upload parser regressions | [39808693093](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39808693093) |
+| Auth | [39808693159](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39808693159) |
+| Next migration | [39808693099](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39808693099) |
+| Public data | [39808693119](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39808693119) |
+| Quality | [39808693124](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39808693124) |
+| Clean Compose | [39808693101](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39808693101) |
+| Compose isolation | [39808693075](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39808693075) |
+
+Fresh Python 3.12.14 uncached install and `pip check` passed. From `backend`:
+
+```bash
+python -m unittest tests.test_upload_parsers tests.test_ingest_service -v
+```
+
+14 tests passed. A separate fresh environment combining #31/#32 requirements passed these 14 plus 30 tests from `tests.test_http_env_dependencies tests.test_env_validation tests.test_mcp_runtime` (with the documented placeholder DATABASE_URL). Initial invocations started before installation finished and failed module imports; those incomplete-environment results, including an incomplete dependency inventory, were discarded. Only the completed installation's 96-distribution inventory and subsequent tests are acceptance evidence. Combined full hosted CI is still required after any owner-approved merges.
+
+### PGVector and mapping isolation #33
+
+The initial [39809342862](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39809342862) run failed 1/70 modules: the test used a noncanonical subject, which the application normalizes to data-structure. The fixture now creates the supported computer-network subject. The HTTP success/persistence assertions were retained.
+
+Two additional failures were reproduced locally before correction:
+
+- Owner/notebook identity regression: four scopes generated one kb_chunk primary key (`1 != 4`), allowing one user's mapping to overwrite another's. Mapping IDs now hash subject, owner and vector ID, while vector/citation IDs remain unchanged.
+- Real SQLite repository regression: replacing one shared source deleted three rows (`3 != 1`), including personal mappings. Shared cleanup now selects only absent/empty owners; personal cleanup remains owner-specific.
+
+24 taxonomy/vector/configuration tests pass:
+
+```bash
+cd backend
+python -m unittest tests.test_knowledge_taxonomy tests.test_ingest_taxonomy_mapping tests.test_retrieval_vector_contract tests.test_postgres_test_utils -v
+python -m unittest tests.test_rag_ingestion_postgres -v
+```
+
+The second command skips locally without TEST_DATABASE_URL; this is not PostgreSQL acceptance. CI runs it with POSTGRES_TEST_STRICT=true in the existing disposable pgvector service. Its unique database is created from template0, migrated to Alembic head and dropped after pools close. The fixture rejects non-loopback, non-test and query-overridden DSNs before connecting. HTML is original and served only on loopback; auth and embeddings are controlled test substitutes. The actual parser, chunker, database, cosine search and citation source metadata are exercised; keyword fallback is forbidden in the positive vector assertions. No paid/external model is involved.
+
+Exact-head hosted results: all seven workflows passed at `df6aacae5bb3f00b39782c6983ba2f8d9e9263b9`. The full-suite log confirms both new PostgreSQL tests passed and **70/70 modules** succeeded, including fresh migrations and test-database cleanup.
+
+| Workflow | Run |
+| --- | --- |
+| Backend full suite | [39810513381](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39810513381) |
+| Auth | [39810513206](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39810513206) |
+| Clean Compose | [39810513400](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39810513400) |
+| Quality | [39810513158](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39810513158) |
+| Public data | [39810513222](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39810513222) |
+| Next migration | [39810513255](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39810513255) |
+| Compose isolation | [39810513163](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39810513163) |
+
+Documentation follow-up checks: all changed Markdown local links and both audit JSON snapshots validated; 12 public-data/Compose/provenance tests passed. The release-gate command still exits 2 with 530 unresolved historical questions. No source data was reintroduced.
+
+No automatic backfill occurs. Owners must back up and reimport lawful originals to restore previously overwritten/deleted mappings; lost content cannot be recreated from the missing row. This review did not access or repair existing learner data. Full browser citation rendering, real embedding relevance and live provider evaluation remain open.

@@ -8,6 +8,8 @@
 | --- | --- | --- |
 | Python, 95 resolved distributions | 5 affected packages: pypdf 5.4.0, python-multipart 0.0.20, Starlette 0.46.2, Requests 2.32.3, python-dotenv 1.1.0 | Patch, test and re-audit; overlapping advisory IDs must not be counted as distinct exploits |
 | Python with proposed #31 pins | Requests 2.34.2 and python-dotenv 1.2.4 no longer reported; 3 affected packages remain | #31 is a narrow mitigation, not a clean audit |
+| Python with proposed #32 pins | pypdf 6.21.2 and python-multipart 0.0.32 have no matched advisories; 3 other affected packages remain | Full audit exits 1; #32 does not include #31 |
+| Fresh environment combining #31 + #32 requirements | 96 resolved distributions; only Starlette 0.46.2 remains reported (14 advisory records) | Full audit exits 1; local combination, not merged-candidate CI |
 | Web `npm audit --omit=dev` | 0 findings | Limited to production dependency scope and this audit date |
 | Web full `npm audit` | 10 findings: 9 high, 1 moderate | Review build/dev chains (including Tailwind/PostCSS, glob/micromatch and Next ESLint chain); production audit does not cover these |
 | Taro full `npm audit` | 83 findings: 8 critical, 51 high, 23 moderate, 1 low | Separate compatible upgrade work and bundle reachability review |
@@ -15,9 +17,13 @@
 
 Taro's eight critical affected package nodes include `@tarojs/components`, `@tarojs/taro`, `decompress`, `proxy-addr`, `shell-quote`, `swiper`, `vm2` and `websocket-driver`. These are package/advisory propagation counts, not eight independently confirmed runtime vulnerabilities. Investigate bundled components such as Swiper separately from build tooling. Some automatic npm suggestions would downgrade Taro to 3.x; do not run `npm audit fix --force` as a release strategy.
 
-pypdf handles user-supplied PDFs; multipart/Starlette sit on request parsing and serving boundaries. Their pending advisories deserve P0 review before public deployment. Do not override Starlette beyond FastAPI 0.115.12's declared range: upgrade FastAPI/Starlette/SSE coherently with upload, authentication, error and streaming regressions. A pypdf major upgrade needs parser fixtures and compatibility checks. New advisory feed entries and exploitability still require individual maintainer assessment.
+pypdf handles user-supplied PDFs; multipart/Starlette sit on request parsing and serving boundaries. Their pending advisories deserve P0 review before public deployment. Do not override Starlette beyond FastAPI 0.115.12's declared range: upgrade FastAPI/Starlette/SSE coherently with upload, authentication, error and streaming regressions. The pypdf major upgrade is proposed in #32 with original generated PDF fixtures and real ASGI multipart parsing checks. New advisory feed entries and exploitability still require individual maintainer assessment.
 
 [PR #31](https://github.com/Xiaomuw/Learning-assistant/pull/31) patches only Requests and python-dotenv. Local tests exercise real loopback HTTP extraction and dotenv override/interpolation; related ingest/configuration tests passed (37). Requests upstream notices: [netrc leakage](https://github.com/psf/requests/security/advisories/GHSA-9hjg-9r4m-mvj7), [temporary-file handling](https://github.com/psf/requests/security/advisories/GHSA-gc5v-m9x4-r6x2). See also the [dotenv changelog](https://github.com/theskumar/python-dotenv/blob/main/CHANGELOG.md). No paid API was used.
+
+[PR #32](https://github.com/Xiaomuw/Learning-assistant/pull/32) updates pypdf 5.4.0 → 6.21.2 and python-multipart 0.0.20 → 0.0.32. Upstream [pypdf release notes](https://pypdf.readthedocs.io/en/6.21.2/meta/CHANGELOG.html) include security fixes in 6.21.2; the [multipart changelog](https://github.com/Kludex/python-multipart/blob/main/CHANGELOG.md) describes parser bounds/validation and scanning improvements. Seven new tests exercise the real PDF/multipart boundary without external document assets; storage is an explicit fake. All seven workflows passed at `bf29dc5e870514b4a0db7907b99e2287af5e5c8c`, including 70 backend modules.
+
+A second **fresh** uncached environment combined only the four requirements edits in #31/#32. `pip check` and 44 focused tests passed; pip-audit still exited 1 for Starlette. Fully resolved [parser-only](audits/python-parsers-2026-10-22.json) and [combined](audits/python-combined-2026-10-22.json) snapshots retain package versions, advisory IDs and fixes. The latter resolved 96 distributions versus the earlier 95, illustrating that current ranges do not freeze transitives. Neither snapshot is an installation lock. Neither proposed patch has changed main.
 
 ### Next.js re-check
 

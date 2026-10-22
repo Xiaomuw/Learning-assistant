@@ -18,6 +18,8 @@
 - [#29](https://github.com/Xiaomuw/Learning-assistant/pull/29): updated installation, release gates, dependency/history findings and truthful Codex for OSS application draft.
 - [#30](https://github.com/Xiaomuw/Learning-assistant/pull/30): real PostgreSQL learning-cycle regression, preserved question option text, real FastAPI-to-Next SSE check, and Compose restart after deleting disposable volumes.
 - [#31](https://github.com/Xiaomuw/Learning-assistant/pull/31): Requests/python-dotenv patch upgrades with local HTTP and configuration regressions.
+- [#32](https://github.com/Xiaomuw/Learning-assistant/pull/32): PDF/multipart parser updates with original-document upload, rejection and cleanup regressions.
+- [#33](https://github.com/Xiaomuw/Learning-assistant/pull/33): prevent chunk mapping overwrite across users/notebooks and shared cleanup deleting personal mappings; exercise URL ingestion and real PGVector with controlled embeddings. Existing lost mappings require owner-reviewed reimport from lawful originals.
 
 ### Known limitations and migration notes
 

@@ -48,6 +48,7 @@ The project is early-stage, with no verified external adoption. Apache-2.0 cover
 - PR #28 merged: development Compose ports bind to loopback; clean-clone stack smoke and health/login/anonymous-auth checks pass on the documented PR snapshot based on main. See the exact-SHA [verification ledger](RELEASE_VERIFICATION.md).
 - PR #22 merged: Alembic expected-head verification is dynamic and isolated PostgreSQL tests pass.
 - Draft PR #30 adds a real PostgreSQL graph round-trip regression and fixes the discovered question JSON corruption, extends actual HTTP SSE coverage and verifies empty-volume restart. Draft #31 narrows two Python dependency alerts with focused tests. These are proposed work, not merged or released changes.
+- Draft #32 adds parser security updates and real multipart/PDF regressions; Draft #33 adds controlled-embedding PostgreSQL retrieval tests and fixes two reproduced mapping-isolation defects. Exact-head outcomes and test limitations are in the verification ledger; these are maintenance evidence, not adoption or release claims.
 - Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The project still has no published Release and no verified external adoption metrics.
 
 ## Mandatory accuracy checks before using these draft answers
