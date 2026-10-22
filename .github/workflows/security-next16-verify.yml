@@ -31,6 +31,8 @@ jobs:
         run: npm run lint
       - name: TypeScript
         run: npm run typecheck
+      - name: CSS pipeline regression
+        run: npm run test:css
       - name: Next.js production build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
