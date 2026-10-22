@@ -2,6 +2,8 @@
 
 This checklist tracks readiness for sustainable public maintenance of **Learning-assistant**. It is not an OpenAI approval checklist and does not establish any eligibility or acceptance.
 
+**Release decision: NO-GO.** See [current verification ledger](RELEASE_VERIFICATION.md), [candidate runbook](RELEASE_CANDIDATE.md), and [dependency/security evidence](DEPENDENCY_SECURITY_REVIEW.md). Checked items below are scoped observations, not full release clearance.
+
 ## 1. Intellectual-property and security review (release blockers)
 
 - [ ] Establish ownership and the right to license original code and any copied snippets. Resolve existing contributors' or employers' rights if applicable.
@@ -11,7 +13,8 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [ ] Resolve **historical Git exposure**: old commits may still contain the web-collected corpus; no history rewrite or external-copy cleanup has been performed. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md).
 - [ ] Audit third-party code, images, diagrams and UI assets; retain upstream attributions and licenses.
 - [ ] Review direct and transitive dependency licenses and generate any required notices.
-- [ ] Scan repository content and Git history for credentials, personal data, tokens, user documents and unsafe sample configuration. Revoke exposed secrets as needed.
+- [x] Run authorized read-only current-tree and reachable-history secret scans; [scope and candidate findings](DEPENDENCY_SECURITY_REVIEW.md) recorded.
+- [ ] Complete candidate triage, image/personal-data review and owner verification of historical test credential non-reuse; rotate any confirmed live credentials through the owner.
 - [ ] Review auth, upload, model tools and request isolation for security-sensitive behavior.
 - [x] Merged [PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7): upgraded to Next.js 16.4.2 / React 19.3.0 and passed migration CI.
 - [x] Merged [PR #28](https://github.com/Xiaomuw/Learning-assistant/pull/28): development Compose ports bind to `127.0.0.1`; configuration guard and clean-clone smoke pass.
@@ -20,13 +23,13 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 - [ ] Review production `.env` secret generation, reverse proxy/TLS/CORS and firewall rules before staging.
 - [ ] Complete [data and release audit](DATA_AND_RELEASE_AUDIT.md).
 
-## 2. Repository foundation (proposed in the OSS-readiness PR)
+## 2. Repository foundation
 
 - [x] Existing Chinese technical README, deployment docs, source structure and test scripts
 - [x] Apache-2.0 root LICENSE and explicit LICENSE-SCOPE.md merged into main; scope excludes the unverified historical question corpus.
-- [x] Proposed English `README.en.md`, contribution and governance guides
-- [x] Proposed `SECURITY.md` and structured issue/PR templates
-- [x] Proposed lightweight GitHub Actions CI checks (not a substitute for integration tests)
+- [x] English `README.en.md`, contribution and governance guides
+- [x] `SECURITY.md` and structured issue/PR templates
+- [x] Initial lightweight GitHub Actions CI checks (not a substitute for integration tests)
 - [ ] Complete original-code, contributor, third-party asset and dependency-rights audit; adding Apache-2.0 does not clear unverified material.
 - [x] Initial PR CI passed for commit `f1e5b66`: Python syntax, Next.js lint and Taro typecheck.
 - [x] Expanded CI passed on commit `11a217b` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39600371744)): architecture tests, Next.js lint/build, Taro lint/type/build.
@@ -35,15 +38,18 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 
 ## 3. Developer experience and adoption
 
-- [ ] Add an architecture image and screenshots that contain no private information
+- [x] Add code-based Mermaid architecture diagrams in both READMEs.
+- [ ] Capture current UI screenshots/video only after manual acceptance and privacy review; none fabricated.
 - [x] Provide two newly drafted synthetic example questions (not a replacement for the 408 bank)
 - [x] Add 530-ID provenance ledger and a structure/review-status audit (all 530 remain REVIEW_REQUIRED)
 - [x] Current heads of checked branches have no question-bank JSON; historical commits and external copies remain unresolved ([history review](GIT_HISTORY_EXPOSURE_REVIEW.md)).
-- [x] Clean-clone Docker Compose smoke passes on current main ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39706401409)): builds and boots a disposable stack, checks backend `/health`, frontend `/login`, anonymous auth rejection and loopback bindings.
-- [ ] Record tested versions and run a human-operated staging deployment with real secrets and external integrations.
-- [ ] Eliminate the fresh-clone dependency on ignored `backend/storage/data/curriculum/` fixtures in some tests
-- [ ] Provide a reproducible demo, clearly labeled if experimental
-- [ ] Describe target developers, use cases and how this differs from existing LangGraph examples
+- [x] Clean-clone Docker Compose smoke passes on the baseline-based PR snapshot ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39742007304)): builds and boots a disposable stack, checks backend `/health`, frontend `/login`, anonymous auth rejection and loopback bindings.
+- [x] Record tested environment versions and exact-scoped results in the [verification ledger](RELEASE_VERIFICATION.md).
+- [ ] Run human-operated staging acceptance with owner-approved secrets and external integrations.
+- [x] `test_builtin_notebook_seed.py` creates its own synthetic curriculum in a temporary directory; fresh-clone CI passes. Private curriculum content is still absent from the public runtime.
+- [x] Document an experimental keyless installation/synthetic-data runbook.
+- [ ] Complete live-model/browser demo acceptance; do not treat the keyless health checks as a full AI demo.
+- [x] English README explains target developers, reusable workflow boundaries and limitations.
 - [ ] Set accurate repository description and topics using GitHub settings
 
 Suggested repository description:
@@ -59,9 +65,9 @@ See [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md) for the completed merge sequence and 
 ## 4. Versioning and maintenance
 
 - [ ] Review and resolve or close obsolete pull requests (do not merge without review)
-- [x] Current-main backend full suite passes ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39709334122)).
-- [x] Current-main frontend/mini-program quality checks pass ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39709334030)).
-- [x] Real authentication regression and isolated PostgreSQL workflow passes on main ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39706401278)).
+- [x] Baseline-main backend full suite passes ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39709334122)).
+- [x] Baseline-main frontend/mini-program quality checks pass ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39709334030)).
+- [x] Real authentication regression and isolated PostgreSQL workflow passes on the baseline-based PR snapshot ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39742007279)).
 - [ ] Verify real-model RAG/SSE, external email delivery and browser/mobile UX in staging.
 - [ ] Publish changelog and an initial release **after** provenance/security review
 - [ ] Triage genuine community issues and record decisions transparently

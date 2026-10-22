@@ -6,7 +6,7 @@ Third-party dependencies, vendored code and assets retain their own license term
 
 ## License review status
 
-A complete inventory of direct **and transitive** dependency licenses, embedded icons/images, vendored sources, copied code, and their applicable attribution requirements has **not** yet been completed. This page is a disclosure of work to do, not a compliance certification.
+An initial resolved dependency/SBOM/license inventory was produced on 2026-10-22; see the [dependency and source review](docs/DEPENDENCY_SECURITY_REVIEW.md) and [sanitized evidence](docs/audits/dependency-review-2026-10-22.json). It includes transitive dependencies and identifies MPL/LGPL/attribution obligations for review. Package metadata does not establish distribution compliance. Embedded image provenance, copied-code ownership and the final distribution-specific notice/source bundle remain incomplete. This page is not a compliance certification.
 
 Before creating a public release package:
 
