@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from dotenv import load_dotenv
 from sqlalchemy import inspect, text
 
@@ -45,7 +47,6 @@ from app.infrastructure.db.database import session_scope  # noqa: E402
 
 
 CONFIRM_TOKEN = "CLEAN_408_REBUILD"
-EXPECTED_ALEMBIC_REVISION = "0011_practice_finalizer"
 DEFAULT_BACKUP_DIR = PROJECT_ROOT / "backups"
 
 STRUCTURED_CLEAR_TABLES = (
@@ -102,10 +103,10 @@ def rebuild(options: RebuildOptions) -> dict[str, Any]:
         raise ValueError("真实清理必须同时提供 --import-questions 和 --questions-path")
     report: dict[str, Any] = {
         "dry_run": options.dry_run,
-        "expected_revision": EXPECTED_ALEMBIC_REVISION,
         "preserved_tables": list(PRESERVED_TABLES),
     }
     report["alembic"] = _assert_alembic_current()
+    report["expected_alembic_heads"] = report["alembic"]["expected_heads"]
     report["taxonomy"] = _taxonomy_health()
     report["questions"] = (
         _validate_question_file(options.questions_path)
@@ -144,17 +145,37 @@ def rebuild(options: RebuildOptions) -> dict[str, Any]:
     return report
 
 
+def _expected_alembic_heads() -> list[str]:
+    """Resolve the migration graph's current heads instead of pinning a stale revision."""
+    config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+    heads = sorted(ScriptDirectory.from_config(config).get_heads())
+    if not heads:
+        raise RuntimeError("未找到 Alembic migration head，请检查 backend/alembic/versions")
+    return heads
+
+
 def _assert_alembic_current() -> dict[str, Any]:
     tables = set(inspect(engine).get_table_names())
     if "alembic_version" not in tables:
         raise RuntimeError("未找到 alembic_version，请先运行 alembic upgrade head")
-    with engine.begin() as connection:
-        revision = str(connection.execute(text("SELECT version_num FROM alembic_version")).scalar() or "")
-    if revision != EXPECTED_ALEMBIC_REVISION:
-        raise RuntimeError(
-            f"Alembic revision 不匹配：current={revision or '<empty>'}, expected={EXPECTED_ALEMBIC_REVISION}"
+
+    expected_heads = _expected_alembic_heads()
+    with engine.connect() as connection:
+        current_revisions = sorted(
+            str(item)
+            for item in connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalars().all()
         )
-    return {"current_revision": revision}
+
+    if current_revisions != expected_heads:
+        raise RuntimeError(
+            "Alembic revision 不匹配："
+            f"current={current_revisions or '<empty>'}, "
+            f"expected_heads={expected_heads}；请先运行 alembic upgrade head"
+        )
+    return {"current_revisions": current_revisions, "expected_heads": expected_heads}
 
 
 def _taxonomy_health() -> dict[str, Any]:
