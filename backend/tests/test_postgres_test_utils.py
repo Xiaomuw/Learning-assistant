@@ -12,6 +12,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from tests.postgres_test_utils import (
     PostgresTestConfigurationError,
+    TemporaryPostgresDatabase,
     get_test_database_base_url,
 )
 
@@ -39,6 +40,18 @@ class PostgresTestUtilsTest(unittest.TestCase):
 
             with self.assertRaises(unittest.SkipTest):
                 get_test_database_base_url()
+
+    def test_database_isolation_rejects_non_test_targets_before_connecting(self) -> None:
+        for url in (
+            "postgresql://user:pass@127.0.0.1/app",
+            "postgresql://user:pass@remote.example.invalid/app_test",
+            "postgresql://user:pass@127.0.0.1/app_test?options=-csearch_path=public",
+        ):
+            with self.subTest(url=url), patch.dict(os.environ, {"TEST_DATABASE_URL": url}):
+                with patch("tests.postgres_test_utils.create_engine") as create_engine:
+                    with self.assertRaises(PostgresTestConfigurationError):
+                        TemporaryPostgresDatabase()
+                    create_engine.assert_not_called()
 
     def test_postgres_url_is_normalized_to_psycopg_driver(self) -> None:
         with patch.dict(

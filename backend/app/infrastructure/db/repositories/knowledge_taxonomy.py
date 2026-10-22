@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 
 from app.infrastructure.db.database import session_scope
 from app.infrastructure.db.models import (
@@ -120,8 +120,12 @@ def delete_kb_chunks_by_source(
             stmt = stmt.where(KbChunkModel.metadata_json["source_id"].as_string() == str(source_id))
         if doc_type is not None:
             stmt = stmt.where(KbChunkModel.metadata_json["doc_type"].as_string() == str(doc_type))
+        owner = KbChunkModel.metadata_json["user_id"].as_string()
         if user_id:
-            stmt = stmt.where(KbChunkModel.metadata_json["user_id"].as_string() == str(user_id))
+            stmt = stmt.where(owner == str(user_id))
+        else:
+            # Shared-source replacement must not delete personal mappings.
+            stmt = stmt.where(or_(owner.is_(None), owner == ""))
         result = session.execute(stmt)
         session.flush()
         return int(result.rowcount or 0)

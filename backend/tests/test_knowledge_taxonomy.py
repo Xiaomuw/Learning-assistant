@@ -18,7 +18,10 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
-from app.infrastructure.db.models import KbSubjectModel  # noqa: E402
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from app.infrastructure.db.models import KbChunkModel, KbSubjectModel  # noqa: E402
 import app.infrastructure.db.repositories.knowledge_taxonomy as knowledge_taxonomy  # noqa: E402
 
 
@@ -59,6 +62,37 @@ class _FakeRegistry:
 
 
 class KnowledgeTaxonomyTest(unittest.TestCase):
+    def test_shared_source_cleanup_preserves_personal_and_other_subject_rows(self) -> None:
+        engine = create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
+        KbChunkModel.__table__.create(engine)
+
+        @contextmanager
+        def session_scope():
+            with Session(engine) as session:
+                yield session
+                session.commit()
+
+        with session_scope() as session:
+            for row_id, subject, user in [
+                ("shared", "computer-network", None),
+                ("alice", "computer-network", "alice"),
+                ("bob", "computer-network", "bob"),
+                ("other-subject", "data-structure", None),
+            ]:
+                session.add(KbChunkModel(
+                    id=row_id, subject_id=subject, source_file="synthetic.pdf",
+                    metadata_json={"source_id": "synthetic.pdf", "doc_type": "pdf", "user_id": user},
+                ))
+        with patch.object(knowledge_taxonomy, "session_scope", session_scope):
+            deleted = knowledge_taxonomy.delete_kb_chunks_by_source(
+                subject_id="computer-network", source_file="synthetic.pdf",
+                source_id="synthetic.pdf", doc_type="pdf", user_id=None,
+            )
+        self.assertEqual(deleted, 1)
+        with session_scope() as session:
+            self.assertEqual(set(session.scalars(select(KbChunkModel.id))), {"alice", "bob", "other-subject"})
+
     def test_flushes_taxonomy_rows_by_fk_dependency_order(self) -> None:
         events: list[str] = []
 
