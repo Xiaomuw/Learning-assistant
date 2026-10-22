@@ -39,7 +39,9 @@ This is an early-stage public project. The main branch now excludes the unverifi
 - PR #3 merged: Apache-2.0, license scope, English README, governance templates, Dependabot, CI and historical provenance ledger are on main.
 - PR #7 merged: Next.js 16.4.2 / React 19.3.0 migration, Docker login-route smoke and real auth regression CI are on main.
 - Remaining rights issues: PRs #23–#25 have cleaned the current heads of `mian`, `codex/docker-production-deploy`, and `codex/qa-408-flow-web-toggle`; all checked branch heads are now clear of question-bank JSON. Historical Git exposure, rights for any content in older commits, and external copies remain unresolved.
-- Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The Alembic-head fix was merged as PR #22 after all four CI workflows passed.
+- PR #28 merged: development Compose ports bind to loopback; clean-clone stack smoke and health/login/anonymous-auth checks pass on main.
+- PR #22 merged: Alembic expected-head verification is dynamic and isolated PostgreSQL tests pass.
+- Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The project still has no published Release and no verified external adoption metrics.
 
 ## Mandatory accuracy checks before using these draft answers
 
