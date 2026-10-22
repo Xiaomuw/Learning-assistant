@@ -46,6 +46,7 @@ jobs:
       MCP_ENABLED: 'false'
       ENABLE_GRAPH_FACTS: 'true'
       ENABLE_GRAPH_DUAL_WRITE: 'false'
+      QA_WEB_SEARCH_EMPTY_CONCEPTS: 'true'
       ENABLE_PRACTICE_FINALIZER_WORKER: 'false'
       MODEL_ACCESS_KEY: ''
       OPENAI_API_KEY: ''
