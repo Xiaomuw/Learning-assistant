@@ -80,6 +80,8 @@ Exact baseline main also has successful [backend full-suite](https://github.com/
 | Compose isolation | [39804655965](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39804655965) |
 
 
+**PR #29 baseline CI blocker:** the documentation commit `e5784bae8d47ed9a1701cbb371c57376246bf0ec` passed six workflows, but [full-suite run 39805461739](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39805461739) failed with 68/69 modules passing. The failure was the existing `test_chat_sync_returns_completed_when_finished_during_grace` assertion (job still pending when the request-scoped TestClient portal closed). The callback/lifecycle fix is already green in independent #30; it is not included in this documentation branch. This known baseline failure is retained instead of rerunning until green. Review #30's fix before accepting the corresponding full-suite gate on a future combined candidate. The six successful #29 runs are [auth](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39805461876), [Compose](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39805461800), [quality](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39805461771), [Next](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39805461759), [data](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39805461755), and [isolation](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39805461790). This paragraph is a documentation-only follow-up; inspect its own head's checks as well.
+
 Each PR targets main and remains Draft. Re-run the combined final main/candidate SHA after any future merges; independently passing branches do not prove their combination.
 
 ## Fresh local checks and their limits

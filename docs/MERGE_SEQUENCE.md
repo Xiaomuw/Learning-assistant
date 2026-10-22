@@ -37,6 +37,7 @@ Related trackers: [question-bank rights #5](https://github.com/Xiaomuw/Learning-
 - Review independent Draft [#30](https://github.com/Xiaomuw/Learning-assistant/pull/30) for the reproduced question-record persistence fix and database/SSE/restart regressions.
 - Review independent Draft [#31](https://github.com/Xiaomuw/Learning-assistant/pull/31) for two narrowly scoped dependency updates.
 - Existing Dependabot major upgrades and docs #2 remain separate; re-evaluate overlap and compatibility before any owner-approved merge.
+- #29 at `e5784ba` reproduces the baseline grace-response test race; the independently reviewed fix is in #30. Resolve that review dependency before calling the documentation branch full-suite gate reliable. Do not copy the runtime/test changes into a second overlapping PR just to hide the failure.
 - After any future merges, re-run the full workflow set on the combined candidate SHA. PR-level green checks do not certify that merged combination.
 
 Use the [verification ledger](RELEASE_VERIFICATION.md) for baseline/head SHAs, current CI runs, local failures/skips and validation levels, rather than treating the older links above as current-head evidence. The [candidate runbook](RELEASE_CANDIDATE.md) proposes `v0.1.0-rc.1` but authorizes no tag, Release, image publication or deployment.
