@@ -20,6 +20,7 @@
 - [#31](https://github.com/Xiaomuw/Learning-assistant/pull/31): Requests/python-dotenv patch upgrades with local HTTP and configuration regressions.
 - [#32](https://github.com/Xiaomuw/Learning-assistant/pull/32): PDF/multipart parser updates with original-document upload, rejection and cleanup regressions.
 - [#33](https://github.com/Xiaomuw/Learning-assistant/pull/33): prevent chunk mapping overwrite across users/notebooks and shared cleanup deleting personal mappings; exercise URL ingestion and real PGVector with controlled embeddings. Existing lost mappings require owner-reviewed reimport from lawful originals.
+- [#34](https://github.com/Xiaomuw/Learning-assistant/pull/34): upgrade FastAPI/Starlette together, enforce URL-encoded form limits, and verify multipart plus real HTTP SSE completion/disconnect compatibility. Combined local Python dependency audit with #31/#32 has no matched advisories; this does not clear the release gate.
 
 ### Known limitations and migration notes
 

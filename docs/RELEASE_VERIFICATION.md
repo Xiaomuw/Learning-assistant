@@ -6,7 +6,7 @@
 
 The initial fresh clone was clean at main `712c0538571d01129c0f8b1fb5488b35c9df6058` (merge of #27). There were 30 remote branch heads, no Git tags, no published GitHub Releases, and 14 open PRs: docs #2/#29 plus Dependabot #9–#16 and #18–#21. #17 was not an open upgrade. Issues #4 (deployment/live acceptance), #5 (question rights/history) and #8 (Hooks lint debt) remain open.
 
-PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seven workflows were green. This task updates that branch instead of opening duplicate release-readiness docs. It does not auto-accept Dependabot major upgrades or merge #2. New Draft PRs #30–#33 are independent branches from the baseline, not evidence of changes already on main.
+PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seven workflows were green. This task updates that branch instead of opening duplicate release-readiness docs. It does not auto-accept Dependabot major upgrades or merge #2. New Draft PRs #30–#34 are independent branches from the baseline, not evidence of changes already on main.
 
 | Requirement / finding | Status | Evidence and remaining boundary |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seve
 | Documentation state | Corrected in #29 | Removed stale Next 14, proposed-license/deletion and all-interface-port claims; exact evidence scope added |
 | Persisted generated-question JSON | Reproduced bug; fix under review in #30 | Trace summarizer changed option text/list shapes; schema round-trip regression now protects it |
 | Real DB learning cycle / actual SSE / empty-volume restart | Added in #30 | Deterministic generation/arithmetic; no external model claim |
-| Third-party vulnerabilities | Partial mitigation in #31/#32 | Four patched Python pins; the combined local audit still flags Starlette. Web/Taro/image issues remain |
+| Third-party vulnerabilities | Partial mitigation in #31/#32/#34 | Six reviewed Python pins have a clean combined local audit; changes remain unmerged. Web/Taro/image issues remain |
 | Complete RAG upload→parse→embed→retrieve→citation pipeline | Controlled-embedding PGVector integration proposed in #33 | Actual URL parsing, chunking, vector storage/search and source metadata; real-provider quality and browser citation rendering remain unverified |
 | Python transitive lock / immutable images / image scanning | Not complete | Fresh installation success is date/environment-specific |
 | Licenses, copied assets and history | Partial inventory, unresolved | See dedicated reviews; not lawful-redistribution clearance |
@@ -184,3 +184,58 @@ Exact-head hosted results: all seven workflows passed at `df6aacae5bb3f00b39782c
 Documentation follow-up checks: all changed Markdown local links and both audit JSON snapshots validated; 12 public-data/Compose/provenance tests passed. The release-gate command still exits 2 with 530 unresolved historical questions. No source data was reintroduced.
 
 No automatic backfill occurs. Owners must back up and reimport lawful originals to restore previously overwritten/deleted mappings; lost content cannot be recreated from the missing row. This review did not access or repair existing learner data. Full browser citation rendering, real embedding relevance and live provider evaluation remain open.
+
+## Follow-up: HTTP framework security and compatibility
+
+Before this follow-up, main remained `712c0538571d01129c0f8b1fb5488b35c9df6058`, #29–#33 remained open Drafts, and #29 was at `9ed5ff8f42d00e527bb2736a037138e2b4a542ef`. Its seven workflows passed, including [69/69 backend modules](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39811500513). This later pass does not erase the earlier observed grace-response race or merge #30's fix.
+
+### Framework patch #34
+
+Head: `59b8826c3b9c1222862386b2b35b9afbb6214e51`. FastAPI 0.115.12 → 0.141.1 and an explicit Starlette 1.3.1 security pin replace the vulnerable 0.46.2 resolution. sse-starlette remains 2.2.1 after compatibility tests. This is a bounded upgrade, not a claim to use the latest upstream releases.
+
+New `tests.test_framework_transport` tests use the application's upload/chat routers and request-logging middleware. Two URL-encoded limit assertions reproduced the baseline failure (422 instead of 400). The patched environment passes these plus multipart text limits, file-byte/owner preservation beyond the spool threshold, and real loopback Uvicorn HTTP SSE completion and disconnect cleanup. The streaming test receives the synthetic answer while the generator still awaits its next item, then observes its `finally` cleanup after closing the HTTP response. Auth, ingest storage and chat output are controlled substitutes; no database, browser or external model is implied by these six tests.
+
+Fresh Python 3.12.14 environments completed uncached installations before any tests/audits:
+
+```bash
+python3 -m venv /tmp/la-framework
+/tmp/la-framework/bin/python -m pip install --no-cache-dir -r backend/requirements.txt
+/tmp/la-framework/bin/python -m pip check
+cd backend
+/tmp/la-framework/bin/python -m unittest tests.test_framework_transport -v
+# Existing modules were each run in a separate interpreter:
+/tmp/la-framework/bin/python -m unittest tests.test_chat_api -v
+/tmp/la-framework/bin/python -m unittest tests.test_upload_api -v
+/tmp/la-framework/bin/python -m unittest tests.test_ingest_service -v
+/tmp/la-framework/bin/python -m unittest tests.test_request_logging_middleware -v
+```
+
+Result: 67 tests passed (6 + 50 + 1 + 7 + 3). An initial middleware invocation used the nonexistent `tests.test_request_logging` name and failed import; the corrected command above passed. `tests.test_auth_api` skipped all 12 PostgreSQL tests locally without TEST_DATABASE_URL. No Docker/PostgreSQL local acceptance is claimed; the existing hosted workflows supply that evidence.
+
+A separate fresh environment combined only the requirements edits in #31/#32/#34. The same framework/chat/middleware modules (59 tests), #32's upload-parser/ingest modules (14), and #31's HTTP-env/env-validation/MCP modules (30) passed in separate interpreters: **103 total**. The tests were run from their respective PR worktrees against that shared fresh dependency environment; this is not a merged code candidate or combined hosted CI.
+
+```bash
+# After the complete uncached installation of the six-pin combination:
+python -m pip check
+python -m pip freeze > /tmp/la-six-pin-resolved.txt
+/tmp/la-audit-tools/bin/pip-audit --disable-pip --no-deps \
+  -r /tmp/la-six-pin-resolved.txt -f json -o /tmp/la-six-pin-audit.json
+```
+
+Audit result: exit **0**, 97 distributions, no matched known vulnerabilities. The framework-only environment had 96 distributions and still exited **1** for four packages patched independently by #31/#32. [Normalized snapshots](DEPENDENCY_SECURITY_REVIEW.md) retain both results, duplicate-aware counts and requirements checksums. Dependency ranges, other languages, image packages, historical rights and live/staging gates remain open.
+
+#34 hosted workflows at the head above: six workflows passed. The full-suite job log confirms **70/70 modules** passed (including all six new tests), fresh migrations and bootstrap succeeded; the workflow API still reports in progress at this checkpoint. Authentication separately passed 22 PostgreSQL regression tests and 18 real FastAPI-through-Next HTTP assertions. The latter are authentication checks; real SSE through Next remains the separate #30 scope.
+
+| Workflow | Run |
+| --- | --- |
+| Backend full suite | [39814090305](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814090305) |
+| Real authentication | [39814090451](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814090451) |
+| Clean Compose | [39814090156](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814090156) |
+| Quality | [39814090137](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814090137) |
+| Next migration | [39814090113](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814090113) |
+| Public data | [39814090229](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814090229) |
+| Compose isolation | [39814090054](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39814090054) |
+
+Documentation checks: all 18 changed-file local Markdown links and both new audit JSON snapshots validated; 12 public-data/Compose/provenance tests and `git diff --check` passed. The release-gate command still exits 2: current questions 0, historical ledger 530 unresolved.
+
+No changes were merged. Resolve requirements overlap without dropping reviewed pins, then repeat all workflow gates on the eventual combined candidate SHA. **Release remains NO-GO.**

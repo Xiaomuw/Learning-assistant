@@ -160,7 +160,7 @@ Record the starting Alembic revision and candidate SHA. Inspect every revision b
 | Fresh dependency installs and client builds | PASS for recorded environments; Python transitive lock and image digests pending |
 | Database migration, bootstrap, auth and service smoke | Baseline and #30 exact-head CI PASS; maintainer review and combined candidate run remain |
 | Real question persistence and learning-cycle regression | PR #30 fixes reproduced question JSON corruption; strict PostgreSQL exact-head suite PASS, review pending |
-| Python / JS / image vulnerabilities | NO-GO: unresolved Python and Web/Taro audit findings; image OS scan outstanding |
+| Python / JS / image vulnerabilities | NO-GO: Python fixes proposed in #31/#32/#34 have a clean combined local audit but remain unmerged; Web/Taro findings and image OS scanning remain open |
 | Third-party licenses and embedded assets | NO-GO: inventory prepared; redistribution obligations/asset provenance not fully closed |
 | Historical question-bank rights/exposure | NO-GO: rights unresolved; ordinary branch heads clear, old blobs still reachable |
 | Secret scan / historical test-account reuse | Partial review; owner must confirm candidate fixture credentials were never reused |

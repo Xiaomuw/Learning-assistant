@@ -38,6 +38,7 @@ Related trackers: [question-bank rights #5](https://github.com/Xiaomuw/Learning-
 - Review independent Draft [#31](https://github.com/Xiaomuw/Learning-assistant/pull/31) for two narrowly scoped dependency updates.
 - Review independent Draft [#32](https://github.com/Xiaomuw/Learning-assistant/pull/32) for PDF/multipart parser pins and original-document upload regressions.
 - Review independent Draft [#33](https://github.com/Xiaomuw/Learning-assistant/pull/33) for chunk mapping identity/cleanup isolation and real PGVector integration with controlled embeddings. Check its final CI and reimport limitations.
+- Review independent Draft [#34](https://github.com/Xiaomuw/Learning-assistant/pull/34) for the coordinated FastAPI/Starlette security pins and upload/SSE compatibility regressions. Preserve all six reviewed pins when resolving requirements overlap with #31/#32; the local combination audit is clean, but does not replace combined-candidate CI.
 - Existing Dependabot major upgrades and docs #2 remain separate; re-evaluate overlap and compatibility before any owner-approved merge.
 - #29 at `e5784ba` reproduces the baseline grace-response test race; the independently reviewed fix is in #30. Resolve that review dependency before calling the documentation branch full-suite gate reliable. Do not copy the runtime/test changes into a second overlapping PR just to hide the failure.
 - After any future merges, re-run the full workflow set on the combined candidate SHA. PR-level green checks do not certify that merged combination.
