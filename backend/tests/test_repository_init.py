@@ -60,7 +60,7 @@ class RepositoryInitTest(unittest.TestCase):
         with TemporaryPostgresSchema() as db_schema:
             db_schema.configure_env()
             db_database = importlib.reload(importlib.import_module("app.infrastructure.db.database"))
-            importlib.reload(importlib.import_module("app.infrastructure.db.models"))
+            importlib.import_module("app.infrastructure.db.models")
             auth_repos = importlib.reload(importlib.import_module("app.infrastructure.db.repositories.auth"))
             bootstrap_repos = importlib.reload(importlib.import_module("app.infrastructure.db.repositories.bootstrap"))
             subjects_repos = importlib.reload(importlib.import_module("app.infrastructure.db.repositories.subjects"))

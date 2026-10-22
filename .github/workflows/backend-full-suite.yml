@@ -44,7 +44,7 @@ jobs:
       LANGCHAIN_TRACING_V2: 'false'
       GRAPH_EVAL_LANGSMITH: 'false'
       MCP_ENABLED: 'false'
-      ENABLE_GRAPH_FACTS: 'false'
+      ENABLE_GRAPH_FACTS: 'true'
       ENABLE_GRAPH_DUAL_WRITE: 'false'
       ENABLE_PRACTICE_FINALIZER_WORKER: 'false'
       MODEL_ACCESS_KEY: ''
