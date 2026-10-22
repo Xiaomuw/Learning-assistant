@@ -38,8 +38,8 @@ This is an early-stage public project. The main branch now excludes the unverifi
 - PR #6 merged: the five original question JSONs are absent from the current main tree; generic import and AI practice remain.
 - PR #3 merged: Apache-2.0, license scope, English README, governance templates, Dependabot, CI and historical provenance ledger are on main.
 - PR #7 merged: Next.js 16.4.2 / React 19.3.0 migration, Docker login-route smoke and real auth regression CI are on main.
-- Remaining rights issues: current main is clear of the five question-bank JSONs, but `mian` contains 42 JSON files and `codex/docker-production-deploy` / `codex/qa-408-flow-web-toggle` contain five each. Cleanup proposals are open as [PR #23](https://github.com/Xiaomuw/Learning-assistant/pull/23), [PR #24](https://github.com/Xiaomuw/Learning-assistant/pull/24), and [PR #25](https://github.com/Xiaomuw/Learning-assistant/pull/25). Historical Git exposure is not cleared.
-- Next steps: review and merge the branch cleanup PRs, assess history exposure separately, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The Alembic-head fix was merged as PR #22 after all four CI workflows passed.
+- Remaining rights issues: PRs #23–#25 have cleaned the current heads of `mian`, `codex/docker-production-deploy`, and `codex/qa-408-flow-web-toggle`; all checked branch heads are now clear of question-bank JSON. Historical Git exposure, rights for any content in older commits, and external copies remain unresolved.
+- Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The Alembic-head fix was merged as PR #22 after all four CI workflows passed.
 
 ## Mandatory accuracy checks before using these draft answers
 
