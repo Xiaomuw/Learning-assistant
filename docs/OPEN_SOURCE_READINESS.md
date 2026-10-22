@@ -6,8 +6,8 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 
 - [ ] Establish ownership and the right to license original code and any copied snippets. Resolve existing contributors' or employers' rights if applicable.
 - [x] Confirm collection method: AI web-searched existing question banks and reorganized results; this is **not** proof of distribution rights.
-- [x] Prepare [Draft PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6) to remove all five JSON banks from the **proposed** current tree and keep imports working (16 targeted tests passed); not merged into `main`.
-- [ ] Resolve the **existing `main`, historical and other active-branch exposure**, including `codex/docker-production-deploy`, `codex/qa-408-flow-web-toggle` and `mian` (42 JSONs at current head; not yet content-audited). A draft deletion and Apache license exclusion do **not** cure prior public exposure. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md).
+- [x] Merged [PR #6](https://github.com/Xiaomuw/Learning-assistant/pull/6): all five original JSON banks are absent from the current main tree; generic imports and AI-practice features remain. Historical commits and older branches are not cleaned by this merge.
+- [ ] Resolve **remaining historical and active-branch exposure**: main is clean at its current tree, but codex/docker-production-deploy and codex/qa-408-flow-web-toggle still have five JSONs each, and mian has 42 JSON files not individually rights-audited. See [remediation plan](QUESTION_BANK_REMEDIATION.md) and [branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md).
 - [ ] Audit third-party code, images, diagrams and UI assets; retain upstream attributions and licenses.
 - [ ] Review direct and transitive dependency licenses and generate any required notices.
 - [ ] Scan repository content and Git history for credentials, personal data, tokens, user documents and unsafe sample configuration. Revoke exposed secrets as needed.
@@ -19,11 +19,11 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 ## 2. Repository foundation (proposed in the OSS-readiness PR)
 
 - [x] Existing Chinese technical README, deployment docs, source structure and test scripts
-- [x] Proposed Apache-2.0 root `LICENSE` and explicit `LICENSE-SCOPE.md`
+- [x] Apache-2.0 root LICENSE and explicit LICENSE-SCOPE.md merged into main; scope excludes the unverified historical question corpus.
 - [x] Proposed English `README.en.md`, contribution and governance guides
 - [x] Proposed `SECURITY.md` and structured issue/PR templates
 - [x] Proposed lightweight GitHub Actions CI checks (not a substitute for integration tests)
-- [ ] Confirm the copyright audit before merging the license proposal into `main`
+- [ ] Complete original-code, contributor, third-party asset and dependency-rights audit; adding Apache-2.0 does not clear unverified material.
 - [x] Initial PR CI passed for commit `f1e5b66`: Python syntax, Next.js lint and Taro typecheck.
 - [x] Expanded CI passed on commit `11a217b` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39600371744)): architecture tests, Next.js lint/build, Taro lint/type/build.
 - [x] Dual-mode provenance-audit tests passed for corpus-present baseline on commit `ecf2488` ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39608895451)).
@@ -49,7 +49,7 @@ Suggested topics (only if they remain accurate):
 
 ## PR ordering
 
-Use [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md): draft PR #6 establishes the data-free base; PR #3 adds Apache license and governance as a stacked, reviewed change. Neither is merged automatically. Avoid any history rewrite during this process.
+See [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md) for the completed merge sequence and remaining release gates. PRs #6, #3 and #7 are merged; no release, production deployment or history rewrite has been performed.
 
 ## 4. Versioning and maintenance
 
@@ -62,8 +62,8 @@ Use [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md): draft PR #6 establishes the data-fre
 
 ## Security upgrade coordination
 
-- [x] [Draft PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7) upgrades the old Next.js to version 16.4.2 and React 19.3.0, with **3/3 CI jobs passed** including production Docker smoke and zero reported production npm vulnerabilities ([workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39618628848)).
-- [ ] Obtain manual real-backend end-to-end verification, then approve/review merge of PR #7 into `main`; the draft is **not** a released fix.
+- [x] Merged [PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7): Next.js 16.4.2 / React 19.3.0, production Docker login-route smoke, dependency audit, and real auth regression workflow passed before merge.
+- [ ] Complete real-model RAG/chat/SSE, browser/mobile acceptance, external email delivery, public TLS/CORS/proxy and staging checks. CI is not a full production acceptance test.
 - [ ] Remove scoped React Hooks migration exceptions and review remaining lint warnings when safe ([issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8)); this is follow-up maintenance work.
 
 ## 5. OpenAI Codex for Open Source application
