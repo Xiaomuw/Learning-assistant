@@ -1,0 +1,115 @@
+name: Clean-clone Docker Compose smoke
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-compose-smoke-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  clean-compose:
+    name: Build and boot complete local stack with disposable data
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate CI-only database and application secrets
+        run: |
+          python3 - <<'PY'
+          import secrets
+          from pathlib import Path
+
+          Path(".env").write_text(
+              "POSTGRES_DB=learning_assistant_compose_ci\n"
+              "POSTGRES_USER=la_compose_ci\n"
+              f"POSTGRES_PASSWORD={secrets.token_urlsafe(40)}\n",
+              encoding="utf-8",
+          )
+          Path("backend/.env").write_text(
+              f"JWT_SECRET_KEY={secrets.token_hex(32)}\n"
+              "CORS_ALLOW_ORIGINS=http://127.0.0.1:3003\n"
+              "RUN_ALEMBIC_UPGRADE=true\n"
+              "RUN_BOOTSTRAP_APP_DATA=true\n"
+              "RUN_BUILTIN_NOTEBOOK_SEED=false\n"
+              "ENABLE_GRAPH_FACTS=false\n"
+              "ENABLE_GRAPH_DUAL_WRITE=false\n"
+              "ENABLE_PRACTICE_FINALIZER_WORKER=false\n"
+              "MCP_ENABLED=false\n"
+              "LANGSMITH_TRACING=false\n"
+              "LANGCHAIN_TRACING_V2=false\n"
+              "GRAPH_EVAL_LANGSMITH=false\n",
+              encoding="utf-8",
+          )
+          PY
+          chmod 600 .env backend/.env
+      - name: Validate Compose and build full application
+        run: |
+          docker compose -p la-ci --file docker-compose.yml config --quiet
+          docker compose -p la-ci --file docker-compose.yml build --parallel
+      - name: Boot disposable stack
+        run: docker compose -p la-ci --file docker-compose.yml up --detach --no-build
+      - name: Check health, API auth and runtime loopback port bindings
+        run: |
+          python3 - <<'PY'
+          import json
+          import subprocess
+          import time
+          import urllib.error
+          import urllib.request
+
+          command = ["docker", "compose", "-p", "la-ci", "--file", "docker-compose.yml"]
+          expected = {
+              ("postgres", "5432"): "127.0.0.1:5434",
+              ("backend", "8000"): "127.0.0.1:8003",
+              ("frontend", "3000"): "127.0.0.1:3003",
+          }
+          for (service, internal), binding in expected.items():
+              actual = subprocess.check_output(
+                  command + ["port", service, internal], text=True
+              ).strip()
+              assert actual == binding, f"Unexpected binding for {service}: {actual}"
+              print(f"PASS: {service} host port remains loopback-only", flush=True)
+
+          def request(path):
+              try:
+                  with urllib.request.urlopen(
+                      f"http://127.0.0.1:{path[0]}{path[1]}", timeout=3
+                  ) as response:
+                      return response.status, response.read(2048)
+              except urllib.error.HTTPError as exc:
+                  return exc.code, exc.read(2048)
+
+          deadline = time.monotonic() + 200
+          while time.monotonic() < deadline:
+              try:
+                  b_status, b_body = request((8003, "/health"))
+                  f_status, _ = request((3003, "/login"))
+                  if b_status == 200 and f_status == 200:
+                      assert json.loads(b_body)["status"] == "ok"
+                      print("PASS: new PostgreSQL -> migrated FastAPI health 200", flush=True)
+                      print("PASS: clean Next.js frontend /login 200", flush=True)
+                      break
+              except Exception:
+                  pass
+              time.sleep(3)
+          else:
+              raise SystemExit("Fresh Compose stack did not become ready")
+
+          anonymous_status, _ = request((3003, "/api/auth/me"))
+          assert anonymous_status == 401, f"Unauthorized API expected 401: got {anonymous_status}"
+          print("PASS: frontend API proxy routes to real backend and rejects anonymous access", flush=True)
+          PY
+      - name: Show redacted container status on failure
+        if: failure()
+        run: |
+          docker compose -p la-ci --file docker-compose.yml ps || true
+          docker compose -p la-ci --file docker-compose.yml logs --no-color --tail=60 backend frontend || true
+      - name: Tear down disposable stack and ephemeral volumes
+        if: always()
+        run: |
+          docker compose -p la-ci --file docker-compose.yml down --volumes --remove-orphans || true
+          rm -f .env backend/.env
