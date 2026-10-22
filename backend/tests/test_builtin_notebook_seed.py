@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +18,7 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
+from app.application.notebooks import curriculum_seed  # noqa: E402
 from app.application.notebooks.builtin_seed import (  # noqa: E402
     build_builtin_seed_payload,
     get_builtin_seed_chapters,
@@ -32,6 +35,62 @@ from scripts.seed_builtin_notebook_vectors import run_seed  # noqa: E402
 
 
 class BuiltinNotebookSeedTest(unittest.TestCase):
+    def setUp(self) -> None:
+        # Curriculum packs are private/untracked production data. Tests use
+        # generated synthetic fixtures so a clean public clone is reproducible.
+        temporary = tempfile.TemporaryDirectory(prefix="learning-assistant-curriculum-test-")
+        self.addCleanup(temporary.cleanup)
+        self.curriculum_dir = Path(temporary.name)
+        patcher = patch.object(curriculum_seed, "CURRICULUM_DIR", self.curriculum_dir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self._write_synthetic_package("408", branch_count=12)
+        self._write_synthetic_package("math", branch_count=12)
+
+    def _write_synthetic_package(self, package_id: str, *, branch_count: int) -> None:
+        branches = []
+        for index in range(branch_count):
+            branches.append(
+                {
+                    "branch_key": f"{package_id}-synthetic-branch-{index}",
+                    "branch_title": f"Synthetic concept {package_id}-{index}",
+                    "knowledge_point": f"Synthetic knowledge point {package_id}-{index}",
+                    "core_explanation": "Test-only explanation written for isolated unit tests.",
+                    "exam_patterns": [
+                        f"Synthetic pattern {index}-{pattern_index}"
+                        for pattern_index in range(1, 4)
+                    ],
+                    "pitfalls": [f"Synthetic pitfall {index}"],
+                    "mastery_checks": [
+                        f"Synthetic mastery check {index}-{check_index}"
+                        for check_index in range(1, 3)
+                    ],
+                }
+            )
+        payload = {
+            "id": package_id,
+            "title": f"Synthetic curriculum {package_id}",
+            "default_source_name": "Original synthetic test fixture",
+            "exam_scopes": ["synthetic-test-only"],
+            "subjects": [
+                {
+                    "subject_id": "computer-organization",
+                    "subject_name": "Synthetic test subject",
+                    "chapters": [
+                        {
+                            "chapter_key": f"{package_id}-synthetic-chapter",
+                            "chapter_title": f"Synthetic chapter {package_id}",
+                            "branches": branches,
+                        }
+                    ],
+                }
+            ],
+        }
+        (self.curriculum_dir / f"{package_id}.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
     def test_builtin_seed_payload_has_deterministic_chapter_metadata(self) -> None:
         subject_id = "computer-network"
         texts, metadatas = build_builtin_seed_payload(subject_id)
