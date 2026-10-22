@@ -6,7 +6,7 @@ import sys
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -42,7 +42,7 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
 
     def test_rebuild_defaults_to_dry_run_and_does_not_backup_or_import(self) -> None:
         with (
-            patch.object(self.script, "_assert_alembic_current", return_value={"current_revision": "head"}),
+            patch.object(self.script, "_assert_alembic_current", return_value={"current_revisions": ["head"], "expected_heads": ["head"]}),
             patch.object(self.script, "_taxonomy_health", return_value={"db_concept_count": 53}),
             patch.object(self.script, "_validate_question_file", return_value={"question_count": 2}) as validate,
             patch.object(self.script, "_cleanup_project_data", return_value={"tables": {}}) as cleanup,
@@ -76,7 +76,7 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
             return _ImportResult(total=2, inserted=2)
 
         with (
-            patch.object(self.script, "_assert_alembic_current", return_value={"current_revision": self.script.EXPECTED_ALEMBIC_REVISION}),
+            patch.object(self.script, "_assert_alembic_current", return_value={"current_revisions": ["test-head"], "expected_heads": ["test-head"]}),
             patch.object(self.script, "_taxonomy_health", return_value={"db_concept_count": 53}),
             patch.object(self.script, "_validate_question_file", return_value={"question_count": 2}),
             patch.object(self.script, "_backup_database", side_effect=backup),
@@ -116,6 +116,64 @@ class Rebuild408ProjectDataTest(unittest.TestCase):
             alembic.assert_not_called()
             backup.assert_not_called()
             cleanup.assert_not_called()
+
+    def _run_alembic_guard(
+        self,
+        *,
+        current_revisions: list[str],
+        expected_heads: list[str],
+        table_names: set[str] | None = None,
+    ) -> dict[str, object]:
+        inspector = MagicMock()
+        inspector.get_table_names.return_value = table_names or {"alembic_version"}
+        connection = MagicMock()
+        connection.execute.return_value.scalars.return_value.all.return_value = current_revisions
+        with (
+            patch.object(self.script, "inspect", return_value=inspector),
+            patch.object(self.script.engine, "connect") as connect,
+            patch.object(self.script, "_expected_alembic_heads", return_value=expected_heads),
+        ):
+            connect.return_value.__enter__.return_value = connection
+            return self.script._assert_alembic_current()
+
+    def test_alembic_guard_matches_current_migration_heads_not_a_pinned_revision(self) -> None:
+        # Simulate multiple heads to ensure the guard compares the complete
+        # sorted Alembic head set, rather than a single hard-coded revision.
+        result = self._run_alembic_guard(
+            current_revisions=["head-b", "head-a"],
+            expected_heads=["head-a", "head-b"],
+        )
+
+        self.assertEqual(result["current_revisions"], ["head-a", "head-b"])
+        self.assertEqual(result["expected_heads"], ["head-a", "head-b"])
+
+    def test_alembic_guard_rejects_database_behind_current_migrations(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "expected_heads"):
+            self._run_alembic_guard(
+                current_revisions=["0011_practice_finalizer"],
+                expected_heads=["0014_chat_async_job_state"],
+            )
+
+    def test_alembic_guard_rejects_missing_version_table_before_query(self) -> None:
+        inspector = MagicMock()
+        inspector.get_table_names.return_value = {"users"}
+        with (
+            patch.object(self.script, "inspect", return_value=inspector),
+            patch.object(self.script.engine, "connect") as connect,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "alembic_version"):
+                self.script._assert_alembic_current()
+        connect.assert_not_called()
+
+    def test_expected_heads_are_loaded_from_repository_migration_graph(self) -> None:
+        expected = self.script._expected_alembic_heads()
+        config = self.script.Config(str(BACKEND_ROOT / "alembic.ini"))
+        config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+        actual = sorted(self.script.ScriptDirectory.from_config(config).get_heads())
+
+        self.assertTrue(expected)
+        self.assertEqual(expected, actual)
+        self.assertNotIn("0011_practice_finalizer", expected)
 
     def test_clear_table_scope_preserves_auth_users_and_taxonomy(self) -> None:
         clear_tables = set(self.script.STRUCTURED_CLEAR_TABLES)
