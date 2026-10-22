@@ -38,7 +38,7 @@ class GraphEvalRunnerTest(unittest.TestCase):
         with patch.dict(os.environ, {"GRAPH_EVAL_LANGSMITH": "false"}, clear=False):
             summary = eval_runner.run_graph_evals()
 
-        self.assertEqual(summary["status"], "passed")
+        self.assertEqual(summary["status"], "passed", summary["results"])
         self.assertEqual(summary["failed"], 0)
         self.assertGreaterEqual(summary["total"], 6)
 
@@ -61,7 +61,7 @@ class GraphEvalRunnerTest(unittest.TestCase):
         ):
             summary = eval_runner.run_graph_evals()
 
-        self.assertEqual(summary["status"], "passed")
+        self.assertEqual(summary["status"], "passed", summary["results"])
         self.assertGreater(trace.call_count, 0)
         encoded = str(captured)
         for forbidden in ("什么是", "HTTP 是", "notebook_context", "tool_args", "raw_output", "document"):

@@ -306,7 +306,7 @@ class RepositoryInitTest(unittest.TestCase):
                 user_id=created_user.id,
                 subject_id=created["id"],
             )
-            self.assertEqual(mastery_rows[0].knowledge_point, "HTTP")
+            self.assertEqual(mastery_rows[0].knowledge_point, "computer-network.application.http-https")
             self.assertEqual(mastery_rows[0].attempt_count, 1)
             self.assertEqual(mastery_rows[0].correct_count, 1)
 
