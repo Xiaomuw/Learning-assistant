@@ -2,7 +2,7 @@
 
 The [practice_questions.json](practice_questions.json) file contains two elementary, independently drafted questions about binary-tree preorder traversal. These demonstrate the supported JSON shape; they do not replace the unaudited 408 practice bank.
 
-The current importer requires an initialized local PostgreSQL database with the canonical concept `data-structure.binary-tree.traversal` already present. After setting up a disposable development database and seeding the required concept metadata, you can validate the example **without inserting records**:
+The current importer requires an initialized local PostgreSQL database with the canonical concept `data-structure.binary-tree.traversal` already present. Follow the [candidate runbook](../docs/RELEASE_CANDIDATE.md) to apply Alembic migrations and run `python scripts/bootstrap_app_data.py --confirm BOOTSTRAP_APP_DATA` in a disposable database. After seeding the required concept metadata, you can validate the example **without inserting records**:
 
 ```bash
 cd backend

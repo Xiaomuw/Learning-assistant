@@ -2,17 +2,19 @@
 
 **Status: BLOCKED for public release.** This is an evidence and action register, not a completed legal/security audit.
 
+See the [current verification ledger](RELEASE_VERIFICATION.md) for the latest scoped test results and [security review](DEPENDENCY_SECURITY_REVIEW.md) for actual audit findings. This older register preserves provenance evidence.
+
 ## Verified observations
 
 | Area | Finding | Next action |
 | --- | --- | --- |
 | Former 408 practice bank and other branches | After PR #6 and cleanup PRs #23–#25 merged, the current main, mian, codex/docker-production-deploy and codex/qa-408-flow-web-toggle branch heads contain **zero question-bank JSON files** under data/practice_questions/. | Keep current trees clear and separately assess historical Git commits, external copies and source rights. [Branch inventory](GIT_HISTORY_EXPOSURE_REVIEW.md). |
-| Untracked curriculum | `backend/app/application/notebooks/curriculum_seed.py` loads packages from `backend/storage/data/curriculum/`, under the ignored `backend/storage/` path. | Make fresh-clone tests independent of unpublished data, or supply legally redistributable fixtures. |
-| Dev configuration | `docker-compose.yml` publishes Postgres 5434, backend 8003, frontend 3003 and uses a predictable database fallback password. | Restrict host access or bind loopback; never reuse defaults in production. |
-| Mini-program | The tracked project config included a specific developer AppID; this PR proposes `touristappid`. | Provide a local AppID via `TARO_APP_ID` / `WECHAT_MINI_APP_ID`, with private configuration ignored. |
-| Third-party code and packages | A complete resolved dependency-license/vulnerability and embedded-asset review has not been run. | Audit direct/transitive dependency licenses, advisories, assets and attribution. |
-| Known Next.js dependency vulnerability range | `frontend/package.json` pins `next@14.2.29`, a version included in publicly disclosed affected ranges. Actual exploitability depends on deployment/features. | Track [security upgrade #4](https://github.com/Xiaomuw/Learning-assistant/issues/4); upgrade to an actively patched major release with regression checks. |
-| Credentials and ownership | A comprehensive historical secret scan and code-contributor ownership review has not been verified. | Audit authorized repository and Git history; revoke any exposed secrets. |
+| Untracked curriculum | `backend/app/application/notebooks/curriculum_seed.py` loads packages from `backend/storage/data/curriculum/`, under the ignored `backend/storage/` path. | Tests now generate temporary synthetic curriculum fixtures (`test_builtin_notebook_seed.py`); private runtime curriculum remains unavailable. |
+| Dev configuration | `docker-compose.yml` publishes Postgres 5434, backend 8003, frontend 3003 and uses a predictable database fallback password. | PR #28 binds host ports to loopback; never reuse defaults in production. |
+| Mini-program | The tracked mini-program config now uses `touristappid`. | Provide a local AppID via `TARO_APP_ID` / `WECHAT_MINI_APP_ID`, with private configuration ignored. |
+| Third-party code and packages | Initial resolved Python/npm vulnerability and license inventories have been run; full license obligations and embedded-asset review remain open. | Resolve recorded findings and complete distribution-specific notices; see [review](DEPENDENCY_SECURITY_REVIEW.md). |
+| Known Next.js dependency vulnerability range | `frontend/package.json` and lockfile pin `next@16.4.2`; the migration merged in PR #7. | Current production npm audit passes, but broader Python/Web-dev/Taro advisories remain. See [dependency review](DEPENDENCY_SECURITY_REVIEW.md). |
+| Credentials and ownership | Read-only current-tree and reachable-blob secret scans ran; candidate non-reuse, image contents and code-contributor ownership remain unverified. | Finish candidate/ownership review; owner to rotate any confirmed live credentials. No credential was externally verified. |
 
 Tracked dataset rights: [issue #5](https://github.com/Xiaomuw/Learning-assistant/issues/5).
 
@@ -74,3 +76,12 @@ Excluding a dataset from the repository Apache-2.0 scope does **not** authorize 
 - [ ] Publish owner-approved changelog, limitations, source notices and release tag.
 
 See [open-source readiness](OPEN_SOURCE_READINESS.md); a successful static check is not release approval.
+
+## 2026-10-23 scoped additions
+
+#41 inventories 33 baseline assets by path/blob ID and excludes historical reports
+from `git archive`; #39 replaces the 16 current navigation PNGs with attributed
+sources. Neither action clears old Git data or proves rights to original code.
+#42 adds final-image inventories and scoped combined acceptance. See the
+[closure report](RELEASE_CLOSURE_STATUS.md); the unresolved owner/rights and real
+service gates above remain unchecked. No old question text was reintroduced.

@@ -8,7 +8,7 @@ This file records the merge order that was actually completed and the checks sti
 2. [PR #3 — OSS readiness](https://github.com/Xiaomuw/Learning-assistant/pull/3) merged as a02e53c671d91b56599c32a7efa0a760f1a25a10. Apache-2.0, scope notes, English README, contributor/security guidance, Dependabot, CI and historical review documentation are on the default branch.
 3. [PR #7 — Next.js 16 migration and real auth tests](https://github.com/Xiaomuw/Learning-assistant/pull/7) merged as 8290f0a2e6b8740104f44bc926d3da06812cb4cb. The web client uses Next.js 16.4.2 / React 19.3.0, with a committed lockfile and authentication regression checks.
 
-## Evidence available
+## Historical evidence available
 
 - [Question-data boundary and isolated PostgreSQL checks](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39636192111)
 - [Quality checks on main](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39636191923)
@@ -22,12 +22,40 @@ The auth test set includes 22 regression tests and 18 HTTP assertions through Ne
 - [x] Merged [PR #23](https://github.com/Xiaomuw/Learning-assistant/pull/23), [PR #24](https://github.com/Xiaomuw/Learning-assistant/pull/24), and [PR #25](https://github.com/Xiaomuw/Learning-assistant/pull/25); all three legacy branch heads now contain zero question-bank JSON files.
 - [ ] Assess historical Git exposure separately. A normal deletion commit does not remove prior commits, clones, forks or caches. No history rewrite has been performed.
 - [ ] Resolve source-rights/provenance concerns for the web-collected 530-question bank; it remains outside the Apache-2.0 grant.
-- [ ] Fix the hard-coded Alembic revision in backend/scripts/rebuild_408_project_data.py (tracked by review PR #22) and rerun the isolated PostgreSQL suite before merging that fix.
+- [x] Alembic expected-head check is implemented dynamically in `backend/scripts/rebuild_408_project_data.py`; PR #22 merged and isolated PostgreSQL checks passed.
 - [ ] Finish full third-party dependency/license, embedded-asset, code ownership and authorized secret/history review.
-- [ ] Test real LLM/RAG answers and backend SSE, browser/mobile flows, external email delivery, HTTPS/TLS, CORS/proxy and staging deployment.
-- [ ] Address React Hooks lint exceptions and warnings tracked in [issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
-- [ ] Publish a reproducible, owner-reviewed release only after these checks; no release has been published yet.
+- [x] PR #28 merged: development ports are loopback-only; clean-clone Compose smoke checks backend `/health`, frontend `/login`, anonymous auth rejection and port bindings.
+- [ ] Test real LLM/RAG answers, browser/mobile flows, external email delivery, HTTPS/TLS, CORS/proxy and staging deployment. Real deterministic FastAPI→Next SSE is added separately in #30; it is not external-model acceptance.
+- [ ] Review/merge tested Draft #40, which removes Hooks exceptions and passes strict lint; then verify final main before closing [issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
+- [ ] Publish a reproducible, owner-reviewed release only after these checks; no Release has been published yet.
 
 Related trackers: [question-bank rights #5](https://github.com/Xiaomuw/Learning-assistant/issues/5), [Next.js/release follow-up #4](https://github.com/Xiaomuw/Learning-assistant/issues/4), [React Hooks debt #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
 
-**Status:** code-level foundations merged; repository-wide data exposure and production readiness remain unresolved.
+## Current review sequence (no automatic merging)
+
+- Keep release/documentation changes in existing Draft [#29](https://github.com/Xiaomuw/Learning-assistant/pull/29).
+- Review independent Draft [#30](https://github.com/Xiaomuw/Learning-assistant/pull/30) for the reproduced question-record persistence fix and database/SSE/restart regressions.
+- Review independent Draft [#31](https://github.com/Xiaomuw/Learning-assistant/pull/31) for two narrowly scoped dependency updates.
+- Review independent Draft [#32](https://github.com/Xiaomuw/Learning-assistant/pull/32) for PDF/multipart parser pins and original-document upload regressions.
+- Review independent Draft [#33](https://github.com/Xiaomuw/Learning-assistant/pull/33) for chunk mapping identity/cleanup isolation and real PGVector integration with controlled embeddings. Check its final CI and reimport limitations.
+- Review independent Draft [#34](https://github.com/Xiaomuw/Learning-assistant/pull/34) for the coordinated FastAPI/Starlette security pins and upload/SSE compatibility regressions. Preserve all six reviewed pins when resolving requirements overlap with #31/#32; the local combination audit is clean, but does not replace combined-candidate CI.
+- Existing Dependabot major upgrades and docs #2 remain separate; re-evaluate overlap and compatibility before any owner-approved merge.
+- Review independent Draft [#35](https://github.com/Xiaomuw/Learning-assistant/pull/35) for Web transitive fixes/CSS regressions and [#36](https://github.com/Xiaomuw/Learning-assistant/pull/36) for four Taro transitive fixes/stream-test CI. Reconcile their npm-generated lockfiles with any subsequently approved direct Dependabot updates; do not drop reviewed patches or hand-edit integrity hashes.
+- #29 at `e5784ba` reproduces the baseline grace-response test race; the independently reviewed fix is in #30. Resolve that review dependency before calling the documentation branch full-suite gate reliable. Do not copy the runtime/test changes into a second overlapping PR just to hide the failure.
+- Review independent Draft [#37](https://github.com/Xiaomuw/Learning-assistant/pull/37) for immutable Action refs and credential-free checkout. Preserve the CSS/stream test additions from #35/#36 while reconciling workflow edits; existing Actions major upgrades #9–#11 still require separate compatibility review.
+- A local preflight applied #30–#37 in order without conflicts and passed scoped static/script checks; see the [snapshot](audits/candidate-preflight-2026-10-23.json). This did not merge PRs, create a candidate commit or run combined hosted/database/build acceptance.
+- After any future merges, re-run the full workflow set on the combined candidate SHA. PR-level green checks do not certify that merged combination.
+- Review Draft [#38](https://github.com/Xiaomuw/Learning-assistant/pull/38) for 15 immutable image references and a fail-closed vulnerability gate. Seven compatibility workflows pass; the security gate fails on real findings. Preserve #37's Action pins and checkout checks when reconciling shared workflows. The earlier #30–#37 preflight does not cover #38.
+- Review Draft [#39](https://github.com/Xiaomuw/Learning-assistant/pull/39) for traceable navigation SVG/PNG assets and full upstream notices. Retain its Taro notice-copy assertion together with #35–#37 workflow changes. Historical assets are not removed or relicensed.
+
+Use the [verification ledger](RELEASE_VERIFICATION.md) for baseline/head SHAs, current CI runs, local failures/skips and validation levels, rather than treating the older links above as current-head evidence. The [candidate runbook](RELEASE_CANDIDATE.md) proposes `v0.1.0-rc.1` but authorizes no tag, Release, image publication or deployment.
+
+**Status: NO-GO.** Dependency findings, license/asset review, historical rights/exposure and live/staging acceptance remain unresolved.
+
+## Latest combined review evidence
+
+- Review #40 for Hooks/authenticated-state behavior and synthetic-API browser regressions.
+- Review #41 for historical-report archive boundaries and canonical license files in component outputs. Preserve #39's Taro icon notices alongside its LICENSE.txt/scope copies.
+- Review #43 for runtime installer removal, preserving #38's image digests, #37's Action safeguards and #41's license copies. Builders still need their installers.
+- #42 is a **validation-only** composition, not a proposal to bypass those reviews. THIRD_PARTY.md, shared workflow edits and Taro copy patterns were reconciled. Exact inputs and conflicts are recorded on that branch; the final [closure report](RELEASE_CLOSURE_STATUS.md) supersedes the earlier local-only preflight limitation.
+- #29's updated evidence documentation may be newer than the docs snapshot inside #42. No functional proposal may change after combined testing without retesting the new composition. Do not auto-merge any PR.

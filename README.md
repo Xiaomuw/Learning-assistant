@@ -78,7 +78,7 @@ backend/
     services/        # rag / tooling / notebook_knowledge_base / runtime_models
     infrastructure/  # db / llm / auth / ingest / mcp / config
     shared/          # 共享 schema 和契约
-frontend/            # Next.js 14 App Router H5
+frontend/            # Next.js 16 App Router H5
 frontend-weapp/      # Taro 4 + React 微信小程序
 data/                # 题库使用说明；不附带来源尚未明确的原 530 道题
 docs/                # 架构、接口、数据库、部署和交接文档
@@ -86,12 +86,16 @@ docs/                # 架构、接口、数据库、部署和交接文档
 
 ## 题库数据与授权
 
-公开项目已在本次提议变更中移除通过 AI 联网搜索现有题库后整理的 530 道题（原 `data/practice_questions/` 下 5 个 JSON）。因为原始来源和再分发授权尚未确认，这些题目**不作为开源数据继续提供**。
+公开项目当前文件树已移除通过 AI 联网搜索现有题库后整理的 530 道题（原 `data/practice_questions/` 下 5 个 JSON）。因为原始来源和再分发授权尚未确认，这些题目**不作为开源数据继续提供**。
 
 - **保留** AI 问答、LangGraph 出题、知识点掌握度、练习记录及 CSV/JSON/Excel 导入能力。
 - 提供两道 [重新编写的演示题](examples/practice_questions.json) 验证导入数据格式；不保证已初始化对应的数据库知识点。
 - 将自己拥有使用权限的题库放在 Git 忽略的本机目录，按 [自备题库指引](docs/PUBLIC_DATA_POLICY.md) 显式指定导入路径。不要把教材、线上题库或用户资料直接重新提交公开仓库。
-- 从当前树删除文件**不会抹去 Git 历史、Fork 或外部缓存**；历史处理与版权问题仍待单独审查。本 Draft PR 不会直接修改 `main` 或服务器数据库。
+- 从当前树删除文件**不会抹去 Git 历史、Fork 或外部缓存**；历史处理与版权问题仍待单独审查。当前清理不代表历史内容已经获得再分发授权。
+
+## 最小复现与候选版本
+
+[RC 操作手册](docs/RELEASE_CANDIDATE.md) 提供无需模型 Key 的容器启动、两道合成题导入及验收命令；[证据清单](docs/RELEASE_VERIFICATION.md) 区分模拟模型、真实数据库/HTTP、真实外部服务和浏览器验收。当前公开发布结论为 **NO-GO**，仍有依赖安全、历史数据来源与部署验收事项。
 
 ## 本地启动
 
@@ -102,7 +106,8 @@ docs/                # 架构、接口、数据库、部署和交接文档
 ```bash
 cd backend
 cp .env.example .env
-python -m venv .venv313
+# 编辑 .env：设置独立数据库 URL、随机 JWT_SECRET_KEY；按需启用外部服务。
+python3.13 -m venv .venv313
 source .venv313/bin/activate
 pip install -r requirements.txt
 python scripts/check_environment.py
@@ -123,7 +128,7 @@ Windows PowerShell 可把激活命令换成：
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
@@ -131,7 +136,7 @@ npm run dev -- --hostname 127.0.0.1 --port 3000
 
 ```bash
 cd frontend-weapp
-npm install
+npm ci
 npm run typecheck
 npm run lint
 npm run build:weapp
@@ -141,10 +146,12 @@ npm run build:weapp
 
 ### 4. Docker Compose
 
-开发/稳定本地模式：
+首次无 Key 验收请使用 [RC 操作手册](docs/RELEASE_CANDIDATE.md) 自动生成临时配置。已有配置的本地开发模式：
 
 ```bash
 cp backend/.env.example backend/.env
+# 编辑 backend/.env，至少替换 JWT_SECRET_KEY；不要覆盖已有的私人配置。
+# 数据库随机凭据在根目录 .env 中设置，Compose 会覆盖容器内数据库 URL。
 docker compose up -d --build
 ```
 
@@ -154,7 +161,7 @@ docker compose up -d --build
 - Backend: `127.0.0.1:8003`
 - Frontend: `127.0.0.1:3003`
 
-注意：开发 Compose 使用可预测的数据库默认凭据，且端口公开绑定；仅用于可信隔离环境，请勿直接暴露至公网。
+注意：开发 Compose 的宿主机端口已绑定 `127.0.0.1`，但默认数据库凭据仍可预测。请使用独立测试环境和随机凭据，不要直接作为生产配置。
 
 生产部署参考 [docs/DEPLOY.md](docs/DEPLOY.md) 与 `docker-compose.prod.yml`。
 
@@ -195,7 +202,7 @@ docker compose up -d --build
 
 ## 测试与自检
 
-推荐从仓库根目录运行：
+推荐完整后端测试使用 CI 相同的隔离模块运行器，先在临时 PostgreSQL 中配置 `DATABASE_URL` 和 `TEST_DATABASE_URL`，设置 `POSTGRES_TEST_STRICT=true`，再运行 `cd backend && .venv313/bin/python scripts/run_isolated_unittests.py`。无测试库时部分测试会跳过；不能记作集成验收通过。以下 Make 目标仍保留，完整验收优先使用隔离运行器：
 
 ```bash
 make test-backend
@@ -259,4 +266,4 @@ cd backend
 - [Apache-2.0](LICENSE) · [License scope](LICENSE-SCOPE.md) · [Third-party notices](THIRD_PARTY.md)
 - [Readiness checklist](docs/OPEN_SOURCE_READINESS.md) · [Question-bank remediation](docs/QUESTION_BANK_REMEDIATION.md)
 
-本仓库拥有合法授权的原创代码计划按 Apache-2.0 开源。**此前的 530 道网络检索整理题目已从本提议版本当前文件树剥离，但旧提交历史中的数据仍然存在且授权未核实。** 这不代表历史内容可自由再分发。请参阅 [公开数据政策](docs/PUBLIC_DATA_POLICY.md) 与 [历史暴露核查](docs/GIT_HISTORY_EXPOSURE_REVIEW.md)。
+本仓库拥有合法授权的原创代码按 Apache-2.0 开源。**此前的 530 道网络检索整理题目已从当前文件树剥离，但旧提交历史中的数据仍然存在且授权未核实。** 这不代表历史内容可自由再分发。请参阅 [公开数据政策](docs/PUBLIC_DATA_POLICY.md) 与 [历史暴露核查](docs/GIT_HISTORY_EXPOSURE_REVIEW.md)。

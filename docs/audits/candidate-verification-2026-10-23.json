@@ -1,0 +1,613 @@
+{
+  "date": "2026-10-23",
+  "main": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "candidate_head": "13805cb8f5102acdaf4fae03a8c9ab4d75f65843",
+  "github_test_merge": "81b902e2b93245d72930b357b74746d67fabcd61",
+  "verified_identical_tree": "1da506ab0de1bd7313b255c63c56908e93fac708",
+  "release_decision": "NO-GO",
+  "scanner": "Trivy 0.76.1",
+  "platform": "linux/amd64",
+  "scan_scope": "final runtime filesystem; HIGH and CRITICAL only; not base/lower-layer clearance",
+  "image_scan_run": 39924777395,
+  "artifact_id": 12489430896,
+  "artifact_zip_sha256": "2d37693b861157721021cd79d87bbaad94bb12e8ee68013ac97fa0b18e9fb4b0",
+  "artifact_expires": "2026-11-06",
+  "images": [
+    {
+      "status": "findings",
+      "scanner_exit_code": 10,
+      "package_advisory_counts": {
+        "HIGH": 48,
+        "CRITICAL": 0
+      },
+      "distinct_advisories": 10,
+      "image": "la-candidate-backend:ci",
+      "image_id": "sha256:cb933f676d547ae0daf015d3af8ec80b84f90b4ef6e4b017e1fa7ac560c739f6"
+    },
+    {
+      "status": "pass",
+      "scanner_exit_code": 0,
+      "package_advisory_counts": {
+        "HIGH": 0,
+        "CRITICAL": 0
+      },
+      "distinct_advisories": 0,
+      "image": "la-candidate-frontend:ci",
+      "image_id": "sha256:9283409da6e30d918a9251b4a13745c03d059c1cc22c630a5ae1a97e7edd0df7"
+    }
+  ],
+  "reports": {
+    "la-candidate-backend-licenses.json": {
+      "sha256": "6f298ccf06d112475bdc27b472232f65feef301cc83a137976cd1af6996ccc50",
+      "bytes": 1052891
+    },
+    "la-candidate-backend-sbom.json": {
+      "sha256": "0fb1a09415c4797c720cc97af91a0ce9566523a03939ac4fa1aff01a1a1e4ecb",
+      "bytes": 316310
+    },
+    "la-candidate-backend-vulnerabilities.json": {
+      "sha256": "b601f36f3f4f51269fa4ad91eb3999f9b489be955ea00dfdac3ac29f127880ec",
+      "bytes": 588708
+    },
+    "la-candidate-frontend-licenses.json": {
+      "sha256": "d794e6c5a6fa73a3bc17b2d52df8aed73d79de9d634003505c6b11ba3984fb1d",
+      "bytes": 83683
+    },
+    "la-candidate-frontend-sbom.json": {
+      "sha256": "8ec1663d2ce2378357194e17755ba3c4ebb783f6f3d40d79590d1456fa4498ef",
+      "bytes": 71436
+    },
+    "la-candidate-frontend-vulnerabilities.json": {
+      "sha256": "0030bc6d4f8f8275ade63283ba297f99d9fe8ab51f0013b49b59a38bee77c7e8",
+      "bytes": 60765
+    },
+    "summary.json": {
+      "sha256": "fdc8bad5e708e8e4e4ac5685474acd55b7a0352c4df3290613906b09ac70e4f9",
+      "bytes": 603
+    }
+  },
+  "remaining_findings": [
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "bsdutils",
+      "version": "1:2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "bsdutils",
+      "version": "1:2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "bsdutils",
+      "version": "1:2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "bsdutils",
+      "version": "1:2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "curl",
+      "version": "8.14.1-2+deb13u7",
+      "advisory": "CVE-2026-12064",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-12064"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "curl",
+      "version": "8.14.1-2+deb13u7",
+      "advisory": "CVE-2026-8458",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-8458"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libacl1",
+      "version": "2.3.2-2+b1",
+      "advisory": "CVE-2026-54369",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-54369"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libblkid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libblkid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libblkid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libblkid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libcurl4t64",
+      "version": "8.14.1-2+deb13u7",
+      "advisory": "CVE-2026-12064",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-12064"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libcurl4t64",
+      "version": "8.14.1-2+deb13u7",
+      "advisory": "CVE-2026-8458",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-8458"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "liblastlog2-2",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "liblastlog2-2",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "liblastlog2-2",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "liblastlog2-2",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libmount1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libmount1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libmount1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libmount1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libncursesw6",
+      "version": "6.5+20250216-2",
+      "advisory": "CVE-2025-69720",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2025-69720"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libsmartcols1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libsmartcols1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libsmartcols1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libsmartcols1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libsystemd0",
+      "version": "257.13-1~deb13u1",
+      "advisory": "CVE-2026-16742",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-16742"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libtinfo6",
+      "version": "6.5+20250216-2",
+      "advisory": "CVE-2025-69720",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2025-69720"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libudev1",
+      "version": "257.13-1~deb13u1",
+      "advisory": "CVE-2026-16742",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-16742"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "login",
+      "version": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "login",
+      "version": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "login",
+      "version": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "login",
+      "version": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "mount",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "mount",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "mount",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "mount",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "ncurses-base",
+      "version": "6.5+20250216-2",
+      "advisory": "CVE-2025-69720",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2025-69720"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "ncurses-bin",
+      "version": "6.5+20250216-2",
+      "advisory": "CVE-2025-69720",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2025-69720"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "perl-base",
+      "version": "5.40.1-6+deb13u1",
+      "advisory": "CVE-2026-9538",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-9538"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "util-linux",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-76642",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-76642"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "util-linux",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78408",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78408"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "util-linux",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78409",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78409"
+    },
+    {
+      "image": "la-candidate-backend",
+      "class": "os-pkgs",
+      "package": "util-linux",
+      "version": "2.41.5-0+deb13u1",
+      "advisory": "CVE-2026-78410",
+      "severity": "HIGH",
+      "fixed_version": null,
+      "primary_url": "https://avd.aquasec.com/nvd/cve-2026-78410"
+    }
+  ],
+  "licenses": {
+    "la-candidate-backend": [
+      {
+        "target": "OS Packages",
+        "class": "license",
+        "detected_records": 808
+      },
+      {
+        "target": "Python",
+        "class": "license",
+        "detected_records": 99
+      },
+      {
+        "target": "Loose File License(s)",
+        "class": "license-file",
+        "detected_records": 974
+      }
+    ],
+    "la-candidate-frontend": [
+      {
+        "target": "OS Packages",
+        "class": "license",
+        "detected_records": 25
+      },
+      {
+        "target": "Node.js",
+        "class": "license",
+        "detected_records": 39
+      },
+      {
+        "target": "Loose File License(s)",
+        "class": "license-file",
+        "detected_records": 16
+      }
+    ]
+  },
+  "tests": {
+    "backend_modules": 74,
+    "backend_tests": 679,
+    "unittest_skips": 0,
+    "real_http_auth_and_deterministic_sse_assertions": 24,
+    "browser_scenario_groups": 6,
+    "redirect_and_panel_helper_cases": 18,
+    "browser_api": "synthetic intercepted responses",
+    "browser": "Chromium, desktop and mobile viewport",
+    "production_image_runtime_env": "development",
+    "external_providers": false,
+    "physical_devices": false,
+    "production_mode_or_online_deployment": false
+  },
+  "workflow_runs": {
+    "backend": 39924777429,
+    "auth_sse": 39924777413,
+    "clean_compose": 39924777625,
+    "quality": 39924777430,
+    "next": 39924777433,
+    "browser": 39924777397,
+    "public_data": 39924777414,
+    "compose_isolation": 39924777394,
+    "base_vulnerability_gate": 39924777402,
+    "application_distribution_gate": 39924777395
+  }
+}
