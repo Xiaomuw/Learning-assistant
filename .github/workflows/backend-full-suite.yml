@@ -81,3 +81,24 @@ jobs:
       - name: Run every backend unittest module
         working-directory: backend
         run: python scripts/run_isolated_unittests.py
+
+  production-runtime:
+    name: Production backend runtime without installer tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build production backend image
+        run: docker build -f backend/Dockerfile.prod -t la-backend-runtime:ci backend
+      - name: Verify application imports without bundled installers
+        run: |
+          docker run --rm --entrypoint python la-backend-runtime:ci -c '
+          import importlib.util, pathlib, sysconfig
+          import fastapi, psycopg, requests, alembic
+          assert importlib.util.find_spec("pip") is None
+          bundled = pathlib.Path(sysconfig.get_path("stdlib")) / "ensurepip" / "_bundled"
+          assert not list(bundled.glob("*.whl"))
+          print("PASS: runtime imports; pip and ensurepip installer wheels absent")
+          '
