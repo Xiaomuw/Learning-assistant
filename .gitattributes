@@ -1,0 +1,3 @@
+# Old reports/screenshots have not completed rights and personal-data review.
+# Exclude them from git archive distributions; this does not remove Git history.
+docs/test-reports export-ignore
