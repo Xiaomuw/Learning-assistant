@@ -1,0 +1,71 @@
+{
+  "upstream_commit": "e28426a871f575b694e8403c6444afccaa404e54",
+  "lucide_version": "0.475.0",
+  "renderer": "CairoSVG 2.8.2",
+  "size": [
+    81,
+    81
+  ],
+  "licenses": [
+    "ISC",
+    "MIT (Feather portions)"
+  ],
+  "icons": [
+    {
+      "file": "chat.png",
+      "source": "message-circle.svg",
+      "source_sha256": "a9bd7a3e24bf81c598974bda992d0d363dd0996d0f14ecbe9986e03a07068884",
+      "png_sha256": "de5720aa1e2809ff6deafc129ff19b12f78d0abc513a5766af7503a7bd26990f",
+      "color": "#6B7280"
+    },
+    {
+      "file": "chat-active.png",
+      "source": "message-circle.svg",
+      "source_sha256": "a9bd7a3e24bf81c598974bda992d0d363dd0996d0f14ecbe9986e03a07068884",
+      "png_sha256": "2d395b0f41d944b85deafd60ceddf6392b00d8d23b6d619ee2b1b597d9d1fb89",
+      "color": "#1F2937"
+    },
+    {
+      "file": "practice.png",
+      "source": "notebook-pen.svg",
+      "source_sha256": "56705c35e839977bd6f133d7ca4e9c93a6eea563c89e4be125efd0a32e1fa041",
+      "png_sha256": "5867f5a30c98096d5214b6c2770f55edf5a887b2bf4ff8ac85dc5089989d266e",
+      "color": "#6B7280"
+    },
+    {
+      "file": "practice-active.png",
+      "source": "notebook-pen.svg",
+      "source_sha256": "56705c35e839977bd6f133d7ca4e9c93a6eea563c89e4be125efd0a32e1fa041",
+      "png_sha256": "6c573ac7867577a87de844eec7e986905056e81ae79875353bd992889f385a65",
+      "color": "#1F2937"
+    },
+    {
+      "file": "dashboard.png",
+      "source": "chart-column.svg",
+      "source_sha256": "80664a4c5ca1bca10bcb88c1a99f62593c94d61d72d3a4bbf577eb3f3ea4da57",
+      "png_sha256": "20e9f4a47443e7f58b627cd0390a2bee3a50577c471eb27101ea370f57c65e58",
+      "color": "#6B7280"
+    },
+    {
+      "file": "dashboard-active.png",
+      "source": "chart-column.svg",
+      "source_sha256": "80664a4c5ca1bca10bcb88c1a99f62593c94d61d72d3a4bbf577eb3f3ea4da57",
+      "png_sha256": "b1617f13d485bc040a727d96e85722b7b3c8d71f4e81321152498ce65ff28196",
+      "color": "#1F2937"
+    },
+    {
+      "file": "profile.png",
+      "source": "user-round.svg",
+      "source_sha256": "84870f26f3faf8da45da84174517519e81b9e8f00319c78954fcbb74f50038a1",
+      "png_sha256": "2cc62000777cc9bc1bb356707d1f90564595a2cb86c01e248d1e9d5c163c3dca",
+      "color": "#6B7280"
+    },
+    {
+      "file": "profile-active.png",
+      "source": "user-round.svg",
+      "source_sha256": "84870f26f3faf8da45da84174517519e81b9e8f00319c78954fcbb74f50038a1",
+      "png_sha256": "987121aaad24710de91358384ccfabb3afb914eeb60a5ab236d96cf863450bdd",
+      "color": "#1F2937"
+    }
+  ]
+}

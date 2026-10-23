@@ -67,3 +67,5 @@ jobs:
         run: npm run build:weapp
         env:
           TARO_APP_ID: touristappid
+      - name: Preserve navigation-icon license notices in build output
+        run: cmp src/assets/icons/NOTICE.txt dist/assets/icons/NOTICE.txt
