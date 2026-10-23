@@ -1,0 +1,42 @@
+name: Pinned base-image vulnerability gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  base-images:
+    name: HIGH and CRITICAL base-image findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Install checksum-verified Trivy 0.76.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --location --retry 3 --output trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz
+          echo 'c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  trivy.tar.gz' | sha256sum --check --strict
+          tar -xzf trivy.tar.gz trivy
+          ./trivy --version
+      - name: Scan all pinned base images and preserve nonzero gates
+        env:
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+        run: python3 scripts/scan_container_bases.py --trivy "$RUNNER_TEMP/trivy" --output-dir "$RUNNER_TEMP/container-scan"
+      - name: Preserve scan evidence even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: base-image-scan-${{ github.sha }}
+          path: ${{ runner.temp }}/container-scan/*.json
+          if-no-files-found: error
+          retention-days: 14
