@@ -33,6 +33,12 @@ git diff --check
 
 Some backend checks require an intentionally provisioned local test environment, and the PostgreSQL suite requires `TEST_DATABASE_URL` pointing to a **disposable test database**. Do not run smoke tests against production or user data.
 
+## Reproduce the release checks
+
+Use the [candidate runbook](docs/RELEASE_CANDIDATE.md) and [verification ledger](docs/RELEASE_VERIFICATION.md). Full backend CI uses `backend/scripts/run_isolated_unittests.py` to avoid cross-module global-state contamination. Set `DATABASE_URL`, `TEST_DATABASE_URL`, `POSTGRES_TEST_STRICT=true`, `ENABLE_GRAPH_FACTS=true`, `ENABLE_GRAPH_DUAL_WRITE=false`, `QA_WEB_SEARCH_EMPTY_CONCEPTS=true`, and disable tracing/external credentials as in `.github/workflows/backend-full-suite.yml`. Do not count skipped database tests as a pass.
+
+Report the exact commit, command, environment, failures/skips and whether the test used a fake model, real database/HTTP, external provider, or browser. Keep advisory findings distinct from confirmed exploitability. Do not run automatic major-version audit fixes or publish secret-scanner output containing values.
+
 ## Pull request checklist
 
 - Explain the motivation and affected module.

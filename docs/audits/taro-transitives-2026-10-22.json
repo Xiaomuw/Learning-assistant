@@ -1,0 +1,1660 @@
+{
+  "review_date": "2026-10-22",
+  "scope": "frontend-weapp npm lockfile",
+  "tool": "npm 11.9.0",
+  "environment": "Linux / Node 24.19.0; fresh worktree and npm cache, npm ci and build completed",
+  "base_sha": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "proposed_sha": "5c7b992ea290e342649783e5a27a1f31f60a43e2",
+  "release_decision": "NO-GO",
+  "lockfile_sha256": {
+    "before": "56dc6a310451c1fdf31948ce4a16ea4104697c2e5ba35086e3f281b6c5ebe828",
+    "after": "991bacfa19fca16e9287cfc87e1664f378cfe1202d6a21294505a6f5f75aa934"
+  },
+  "version_changes": [
+    {
+      "path": "node_modules/proxy-addr",
+      "before": "2.0.7",
+      "after": "2.0.8",
+      "license": "MIT"
+    },
+    {
+      "path": "node_modules/shell-quote",
+      "before": "1.8.3",
+      "after": "1.12.0",
+      "license": "MIT"
+    },
+    {
+      "path": "node_modules/vm2",
+      "before": "3.11.2",
+      "after": "3.12.2",
+      "license": "MIT"
+    },
+    {
+      "path": "node_modules/websocket-driver",
+      "before": "0.7.4",
+      "after": "0.7.5",
+      "license": "Apache-2.0"
+    }
+  ],
+  "notes": [
+    "Counts are affected package nodes and distinct advisory URLs, not proven exploitable paths.",
+    "Full audit exits 1 before and after; no advisories are suppressed.",
+    "License metadata and selected installed license files are inputs to review, not distribution clearance."
+  ],
+  "before": {
+    "exit_code": 1,
+    "counts": {
+      "info": 0,
+      "low": 1,
+      "moderate": 23,
+      "high": 51,
+      "critical": 8,
+      "total": 83
+    },
+    "distinct_direct_advisory_count": 162,
+    "direct_advisory_ids": [
+      "GHSA-23c5-xmqv-rm74",
+      "GHSA-248r-7h7q-cr24",
+      "GHSA-27g9-p43v-cw3v",
+      "GHSA-2883-xcg3-v3hh",
+      "GHSA-28wg-ghj8-5hjv",
+      "GHSA-2p49-hgcm-8545",
+      "GHSA-2v2p-6j97-cjg9",
+      "GHSA-2v37-7h3g-55p8",
+      "GHSA-2wm5-q62r-hmrv",
+      "GHSA-38r7-794h-5758",
+      "GHSA-395f-4hp3-45gv",
+      "GHSA-3jxr-9vmj-r5cp",
+      "GHSA-3ppc-4f35-3m26",
+      "GHSA-3pq3-5fj3-cg6v",
+      "GHSA-3vgf-8m4q-q4qr",
+      "GHSA-42h9-826w-cgv3",
+      "GHSA-44g4-m2mj-wpvx",
+      "GHSA-489w-w794-jq94",
+      "GHSA-4c8g-83qw-93j6",
+      "GHSA-4hqw-qxg8-jxx2",
+      "GHSA-4mjr-xmp4-gh2g",
+      "GHSA-4v9v-hfq4-rm2v",
+      "GHSA-4vpr-x523-8j87",
+      "GHSA-4vvj-4cpr-p986",
+      "GHSA-4x5r-pxfx-6jf8",
+      "GHSA-52cp-r559-cp3m",
+      "GHSA-542g-h47m-68v8",
+      "GHSA-587h-7wmj-h5pm",
+      "GHSA-58qx-3vcg-4xpx",
+      "GHSA-5c6j-r48x-rmvq",
+      "GHSA-5h3f-q97h-ccvc",
+      "GHSA-5j98-mcp5-4vw2",
+      "GHSA-5p4m-2wfm-xmqj",
+      "GHSA-633r-hq9m-c4ff",
+      "GHSA-64mm-vxmg-q3vj",
+      "GHSA-67mh-4wv8-2f99",
+      "GHSA-68fv-2mgg-jv7q",
+      "GHSA-698v-4r3x-3vcv",
+      "GHSA-6g55-p6wh-862q",
+      "GHSA-6h2x-m376-mqjq",
+      "GHSA-6j2x-vhqr-qr7q",
+      "GHSA-6j4f-fj2g-mc7p",
+      "GHSA-6rh5-qq4q-97xh",
+      "GHSA-6w3j-5fw6-r9vr",
+      "GHSA-73wf-gq98-2v4g",
+      "GHSA-76w7-j9cq-rx2j",
+      "GHSA-79cf-xcqc-c78w",
+      "GHSA-7fh5-64p2-3v2j",
+      "GHSA-7p8r-x3mc-p8w7",
+      "GHSA-7q3f-wx44-378m",
+      "GHSA-7q85-xj36-vmfc",
+      "GHSA-7q8q-rj6j-mhjq",
+      "GHSA-7r86-cg39-jmmj",
+      "GHSA-8238-w5pm-2374",
+      "GHSA-8686-vhfx-7r3j",
+      "GHSA-86w9-cpqp-85rv",
+      "GHSA-88hf-g992-jg85",
+      "GHSA-8fgc-7cc6-rx7x",
+      "GHSA-8jmw-wjr8-2x66",
+      "GHSA-8r9p-f939-6h3c",
+      "GHSA-96hv-2xvq-fx4p",
+      "GHSA-9fr6-4gfg-395g",
+      "GHSA-9g8x-92q2-p28f",
+      "GHSA-9jgg-88mc-972h",
+      "GHSA-c48m-32m9-vx93",
+      "GHSA-c4cf-2hgv-2qv6",
+      "GHSA-c6fg-446q-cg94",
+      "GHSA-c83g-rgw3-j3cx",
+      "GHSA-cfcw-xp6x-25gj",
+      "GHSA-ch52-4w7c-c8xp",
+      "GHSA-f4gw-2p7v-4548",
+      "GHSA-f5vj-f2hx-8m93",
+      "GHSA-f65p-4m7j-42xc",
+      "GHSA-f8gf-w286-fmq2",
+      "GHSA-fcqc-726x-5wfc",
+      "GHSA-fph4-wmhf-6fwf",
+      "GHSA-fxqj-rqcc-2cmp",
+      "GHSA-g7r4-m6w7-qqqr",
+      "GHSA-g84c-rxfj-3j2c",
+      "GHSA-gcfj-64vw-6mp9",
+      "GHSA-gg4h-3hg2-grpc",
+      "GHSA-gjq8-xm47-88rc",
+      "GHSA-gmc2-2x9w-cgh9",
+      "GHSA-h39j-r5qq-r9mm",
+      "GHSA-h67p-54hq-rp68",
+      "GHSA-hcpx-6fm6-wx23",
+      "GHSA-hmw2-7cc7-3qxx",
+      "GHSA-hmx5-qpq5-p643",
+      "GHSA-hrh2-vp3x-79xf",
+      "GHSA-hrr3-gc8f-f4qj",
+      "GHSA-j3hm-6rg5-mchv",
+      "GHSA-j5f4-cc29-5x44",
+      "GHSA-j8rh-479h-cp32",
+      "GHSA-jqcg-44mw-7w3h",
+      "GHSA-jqff-g426-hqxp",
+      "GHSA-jqh4-m9w3-8hp9",
+      "GHSA-jwp9-9v96-94mx",
+      "GHSA-jxxv-8r27-vm4p",
+      "GHSA-m283-3h24-438v",
+      "GHSA-m28w-2pqf-7qgj",
+      "GHSA-m4wx-m65x-ghrr",
+      "GHSA-m5q2-4fm3-vfqp",
+      "GHSA-m5w8-4gq2-6f8x",
+      "GHSA-m8m8-qj5v-23w3",
+      "GHSA-mghh-pgcx-3jjj",
+      "GHSA-mh99-v99m-4gvg",
+      "GHSA-mmx7-hfxf-jppx",
+      "GHSA-mp2f-45pm-3cg9",
+      "GHSA-mp7j-qc5w-4988",
+      "GHSA-mwf2-3pr3-8698",
+      "GHSA-mx8g-39q3-5c79",
+      "GHSA-p634-w6r4-rjp2",
+      "GHSA-pfq8-rq6v-vf5m",
+      "GHSA-pfrx-2q88-qq97",
+      "GHSA-pmv8-rq9r-6j72",
+      "GHSA-pq68-rvw4-xp4r",
+      "GHSA-q2hr-2g5m-vwhr",
+      "GHSA-q3fm-4wcw-g57x",
+      "GHSA-q3jh-wrc6-jgq8",
+      "GHSA-q7cg-457f-vx79",
+      "GHSA-q8mj-m7cp-5q26",
+      "GHSA-qhr7-859c-m2p7",
+      "GHSA-qhwx-74w5-xhxq",
+      "GHSA-qj8w-gfj5-8c6v",
+      "GHSA-qw65-cvwx-89v3",
+      "GHSA-qx2v-qp2m-jg93",
+      "GHSA-r273-hxvj-fxhp",
+      "GHSA-r28c-9q8g-f849",
+      "GHSA-r4fx-v8hh-22mv",
+      "GHSA-r825-w8mm-5pxw",
+      "GHSA-r9pm-gxmw-wv6p",
+      "GHSA-rc47-6667-2j5j",
+      "GHSA-rcw4-f5rp-g42v",
+      "GHSA-rgw5-rvv9-x895",
+      "GHSA-rj75-hqrm-r3gf",
+      "GHSA-rp36-8xq3-r6c4",
+      "GHSA-v2hh-gcrm-f6hx",
+      "GHSA-v422-hmwv-36x6",
+      "GHSA-v56q-mh7h-f735",
+      "GHSA-v6mx-mf47-r5wg",
+      "GHSA-v6wh-96g9-6wx3",
+      "GHSA-v836-6xw4-9cx3",
+      "GHSA-vc2v-76pw-4v95",
+      "GHSA-vcc3-ghjq-m6fr",
+      "GHSA-vfj7-8cjw-p6xm",
+      "GHSA-vh66-26gq-q6x8",
+      "GHSA-vwc7-r8mq-g2x9",
+      "GHSA-w27v-7q3p-w38r",
+      "GHSA-w5hq-g745-h8pq",
+      "GHSA-w5vr-8v7q-w6rv",
+      "GHSA-w7jw-789q-3m8p",
+      "GHSA-w9m9-85wc-3x92",
+      "GHSA-wjwh-qqvp-g4p4",
+      "GHSA-wr44-6hxh-3jwq",
+      "GHSA-x5fp-wj9c-mxmx",
+      "GHSA-x6m4-chr9-cg97",
+      "GHSA-x965-fc75-jpqh",
+      "GHSA-x97p-jq2g-jp4f",
+      "GHSA-xcpc-8h2w-3j85",
+      "GHSA-xj6q-8x83-jv6g",
+      "GHSA-xv26-6w52-cph6",
+      "GHSA-xvcm-6775-5m9r"
+    ]
+  },
+  "after": {
+    "exit_code": 1,
+    "counts": {
+      "info": 0,
+      "low": 1,
+      "moderate": 23,
+      "high": 51,
+      "critical": 4,
+      "total": 79
+    },
+    "distinct_direct_advisory_count": 118,
+    "direct_advisory_ids": [
+      "GHSA-23c5-xmqv-rm74",
+      "GHSA-2883-xcg3-v3hh",
+      "GHSA-28wg-ghj8-5hjv",
+      "GHSA-2p49-hgcm-8545",
+      "GHSA-2v37-7h3g-55p8",
+      "GHSA-2wm5-q62r-hmrv",
+      "GHSA-38r7-794h-5758",
+      "GHSA-3jxr-9vmj-r5cp",
+      "GHSA-3ppc-4f35-3m26",
+      "GHSA-3pq3-5fj3-cg6v",
+      "GHSA-42h9-826w-cgv3",
+      "GHSA-44g4-m2mj-wpvx",
+      "GHSA-4c8g-83qw-93j6",
+      "GHSA-4hqw-qxg8-jxx2",
+      "GHSA-4mjr-xmp4-gh2g",
+      "GHSA-4v9v-hfq4-rm2v",
+      "GHSA-4vpr-x523-8j87",
+      "GHSA-4vvj-4cpr-p986",
+      "GHSA-4x5r-pxfx-6jf8",
+      "GHSA-52cp-r559-cp3m",
+      "GHSA-542g-h47m-68v8",
+      "GHSA-587h-7wmj-h5pm",
+      "GHSA-58qx-3vcg-4xpx",
+      "GHSA-5c6j-r48x-rmvq",
+      "GHSA-5j98-mcp5-4vw2",
+      "GHSA-5p4m-2wfm-xmqj",
+      "GHSA-64mm-vxmg-q3vj",
+      "GHSA-67mh-4wv8-2f99",
+      "GHSA-68fv-2mgg-jv7q",
+      "GHSA-698v-4r3x-3vcv",
+      "GHSA-6g55-p6wh-862q",
+      "GHSA-6h2x-m376-mqjq",
+      "GHSA-6j4f-fj2g-mc7p",
+      "GHSA-6w3j-5fw6-r9vr",
+      "GHSA-73wf-gq98-2v4g",
+      "GHSA-79cf-xcqc-c78w",
+      "GHSA-7fh5-64p2-3v2j",
+      "GHSA-7p8r-x3mc-p8w7",
+      "GHSA-7q85-xj36-vmfc",
+      "GHSA-7q8q-rj6j-mhjq",
+      "GHSA-7r86-cg39-jmmj",
+      "GHSA-8238-w5pm-2374",
+      "GHSA-86w9-cpqp-85rv",
+      "GHSA-8fgc-7cc6-rx7x",
+      "GHSA-8jmw-wjr8-2x66",
+      "GHSA-8r9p-f939-6h3c",
+      "GHSA-96hv-2xvq-fx4p",
+      "GHSA-9fr6-4gfg-395g",
+      "GHSA-9jgg-88mc-972h",
+      "GHSA-c6fg-446q-cg94",
+      "GHSA-c83g-rgw3-j3cx",
+      "GHSA-ch52-4w7c-c8xp",
+      "GHSA-f4gw-2p7v-4548",
+      "GHSA-f5vj-f2hx-8m93",
+      "GHSA-f65p-4m7j-42xc",
+      "GHSA-fph4-wmhf-6fwf",
+      "GHSA-fxqj-rqcc-2cmp",
+      "GHSA-g7r4-m6w7-qqqr",
+      "GHSA-g84c-rxfj-3j2c",
+      "GHSA-gcfj-64vw-6mp9",
+      "GHSA-gg4h-3hg2-grpc",
+      "GHSA-h39j-r5qq-r9mm",
+      "GHSA-h67p-54hq-rp68",
+      "GHSA-hcpx-6fm6-wx23",
+      "GHSA-hmw2-7cc7-3qxx",
+      "GHSA-hmx5-qpq5-p643",
+      "GHSA-hrh2-vp3x-79xf",
+      "GHSA-hrr3-gc8f-f4qj",
+      "GHSA-j5f4-cc29-5x44",
+      "GHSA-j8rh-479h-cp32",
+      "GHSA-jqff-g426-hqxp",
+      "GHSA-jqh4-m9w3-8hp9",
+      "GHSA-jwp9-9v96-94mx",
+      "GHSA-m28w-2pqf-7qgj",
+      "GHSA-m8m8-qj5v-23w3",
+      "GHSA-mghh-pgcx-3jjj",
+      "GHSA-mh99-v99m-4gvg",
+      "GHSA-mmx7-hfxf-jppx",
+      "GHSA-mp2f-45pm-3cg9",
+      "GHSA-mwf2-3pr3-8698",
+      "GHSA-mx8g-39q3-5c79",
+      "GHSA-p634-w6r4-rjp2",
+      "GHSA-pfq8-rq6v-vf5m",
+      "GHSA-pfrx-2q88-qq97",
+      "GHSA-pmv8-rq9r-6j72",
+      "GHSA-q2hr-2g5m-vwhr",
+      "GHSA-q3jh-wrc6-jgq8",
+      "GHSA-q7cg-457f-vx79",
+      "GHSA-q8mj-m7cp-5q26",
+      "GHSA-qhr7-859c-m2p7",
+      "GHSA-qj8w-gfj5-8c6v",
+      "GHSA-qw65-cvwx-89v3",
+      "GHSA-qx2v-qp2m-jg93",
+      "GHSA-r28c-9q8g-f849",
+      "GHSA-r825-w8mm-5pxw",
+      "GHSA-rc47-6667-2j5j",
+      "GHSA-rcw4-f5rp-g42v",
+      "GHSA-rgw5-rvv9-x895",
+      "GHSA-rj75-hqrm-r3gf",
+      "GHSA-v2hh-gcrm-f6hx",
+      "GHSA-v422-hmwv-36x6",
+      "GHSA-v56q-mh7h-f735",
+      "GHSA-v6wh-96g9-6wx3",
+      "GHSA-vc2v-76pw-4v95",
+      "GHSA-vcc3-ghjq-m6fr",
+      "GHSA-vfj7-8cjw-p6xm",
+      "GHSA-vh66-26gq-q6x8",
+      "GHSA-vwc7-r8mq-g2x9",
+      "GHSA-w27v-7q3p-w38r",
+      "GHSA-w5hq-g745-h8pq",
+      "GHSA-w5vr-8v7q-w6rv",
+      "GHSA-w9m9-85wc-3x92",
+      "GHSA-wr44-6hxh-3jwq",
+      "GHSA-x5fp-wj9c-mxmx",
+      "GHSA-x97p-jq2g-jp4f",
+      "GHSA-xcpc-8h2w-3j85",
+      "GHSA-xj6q-8x83-jv6g",
+      "GHSA-xvcm-6775-5m9r"
+    ],
+    "affected_packages": [
+      {
+        "name": "@babel/core",
+        "severity": "low",
+        "is_direct_dependency": true,
+        "range": "<=7.29.0",
+        "via": [
+          "GHSA-4x5r-pxfx-6jf8"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/@babel/core"
+        ]
+      },
+      {
+        "name": "@tarojs/cli",
+        "severity": "high",
+        "is_direct_dependency": true,
+        "range": "0.0.0-experimental.2 || >=0.0.56",
+        "via": [
+          "@tarojs/helper",
+          "@tarojs/plugin-doctor",
+          "@tarojs/service",
+          "adm-zip",
+          "download-git-repo",
+          "latest-version"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/cli"
+        ]
+      },
+      {
+        "name": "@tarojs/components",
+        "severity": "critical",
+        "is_direct_dependency": true,
+        "range": ">=3.3.0-alpha.0",
+        "via": [
+          "@tarojs/taro",
+          "swiper"
+        ],
+        "fix_available": {
+          "name": "@tarojs/components",
+          "version": "3.2.16",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/components"
+        ]
+      },
+      {
+        "name": "@tarojs/helper",
+        "severity": "high",
+        "is_direct_dependency": true,
+        "range": "*",
+        "via": [
+          "chokidar",
+          "esbuild",
+          "find-yarn-workspace-root"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/helper"
+        ]
+      },
+      {
+        "name": "@tarojs/plugin-doctor",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "glob"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/plugin-doctor"
+        ]
+      },
+      {
+        "name": "@tarojs/plugin-framework-react",
+        "severity": "moderate",
+        "is_direct_dependency": true,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "via": [
+          "@tarojs/helper"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-framework-react",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/plugin-framework-react"
+        ]
+      },
+      {
+        "name": "@tarojs/plugin-platform-weapp",
+        "severity": "moderate",
+        "is_direct_dependency": true,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "via": [
+          "@tarojs/service"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/plugin-platform-weapp"
+        ]
+      },
+      {
+        "name": "@tarojs/runner-utils",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "@tarojs/helper",
+          "scss-bundle"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/runner-utils"
+        ]
+      },
+      {
+        "name": "@tarojs/service",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "via": [
+          "@tarojs/helper",
+          "@tarojs/runner-utils"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/service"
+        ]
+      },
+      {
+        "name": "@tarojs/taro",
+        "severity": "critical",
+        "is_direct_dependency": true,
+        "range": ">=3.6.23-nightly.0",
+        "via": [
+          "@tarojs/components",
+          "@tarojs/helper",
+          "webpack-dev-server"
+        ],
+        "fix_available": {
+          "name": "@tarojs/taro",
+          "version": "3.6.40",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@tarojs/taro"
+        ]
+      },
+      {
+        "name": "@tarojs/taro-loader",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "via": [
+          "@tarojs/helper",
+          "webpack"
+        ],
+        "fix_available": false,
+        "nodes": [
+          "node_modules/@tarojs/taro-loader"
+        ]
+      },
+      {
+        "name": "@tarojs/webpack5-prebundle",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<=3.5.1 || >=3.6.6-alpha.0",
+        "via": [
+          "@tarojs/helper",
+          "webpack"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/@tarojs/webpack5-prebundle"
+        ]
+      },
+      {
+        "name": "@tarojs/webpack5-runner",
+        "severity": "high",
+        "is_direct_dependency": true,
+        "range": "*",
+        "via": [
+          "@tarojs/helper",
+          "@tarojs/runner-utils",
+          "@tarojs/taro-loader",
+          "@tarojs/webpack5-prebundle",
+          "copy-webpack-plugin",
+          "css-minimizer-webpack-plugin",
+          "esbuild",
+          "html-minifier",
+          "miniprogram-simulate",
+          "stylus-loader",
+          "webpack",
+          "webpack-dev-server"
+        ],
+        "fix_available": false,
+        "nodes": [
+          "node_modules/@tarojs/webpack5-runner"
+        ]
+      },
+      {
+        "name": "@typescript-eslint/eslint-plugin",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "6.16.0 - 7.5.0",
+        "via": [
+          "@typescript-eslint/type-utils",
+          "@typescript-eslint/utils"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/eslint-config-taro/node_modules/@typescript-eslint/eslint-plugin"
+        ]
+      },
+      {
+        "name": "@typescript-eslint/parser",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "6.16.0 - 7.5.0",
+        "via": [
+          "@typescript-eslint/typescript-estree"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/eslint-config-taro/node_modules/@typescript-eslint/parser"
+        ]
+      },
+      {
+        "name": "@typescript-eslint/type-utils",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "6.16.0 - 7.5.0",
+        "via": [
+          "@typescript-eslint/typescript-estree",
+          "@typescript-eslint/utils"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/eslint-config-taro/node_modules/@typescript-eslint/type-utils"
+        ]
+      },
+      {
+        "name": "@typescript-eslint/typescript-estree",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "3.10.2-alpha.0 - 8.2.1-alpha.25",
+        "via": [
+          "globby",
+          "minimatch"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/eslint-config-taro/node_modules/@typescript-eslint/typescript-estree"
+        ]
+      },
+      {
+        "name": "@typescript-eslint/utils",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "6.16.0 - 7.5.0",
+        "via": [
+          "@typescript-eslint/typescript-estree"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/eslint-config-taro/node_modules/@typescript-eslint/utils"
+        ]
+      },
+      {
+        "name": "adm-zip",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=0.6.0",
+        "via": [
+          "GHSA-xcpc-8h2w-3j85",
+          "GHSA-vwc7-r8mq-g2x9",
+          "GHSA-7q85-xj36-vmfc",
+          "GHSA-rcw4-f5rp-g42v",
+          "GHSA-j5f4-cc29-5x44",
+          "GHSA-p634-w6r4-rjp2",
+          "GHSA-c6fg-446q-cg94",
+          "GHSA-8238-w5pm-2374"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/adm-zip"
+        ]
+      },
+      {
+        "name": "axios",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "1.0.0 - 1.19.0",
+        "via": [
+          "GHSA-xj6q-8x83-jv6g",
+          "GHSA-mmx7-hfxf-jppx",
+          "GHSA-pmv8-rq9r-6j72",
+          "GHSA-mwf2-3pr3-8698",
+          "GHSA-gcfj-64vw-6mp9",
+          "GHSA-7q8q-rj6j-mhjq",
+          "GHSA-jqh4-m9w3-8hp9",
+          "GHSA-f4gw-2p7v-4548",
+          "GHSA-42h9-826w-cgv3",
+          "GHSA-hcpx-6fm6-wx23",
+          "GHSA-vh66-26gq-q6x8",
+          "GHSA-9fr6-4gfg-395g",
+          "GHSA-mghh-pgcx-3jjj",
+          "GHSA-x97p-jq2g-jp4f",
+          "GHSA-3pq3-5fj3-cg6v",
+          "GHSA-542g-h47m-68v8",
+          "GHSA-j8rh-479h-cp32",
+          "GHSA-4hqw-qxg8-jxx2",
+          "GHSA-m8m8-qj5v-23w3",
+          "GHSA-44g4-m2mj-wpvx"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/axios"
+        ]
+      },
+      {
+        "name": "babel-preset-taro",
+        "severity": "moderate",
+        "is_direct_dependency": true,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "via": [
+          "@tarojs/helper"
+        ],
+        "fix_available": {
+          "name": "babel-preset-taro",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/babel-preset-taro"
+        ]
+      },
+      {
+        "name": "baseline-browser-mapping",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": ">=2.0.0 <2.11.0",
+        "via": [
+          "GHSA-w5vr-8v7q-w6rv"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/baseline-browser-mapping"
+        ]
+      },
+      {
+        "name": "body-parser",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<=1.20.6",
+        "via": [
+          "GHSA-v422-hmwv-36x6",
+          "qs"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/body-parser"
+        ]
+      },
+      {
+        "name": "brace-expansion",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=1.1.20 || 2.0.0 - 2.1.6 || 3.0.0 - 5.0.11",
+        "via": [
+          "GHSA-3jxr-9vmj-r5cp",
+          "GHSA-3jxr-9vmj-r5cp",
+          "GHSA-3jxr-9vmj-r5cp",
+          "GHSA-mh99-v99m-4gvg",
+          "GHSA-mh99-v99m-4gvg",
+          "GHSA-mh99-v99m-4gvg",
+          "GHSA-rgw5-rvv9-x895",
+          "GHSA-rgw5-rvv9-x895",
+          "GHSA-rgw5-rvv9-x895",
+          "GHSA-q2hr-2g5m-vwhr",
+          "GHSA-q2hr-2g5m-vwhr",
+          "GHSA-q2hr-2g5m-vwhr",
+          "GHSA-qhr7-859c-m2p7",
+          "GHSA-qhr7-859c-m2p7",
+          "GHSA-qhr7-859c-m2p7",
+          "GHSA-6j4f-fj2g-mc7p",
+          "GHSA-6j4f-fj2g-mc7p",
+          "GHSA-6j4f-fj2g-mc7p"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/@eslint/eslintrc/node_modules/brace-expansion",
+          "node_modules/@humanwhocodes/config-array/node_modules/brace-expansion",
+          "node_modules/@tarojs/plugin-doctor/node_modules/brace-expansion",
+          "node_modules/brace-expansion",
+          "node_modules/eslint-config-taro/node_modules/brace-expansion",
+          "node_modules/eslint-plugin-import/node_modules/brace-expansion",
+          "node_modules/eslint-plugin-react/node_modules/brace-expansion",
+          "node_modules/eslint/node_modules/brace-expansion",
+          "node_modules/glob/node_modules/brace-expansion",
+          "node_modules/globs/node_modules/brace-expansion",
+          "node_modules/miniprogram-compiler/node_modules/brace-expansion",
+          "node_modules/postcss-url/node_modules/brace-expansion",
+          "node_modules/rimraf/node_modules/brace-expansion",
+          "node_modules/stylus/node_modules/brace-expansion"
+        ]
+      },
+      {
+        "name": "braces",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "GHSA-vfj7-8cjw-p6xm"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/braces"
+        ]
+      },
+      {
+        "name": "browserslist",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=4.28.6",
+        "via": [
+          "GHSA-c83g-rgw3-j3cx",
+          "GHSA-73wf-gq98-2v4g"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/browserslist"
+        ]
+      },
+      {
+        "name": "cacheable-request",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "0.1.0 - 2.1.4",
+        "via": [
+          "http-cache-semantics",
+          "normalize-url"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/cacheable-request"
+        ]
+      },
+      {
+        "name": "chokidar",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "2.0.0 - 3.6.0",
+        "via": [
+          "braces"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/chokidar"
+        ]
+      },
+      {
+        "name": "colord",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<2.9.4",
+        "via": [
+          "GHSA-2wm5-q62r-hmrv"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/colord"
+        ]
+      },
+      {
+        "name": "compression",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<1.8.2",
+        "via": [
+          "GHSA-vc2v-76pw-4v95"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/compression"
+        ]
+      },
+      {
+        "name": "copy-webpack-plugin",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "6.0.0 - 13.0.1",
+        "via": [
+          "fast-glob",
+          "globby",
+          "serialize-javascript"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/copy-webpack-plugin"
+        ]
+      },
+      {
+        "name": "css-minimizer-webpack-plugin",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "1.1.4 - 7.0.4",
+        "via": [
+          "serialize-javascript"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/css-minimizer-webpack-plugin"
+        ]
+      },
+      {
+        "name": "decode-uri-component",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<=0.4.2",
+        "via": [
+          "GHSA-vcc3-ghjq-m6fr"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/decode-uri-component"
+        ]
+      },
+      {
+        "name": "decompress",
+        "severity": "critical",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "GHSA-mp2f-45pm-3cg9",
+          "GHSA-h39j-r5qq-r9mm",
+          "GHSA-jwp9-9v96-94mx",
+          "GHSA-hrh2-vp3x-79xf"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/decompress"
+        ]
+      },
+      {
+        "name": "download",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<=2.0.0 || >=4.0.0",
+        "via": [
+          "decompress",
+          "got"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/download"
+        ]
+      },
+      {
+        "name": "download-git-repo",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": ">=0.1.0",
+        "via": [
+          "download",
+          "git-clone"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/download-git-repo"
+        ]
+      },
+      {
+        "name": "esbuild",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<=0.24.2 || 0.27.3 - 0.28.0",
+        "via": [
+          "GHSA-67mh-4wv8-2f99",
+          "GHSA-g7r4-m6w7-qqqr"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/esbuild",
+          "node_modules/esbuild-loader/node_modules/esbuild"
+        ]
+      },
+      {
+        "name": "fast-glob",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "micromatch"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/fast-glob"
+        ]
+      },
+      {
+        "name": "fast-uri",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "3.0.0 - 3.1.7",
+        "via": [
+          "GHSA-v2hh-gcrm-f6hx",
+          "GHSA-7p8r-x3mc-p8w7",
+          "GHSA-f65p-4m7j-42xc",
+          "GHSA-fph4-wmhf-6fwf",
+          "GHSA-jqff-g426-hqxp",
+          "GHSA-4c8g-83qw-93j6",
+          "GHSA-qw65-cvwx-89v3",
+          "GHSA-hrr3-gc8f-f4qj"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/fast-uri"
+        ]
+      },
+      {
+        "name": "find-yarn-workspace-root",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "micromatch"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/find-yarn-workspace-root"
+        ]
+      },
+      {
+        "name": "follow-redirects",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "1.16.0",
+        "via": [
+          "GHSA-q3jh-wrc6-jgq8",
+          "GHSA-8r9p-f939-6h3c"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/follow-redirects"
+        ]
+      },
+      {
+        "name": "form-data",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "4.0.0 - 4.0.5",
+        "via": [
+          "GHSA-hmw2-7cc7-3qxx"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/form-data"
+        ]
+      },
+      {
+        "name": "git-clone",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "GHSA-8jmw-wjr8-2x66"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/git-clone"
+        ]
+      },
+      {
+        "name": "glob",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "10.2.0 - 10.4.5",
+        "via": [
+          "GHSA-5j98-mcp5-4vw2"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/glob"
+        ]
+      },
+      {
+        "name": "globby",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": ">=8.0.0",
+        "via": [
+          "fast-glob"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/eslint-config-taro/node_modules/globby",
+          "node_modules/globby"
+        ]
+      },
+      {
+        "name": "got",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=11.8.3",
+        "via": [
+          "GHSA-pfrx-2q88-qq97",
+          "cacheable-request"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/got",
+          "node_modules/package-json/node_modules/got"
+        ]
+      },
+      {
+        "name": "html-minifier",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "GHSA-pfq8-rq6v-vf5m"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/html-minifier"
+        ]
+      },
+      {
+        "name": "http-cache-semantics",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=4.2.0",
+        "via": [
+          "GHSA-rc47-6667-2j5j",
+          "GHSA-ch52-4w7c-c8xp"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/http-cache-semantics",
+          "node_modules/package-json/node_modules/http-cache-semantics"
+        ]
+      },
+      {
+        "name": "http-proxy-middleware",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": ">=0.3.0",
+        "via": [
+          "GHSA-64mm-vxmg-q3vj",
+          "micromatch"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/http-proxy-middleware"
+        ]
+      },
+      {
+        "name": "immutable",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "5.0.0-beta.1 - 5.1.7",
+        "via": [
+          "GHSA-xvcm-6775-5m9r",
+          "GHSA-v56q-mh7h-f735"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/immutable"
+        ]
+      },
+      {
+        "name": "joi",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=17.13.7",
+        "via": [
+          "GHSA-q7cg-457f-vx79",
+          "GHSA-6w3j-5fw6-r9vr",
+          "GHSA-gg4h-3hg2-grpc",
+          "GHSA-wr44-6hxh-3jwq",
+          "GHSA-6h2x-m376-mqjq"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/joi"
+        ]
+      },
+      {
+        "name": "js-yaml",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "4.0.0 - 4.3.1",
+        "via": [
+          "GHSA-h67p-54hq-rp68",
+          "GHSA-52cp-r559-cp3m",
+          "GHSA-5p4m-2wfm-xmqj",
+          "GHSA-2883-xcg3-v3hh"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/js-yaml"
+        ]
+      },
+      {
+        "name": "latest-version",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "0.2.0 - 5.1.0",
+        "via": [
+          "package-json"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/latest-version"
+        ]
+      },
+      {
+        "name": "launch-editor",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=2.14.1",
+        "via": [
+          "GHSA-v6wh-96g9-6wx3",
+          "GHSA-698v-4r3x-3vcv",
+          "GHSA-r825-w8mm-5pxw",
+          "GHSA-587h-7wmj-h5pm"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/launch-editor"
+        ]
+      },
+      {
+        "name": "micromatch",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": ">=0.2.0",
+        "via": [
+          "braces"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/micromatch"
+        ]
+      },
+      {
+        "name": "minimatch",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=3.1.3 || 9.0.0 - 9.0.6",
+        "via": [
+          "GHSA-3ppc-4f35-3m26",
+          "GHSA-3ppc-4f35-3m26",
+          "GHSA-7r86-cg39-jmmj",
+          "GHSA-7r86-cg39-jmmj",
+          "GHSA-23c5-xmqv-rm74",
+          "GHSA-23c5-xmqv-rm74"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/eslint-config-taro/node_modules/minimatch",
+          "node_modules/postcss-url/node_modules/minimatch"
+        ]
+      },
+      {
+        "name": "miniprogram-simulate",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": ">=0.1.0",
+        "via": [
+          "postcss"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/miniprogram-simulate"
+        ]
+      },
+      {
+        "name": "nanoid",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=3.3.17",
+        "via": [
+          "GHSA-28wg-ghj8-5hjv",
+          "GHSA-2v37-7h3g-55p8"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/nanoid"
+        ]
+      },
+      {
+        "name": "node-forge",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "GHSA-86w9-cpqp-85rv"
+        ],
+        "fix_available": {
+          "name": "@tarojs/taro",
+          "version": "3.6.40",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/node-forge"
+        ]
+      },
+      {
+        "name": "normalize-url",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "2.0.0 - 2.0.1",
+        "via": [
+          "query-string"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/normalize-url"
+        ]
+      },
+      {
+        "name": "package-json",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<=6.5.0",
+        "via": [
+          "got"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/package-json"
+        ]
+      },
+      {
+        "name": "postcss",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=8.5.22",
+        "via": [
+          "GHSA-7fh5-64p2-3v2j",
+          "GHSA-qx2v-qp2m-jg93",
+          "GHSA-6g55-p6wh-862q",
+          "GHSA-fxqj-rqcc-2cmp",
+          "GHSA-r28c-9q8g-f849"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/miniprogram-simulate/node_modules/postcss",
+          "node_modules/postcss"
+        ]
+      },
+      {
+        "name": "postcss-selector-parser",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<=7.1.5",
+        "via": [
+          "GHSA-w9m9-85wc-3x92",
+          "GHSA-w9m9-85wc-3x92",
+          "GHSA-rj75-hqrm-r3gf"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/postcss-modules-local-by-default/node_modules/postcss-selector-parser",
+          "node_modules/postcss-modules-scope/node_modules/postcss-selector-parser",
+          "node_modules/postcss-selector-parser"
+        ]
+      },
+      {
+        "name": "postcss-url",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "9.0.0 - 10.1.3",
+        "via": [
+          "minimatch"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/postcss-url"
+        ]
+      },
+      {
+        "name": "qs",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "2.2.5 - 6.15.3",
+        "via": [
+          "GHSA-q8mj-m7cp-5q26",
+          "GHSA-x5fp-wj9c-mxmx",
+          "GHSA-4mjr-xmp4-gh2g"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/body-parser/node_modules/qs",
+          "node_modules/qs"
+        ]
+      },
+      {
+        "name": "query-string",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "5.0.0 - 9.4.1",
+        "via": [
+          "decode-uri-component"
+        ],
+        "fix_available": {
+          "name": "@tarojs/cli",
+          "version": "1.3.8",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/query-string"
+        ]
+      },
+      {
+        "name": "scss-bundle",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=0.0.0-canary.e3c9a99 || >=2.5.0-beta",
+        "via": [
+          "chokidar"
+        ],
+        "fix_available": {
+          "name": "@tarojs/plugin-platform-weapp",
+          "version": "3.6.5",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/scss-bundle"
+        ]
+      },
+      {
+        "name": "selfsigned",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "1.1.1 - 4.0.1",
+        "via": [
+          "node-forge"
+        ],
+        "fix_available": {
+          "name": "@tarojs/taro",
+          "version": "3.6.40",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/selfsigned"
+        ]
+      },
+      {
+        "name": "serialize-javascript",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=7.0.4",
+        "via": [
+          "GHSA-5c6j-r48x-rmvq",
+          "GHSA-qj8w-gfj5-8c6v"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/serialize-javascript"
+        ]
+      },
+      {
+        "name": "sockjs",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": ">=0.3.17",
+        "via": [
+          "uuid"
+        ],
+        "fix_available": {
+          "name": "@tarojs/taro",
+          "version": "3.6.40",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/sockjs"
+        ]
+      },
+      {
+        "name": "source-map-js",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "1.0.0 - 1.2.1",
+        "via": [
+          "GHSA-68fv-2mgg-jv7q"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/source-map-js"
+        ]
+      },
+      {
+        "name": "stylus-loader",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "4.0.0 - 8.1.3",
+        "via": [
+          "fast-glob"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/stylus-loader"
+        ]
+      },
+      {
+        "name": "svgo",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "3.0.0 - 3.3.4",
+        "via": [
+          "GHSA-2p49-hgcm-8545",
+          "GHSA-w27v-7q3p-w38r",
+          "GHSA-4vpr-x523-8j87"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/svgo"
+        ]
+      },
+      {
+        "name": "swiper",
+        "severity": "critical",
+        "is_direct_dependency": false,
+        "range": "6.5.1 - 12.1.1",
+        "via": [
+          "GHSA-hmx5-qpq5-p643"
+        ],
+        "fix_available": {
+          "name": "@tarojs/components",
+          "version": "3.2.16",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/swiper"
+        ]
+      },
+      {
+        "name": "uuid",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<11.1.1",
+        "via": [
+          "GHSA-w5hq-g745-h8pq"
+        ],
+        "fix_available": {
+          "name": "@tarojs/taro",
+          "version": "3.6.40",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/uuid"
+        ]
+      },
+      {
+        "name": "webpack",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "5.0.0-alpha.0 - 5.104.0",
+        "via": [
+          "GHSA-4vvj-4cpr-p986",
+          "GHSA-8fgc-7cc6-rx7x",
+          "GHSA-38r7-794h-5758"
+        ],
+        "fix_available": false,
+        "nodes": [
+          "node_modules/webpack"
+        ]
+      },
+      {
+        "name": "webpack-dev-middleware",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<7.4.5",
+        "via": [
+          "GHSA-g84c-rxfj-3j2c"
+        ],
+        "fix_available": {
+          "name": "@tarojs/taro",
+          "version": "3.6.40",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/webpack-dev-middleware"
+        ]
+      },
+      {
+        "name": "webpack-dev-server",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "<=5.2.7",
+        "via": [
+          "GHSA-9jgg-88mc-972h",
+          "GHSA-4v9v-hfq4-rm2v",
+          "GHSA-79cf-xcqc-c78w",
+          "GHSA-mx8g-39q3-5c79",
+          "GHSA-f5vj-f2hx-8m93",
+          "GHSA-m28w-2pqf-7qgj",
+          "chokidar",
+          "selfsigned",
+          "sockjs",
+          "webpack-dev-middleware"
+        ],
+        "fix_available": {
+          "name": "@tarojs/taro",
+          "version": "3.6.40",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/webpack-dev-server"
+        ]
+      },
+      {
+        "name": "ws",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "8.0.0 - 8.20.1",
+        "via": [
+          "GHSA-58qx-3vcg-4xpx",
+          "GHSA-96hv-2xvq-fx4p"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/ws"
+        ]
+      }
+    ]
+  }
+}

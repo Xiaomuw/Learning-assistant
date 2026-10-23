@@ -6,7 +6,15 @@ Third-party dependencies, vendored code and assets retain their own license term
 
 ## License review status
 
-A complete inventory of direct **and transitive** dependency licenses, embedded icons/images, vendored sources, copied code, and their applicable attribution requirements has **not** yet been completed. This page is a disclosure of work to do, not a compliance certification.
+The current navigation PNG assets in both clients are generated from reviewed
+Lucide 0.475.0 SVGs (ISC, with Feather MIT portions). Their exact upstream commit,
+editable sources, licenses, modifications and file hashes are in
+[third_party/navigation-icons](third_party/navigation-icons/README.md). Each
+client includes the complete attribution/license texts in its icon NOTICE.txt;
+Taro copies that notice into its build output. This replacement does not clear
+the rights of old PNG blobs retained in Git history or other unreviewed assets.
+
+An initial resolved dependency/SBOM/license inventory was produced on 2026-10-22; see the [dependency and source review](docs/DEPENDENCY_SECURITY_REVIEW.md) and [sanitized evidence](docs/audits/dependency-review-2026-10-22.json). It includes transitive dependencies and identifies MPL/LGPL/attribution obligations for review. Package metadata does not establish distribution compliance. Embedded image provenance, copied-code ownership and the final distribution-specific notice/source bundle remain incomplete. This page is not a compliance certification.
 
 Before creating a public release package:
 

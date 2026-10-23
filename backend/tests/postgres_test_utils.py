@@ -88,3 +88,43 @@ class TemporaryPostgresSchema:
     def configure_env(self) -> None:
         os.environ["DATABASE_URL"] = self.database_url
         os.environ["LANGGRAPH_POSTGRES_URL"] = self.langgraph_url
+
+
+class TemporaryPostgresDatabase:
+    """Own a fresh database on the explicit loopback test service (requires CREATEDB).
+
+    PGVector owns extension types as well as tables, so a separate database avoids
+    schema search_path fallback into pre-existing public tables.
+    """
+
+    def __init__(self) -> None:
+        base = make_url(get_test_database_base_url())
+        if base.host not in {"127.0.0.1", "localhost", "::1"} or not (base.database or "").endswith("_test"):
+            raise PostgresTestConfigurationError(
+                "Database-level tests require a loopback TEST_DATABASE_URL ending in _test"
+            )
+        if base.query:
+            raise PostgresTestConfigurationError("Database-level tests do not accept DSN query overrides")
+        self.name = f"test_rag_{uuid.uuid4().hex}"
+        self.database_url = base.set(database=self.name).render_as_string(hide_password=False)
+        self.admin_engine = create_engine(base, isolation_level="AUTOCOMMIT")
+        self.created = False
+
+    def __enter__(self):
+        try:
+            with self.admin_engine.connect() as connection:
+                connection.execute(text(f'CREATE DATABASE "{self.name}" TEMPLATE template0'))
+            self.created = True
+            return self
+        except BaseException:
+            self.admin_engine.dispose()
+            raise
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        try:
+            if self.created:
+                with self.admin_engine.connect() as connection:
+                    connection.execute(text(f'DROP DATABASE "{self.name}"'))
+                self.created = False
+        finally:
+            self.admin_engine.dispose()

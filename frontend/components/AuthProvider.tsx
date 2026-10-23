@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { getSafeNextPath } from "@/lib/safe-next-path";
 import { usePathname, useRouter } from "next/navigation";
 import {
   completeRegisterWithPassword,
@@ -85,18 +86,6 @@ function isProtectedPath(pathname: string) {
   return pathname === "/" || PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
-function getSafeNextPath(nextPath: string | null): string {
-  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
-    return "/chat";
-  }
-
-  const [pathname] = nextPath.split("?");
-  if (AUTH_PAGES.has(pathname)) {
-    return "/chat";
-  }
-
-  return nextPath;
-}
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -117,6 +106,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         }),
       ]);
 
+      setLearningStoreUser(payload.user.id);
       setUser(payload.user);
       persistStoredAuthUser(payload.user);
       return payload.user;

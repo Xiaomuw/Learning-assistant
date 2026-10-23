@@ -1,35 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { getSafeNextPath } from "@/lib/safe-next-path";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { ArrowRight, Eye, EyeOff, KeyRound, Mail, Sparkles } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
-function getSafeNextPath(nextPath: string | null): string {
-  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
-    return "/chat";
-  }
-  const [pathname] = nextPath.split("?");
-  if (pathname === "/login" || pathname === "/register") {
-    return "/chat";
-  }
-  return nextPath;
-}
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const { login, isLoading, user } = useAuth();
-  const [nextPath, setNextPath] = useState<string | null>(null);
+  const nextPath = useSearchParams().get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    setNextPath(new URLSearchParams(window.location.search).get("next"));
-  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,4 +115,8 @@ export default function LoginPage() {
       </section>
     </main>
   );
+}
+
+export default function LoginPage() {
+  return <Suspense fallback={<p role="status">正在加载…</p>}><LoginForm /></Suspense>;
 }

@@ -15,10 +15,27 @@ os.environ.setdefault(
     "postgresql+psycopg://test:test@127.0.0.1:5432/__tests_only__",
 )
 
-from app.services.rag.vector_store import upsert_documents, upsert_documents_with_summary  # noqa: E402
+from app.services.rag.vector_store import _record_kb_chunk_mapping, upsert_documents, upsert_documents_with_summary  # noqa: E402
 
 
 class IngestTaxonomyMappingTest(unittest.TestCase):
+    def test_mapping_identity_is_stable_bounded_and_scoped_to_owner_and_subject(self) -> None:
+        identities = []
+        for subject, user in [("computer-network", "alice"), ("computer-network", "bob"),
+                              ("computer-network", None), ("data-structure", "alice"),
+                              ("computer-network", "alice")]:
+            with patch("app.services.rag.vector_store.save_kb_chunk_record") as save:
+                _record_kb_chunk_mapping(
+                    vector_id="pdf:synthetic.pdf:0:0",
+                    metadata={"subject_id": subject, "user_id": user}, content="Original synthetic text",
+                )
+            payload = save.call_args.args[0]
+            self.assertEqual(payload["vector_id"], "pdf:synthetic.pdf:0:0")
+            self.assertLessEqual(len(payload["id"]), 120)
+            identities.append(payload["id"])
+        self.assertEqual(len(set(identities[:4])), 4)
+        self.assertEqual(identities[0], identities[-1])
+
     def test_mapped_chunk_gets_concept_metadata_and_enters_vector_store(self) -> None:
         class _FakeEmbeddings:
             def embed_documents(self, texts: list[str]) -> list[list[float]]:

@@ -1,0 +1,2725 @@
+{
+  "date_utc": "2026-10-22",
+  "baseline_sha": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "scope": "Fresh Linux Python 3.12.14 resolution and npm lockfiles; not a release lock or clearance",
+  "tools": {
+    "pip-audit": "2.10.1",
+    "pip-licenses": "5.5.5",
+    "detect-secrets": "1.5.0",
+    "npm": "11.9.0"
+  },
+  "python_baseline": [
+    {
+      "name": "alembic",
+      "version": "1.20.1",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "asyncpg",
+      "version": "0.32.0",
+      "license_metadata": "Apache-2.0",
+      "advisories": []
+    },
+    {
+      "name": "bcrypt",
+      "version": "5.0.0",
+      "license_metadata": "Apache Software License",
+      "advisories": []
+    },
+    {
+      "name": "beautifulsoup4",
+      "version": "4.13.3",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "certifi",
+      "version": "2026.10.19",
+      "license_metadata": "Mozilla Public License 2.0 (MPL 2.0)",
+      "advisories": []
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "license_metadata": "MIT-0",
+      "advisories": []
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "click",
+      "version": "8.5.0",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "cryptography",
+      "version": "50.0.2",
+      "license_metadata": "Apache-2.0 OR BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "dnspython",
+      "version": "2.9.0",
+      "license_metadata": "ISC",
+      "advisories": []
+    },
+    {
+      "name": "email-validator",
+      "version": "2.3.0",
+      "license_metadata": "The Unlicense (Unlicense)",
+      "advisories": []
+    },
+    {
+      "name": "et-xmlfile",
+      "version": "2.0.0",
+      "license_metadata": "unknown",
+      "advisories": []
+    },
+    {
+      "name": "fastapi",
+      "version": "0.115.12",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "filetype",
+      "version": "1.2.0",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "google-ai-generativelanguage",
+      "version": "0.12.1",
+      "license_metadata": "Apache Software License",
+      "advisories": []
+    },
+    {
+      "name": "google-api-core",
+      "version": "2.30.3",
+      "license_metadata": "Apache Software License",
+      "advisories": []
+    },
+    {
+      "name": "google-auth",
+      "version": "2.62.0",
+      "license_metadata": "Apache Software License",
+      "advisories": []
+    },
+    {
+      "name": "googleapis-common-protos",
+      "version": "1.75.5",
+      "license_metadata": "Apache-2.0",
+      "advisories": []
+    },
+    {
+      "name": "greenlet",
+      "version": "3.5.6",
+      "license_metadata": "MIT AND PSF-2.0",
+      "advisories": []
+    },
+    {
+      "name": "grpcio",
+      "version": "1.84.0",
+      "license_metadata": "Apache-2.0",
+      "advisories": []
+    },
+    {
+      "name": "grpcio-status",
+      "version": "1.84.0",
+      "license_metadata": "Apache-2.0",
+      "advisories": []
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "httpcore2",
+      "version": "2.16.0",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "httptools",
+      "version": "0.9.0",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "license_metadata": "BSD License",
+      "advisories": []
+    },
+    {
+      "name": "httpx2",
+      "version": "2.16.0",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "jiter",
+      "version": "0.17.0",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "jsonpatch",
+      "version": "1.36",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "jsonpointer",
+      "version": "3.4",
+      "license_metadata": "BSD License",
+      "advisories": []
+    },
+    {
+      "name": "langchain",
+      "version": "1.4.6",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "langchain-core",
+      "version": "1.6.10",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "langchain-google-genai",
+      "version": "3.2.0",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "langchain-openai",
+      "version": "1.7.2",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "langchain-postgres",
+      "version": "0.0.19",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "langchain-protocol",
+      "version": "0.0.20",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "langchain-text-splitters",
+      "version": "1.1.3",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "langgraph",
+      "version": "1.2.16",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "langgraph-checkpoint",
+      "version": "4.3.0",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "langgraph-checkpoint-postgres",
+      "version": "3.2.0",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "langgraph-prebuilt",
+      "version": "1.1.1",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "langgraph-sdk",
+      "version": "0.4.8",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "langsmith",
+      "version": "0.8.18",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "loguru",
+      "version": "0.7.3",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "mako",
+      "version": "1.4.3",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "markupsafe",
+      "version": "3.0.4",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.4",
+      "license_metadata": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+      "advisories": []
+    },
+    {
+      "name": "openai",
+      "version": "3.36.1",
+      "license_metadata": "Apache-2.0",
+      "advisories": []
+    },
+    {
+      "name": "openpyxl",
+      "version": "3.1.5",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "orjson",
+      "version": "3.13.0",
+      "license_metadata": "MPL-2.0 AND (Apache-2.0 OR MIT)",
+      "advisories": []
+    },
+    {
+      "name": "ormsgpack",
+      "version": "1.13.0",
+      "license_metadata": "Apache-2.0 OR MIT",
+      "advisories": []
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "license_metadata": "Apache-2.0 OR BSD-2-Clause",
+      "advisories": []
+    },
+    {
+      "name": "passlib",
+      "version": "1.7.4",
+      "license_metadata": "BSD",
+      "advisories": []
+    },
+    {
+      "name": "pgvector",
+      "version": "0.3.6",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "proto-plus",
+      "version": "1.29.0",
+      "license_metadata": "Apache Software License",
+      "advisories": []
+    },
+    {
+      "name": "protobuf",
+      "version": "7.36.2",
+      "license_metadata": "3-Clause BSD License",
+      "advisories": []
+    },
+    {
+      "name": "psycopg",
+      "version": "3.3.6",
+      "license_metadata": "LGPL-3.0-only",
+      "advisories": []
+    },
+    {
+      "name": "psycopg-binary",
+      "version": "3.3.6",
+      "license_metadata": "LGPL-3.0-only",
+      "advisories": []
+    },
+    {
+      "name": "psycopg-pool",
+      "version": "3.3.3",
+      "license_metadata": "LGPL-3.0-only",
+      "advisories": []
+    },
+    {
+      "name": "pyasn1",
+      "version": "0.6.4",
+      "license_metadata": "BSD-2-Clause",
+      "advisories": []
+    },
+    {
+      "name": "pyasn1-modules",
+      "version": "0.4.2",
+      "license_metadata": "unknown",
+      "advisories": []
+    },
+    {
+      "name": "pycparser",
+      "version": "3.12",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "pydantic",
+      "version": "2.11.1",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "pydantic-settings",
+      "version": "2.9.1",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.33.0",
+      "license_metadata": "unknown",
+      "advisories": []
+    },
+    {
+      "name": "pyjwt",
+      "version": "2.15.1",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "pypdf",
+      "version": "5.4.0",
+      "license_metadata": "BSD License",
+      "advisories": [
+        {
+          "id": "PYSEC-2026-1830",
+          "fix_versions": [
+            "6.0.0"
+          ],
+          "aliases": [
+            "GHSA-7hfw-26vp-jp8m",
+            "CVE-2025-55197"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1833",
+          "fix_versions": [
+            "6.1.3"
+          ],
+          "aliases": [
+            "CVE-2025-62707",
+            "GHSA-vr63-x8vc-m265"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1831",
+          "fix_versions": [
+            "6.1.3"
+          ],
+          "aliases": [
+            "GHSA-jfx9-29x2-rv3j",
+            "CVE-2025-62708"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1832",
+          "fix_versions": [
+            "6.4.0"
+          ],
+          "aliases": [
+            "GHSA-m449-cwjh-6pw7",
+            "CVE-2025-66019"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1829",
+          "fix_versions": [
+            "6.6.0"
+          ],
+          "aliases": [
+            "GHSA-4xc4-762w-m6cg",
+            "CVE-2026-22690"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1828",
+          "fix_versions": [
+            "6.6.0"
+          ],
+          "aliases": [
+            "GHSA-4f6g-68pf-7vhv",
+            "CVE-2026-22691"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1827",
+          "fix_versions": [
+            "6.6.2"
+          ],
+          "aliases": [
+            "CVE-2026-24688",
+            "GHSA-2q4j-m29v-hq73"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3015",
+          "fix_versions": [
+            "6.7.1"
+          ],
+          "aliases": [
+            "GHSA-9mvc-8737-8j8h",
+            "CVE-2026-27026"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3013",
+          "fix_versions": [
+            "6.7.1"
+          ],
+          "aliases": [
+            "CVE-2026-27024",
+            "GHSA-996q-pr4m-cvgq"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3024",
+          "fix_versions": [
+            "6.7.1"
+          ],
+          "aliases": [
+            "GHSA-wgvp-vg3v-2xq3",
+            "CVE-2026-27025"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3005",
+          "fix_versions": [
+            "6.7.2"
+          ],
+          "aliases": [
+            "GHSA-2rw7-x74f-jg35",
+            "CVE-2026-27628"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3027",
+          "fix_versions": [
+            "6.7.3"
+          ],
+          "aliases": [
+            "GHSA-x7hp-r3qg-r3cj",
+            "CVE-2026-27888"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3017",
+          "fix_versions": [
+            "6.7.4"
+          ],
+          "aliases": [
+            "CVE-2026-28351",
+            "GHSA-f2v5-7jq9-h8cg"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3014",
+          "fix_versions": [
+            "6.7.5"
+          ],
+          "aliases": [
+            "GHSA-9m86-7pmv-2852",
+            "CVE-2026-28804"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3019",
+          "fix_versions": [
+            "6.8.0"
+          ],
+          "aliases": [
+            "CVE-2026-31826",
+            "GHSA-hqmh-ppp3-xvm7"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3023",
+          "fix_versions": [
+            "6.9.1"
+          ],
+          "aliases": [
+            "CVE-2026-33123",
+            "GHSA-qpxp-75px-xjcp"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3012",
+          "fix_versions": [
+            "6.9.2"
+          ],
+          "aliases": [
+            "CVE-2026-33699",
+            "GHSA-87mj-5ggw-8qc3"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3006",
+          "fix_versions": [
+            "6.10.0"
+          ],
+          "aliases": [
+            "CVE-2026-40260",
+            "GHSA-3crg-w4f6-42mx"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3021",
+          "fix_versions": [
+            "6.10.1"
+          ],
+          "aliases": [
+            "CVE-2026-41168",
+            "GHSA-jj6c-8h6c-hppx"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3007",
+          "fix_versions": [
+            "6.10.2"
+          ],
+          "aliases": [
+            "GHSA-4pxv-j86v-mhcw",
+            "CVE-2026-41313"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3011",
+          "fix_versions": [
+            "6.10.2"
+          ],
+          "aliases": [
+            "CVE-2026-41312",
+            "GHSA-7gw9-cf7v-778f"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3026",
+          "fix_versions": [
+            "6.10.2"
+          ],
+          "aliases": [
+            "GHSA-x284-j5p8-9c5p",
+            "CVE-2026-41314"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3004",
+          "fix_versions": [
+            "6.12.0"
+          ],
+          "aliases": [
+            "CVE-2026-48156",
+            "GHSA-248m-82v9-q6g6"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3016",
+          "fix_versions": [
+            "6.12.0"
+          ],
+          "aliases": [
+            "CVE-2026-48155",
+            "GHSA-cj93-chg6-vgv8"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3025",
+          "fix_versions": [
+            "6.12.1"
+          ],
+          "aliases": [
+            "CVE-2026-48735",
+            "GHSA-wjqc-6w8f-h24c"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3020",
+          "fix_versions": [
+            "6.12.2"
+          ],
+          "aliases": [
+            "GHSA-j543-4vmf-qm7v",
+            "CVE-2026-49461"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3010",
+          "fix_versions": [
+            "6.12.2"
+          ],
+          "aliases": [
+            "CVE-2026-49460",
+            "GHSA-5hgr-hg42-57jg"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3022",
+          "fix_versions": [
+            "6.13.0"
+          ],
+          "aliases": [
+            "CVE-2026-54531",
+            "GHSA-m2v9-299j-rv96"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3009",
+          "fix_versions": [
+            "6.13.0"
+          ],
+          "aliases": [
+            "GHSA-52x6-gq3r-vpf4",
+            "CVE-2026-54530"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1833",
+          "fix_versions": [
+            "6.1.3"
+          ],
+          "aliases": [
+            "CVE-2025-62707",
+            "GHSA-vr63-x8vc-m265"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1829",
+          "fix_versions": [
+            "6.6.0"
+          ],
+          "aliases": [
+            "GHSA-4xc4-762w-m6cg",
+            "CVE-2026-22690"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1832",
+          "fix_versions": [
+            "6.4.0"
+          ],
+          "aliases": [
+            "GHSA-m449-cwjh-6pw7",
+            "CVE-2025-66019"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1830",
+          "fix_versions": [
+            "6.0.0"
+          ],
+          "aliases": [
+            "GHSA-7hfw-26vp-jp8m",
+            "CVE-2025-55197"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1831",
+          "fix_versions": [
+            "6.1.3"
+          ],
+          "aliases": [
+            "GHSA-jfx9-29x2-rv3j",
+            "CVE-2025-62708"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1827",
+          "fix_versions": [
+            "6.6.2"
+          ],
+          "aliases": [
+            "CVE-2026-24688",
+            "GHSA-2q4j-m29v-hq73"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1828",
+          "fix_versions": [
+            "6.6.0"
+          ],
+          "aliases": [
+            "GHSA-4f6g-68pf-7vhv",
+            "CVE-2026-22691"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3018",
+          "fix_versions": [
+            "6.13.1"
+          ],
+          "aliases": [
+            "CVE-2026-54651",
+            "GHSA-g9xf-7f8q-9mcj"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3023",
+          "fix_versions": [
+            "6.9.1"
+          ],
+          "aliases": [
+            "CVE-2026-33123",
+            "GHSA-qpxp-75px-xjcp"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3022",
+          "fix_versions": [
+            "6.13.0"
+          ],
+          "aliases": [
+            "CVE-2026-54531",
+            "GHSA-m2v9-299j-rv96"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3017",
+          "fix_versions": [
+            "6.7.4"
+          ],
+          "aliases": [
+            "CVE-2026-28351",
+            "GHSA-f2v5-7jq9-h8cg"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3019",
+          "fix_versions": [
+            "6.8.0"
+          ],
+          "aliases": [
+            "CVE-2026-31826",
+            "GHSA-hqmh-ppp3-xvm7"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3020",
+          "fix_versions": [
+            "6.12.2"
+          ],
+          "aliases": [
+            "GHSA-j543-4vmf-qm7v",
+            "CVE-2026-49461"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3018",
+          "fix_versions": [
+            "6.13.1"
+          ],
+          "aliases": [
+            "CVE-2026-54651",
+            "GHSA-g9xf-7f8q-9mcj"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3021",
+          "fix_versions": [
+            "6.10.1"
+          ],
+          "aliases": [
+            "CVE-2026-41168",
+            "GHSA-jj6c-8h6c-hppx"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3011",
+          "fix_versions": [
+            "6.10.2"
+          ],
+          "aliases": [
+            "CVE-2026-41312",
+            "GHSA-7gw9-cf7v-778f"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3007",
+          "fix_versions": [
+            "6.10.2"
+          ],
+          "aliases": [
+            "GHSA-4pxv-j86v-mhcw",
+            "CVE-2026-41313"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3004",
+          "fix_versions": [
+            "6.12.0"
+          ],
+          "aliases": [
+            "CVE-2026-48156",
+            "GHSA-248m-82v9-q6g6"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3005",
+          "fix_versions": [
+            "6.7.2"
+          ],
+          "aliases": [
+            "GHSA-2rw7-x74f-jg35",
+            "CVE-2026-27628"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3006",
+          "fix_versions": [
+            "6.10.0"
+          ],
+          "aliases": [
+            "CVE-2026-40260",
+            "GHSA-3crg-w4f6-42mx"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3014",
+          "fix_versions": [
+            "6.7.5"
+          ],
+          "aliases": [
+            "GHSA-9m86-7pmv-2852",
+            "CVE-2026-28804"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3024",
+          "fix_versions": [
+            "6.7.1"
+          ],
+          "aliases": [
+            "GHSA-wgvp-vg3v-2xq3",
+            "CVE-2026-27025"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3026",
+          "fix_versions": [
+            "6.10.2"
+          ],
+          "aliases": [
+            "GHSA-x284-j5p8-9c5p",
+            "CVE-2026-41314"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3016",
+          "fix_versions": [
+            "6.12.0"
+          ],
+          "aliases": [
+            "CVE-2026-48155",
+            "GHSA-cj93-chg6-vgv8"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3010",
+          "fix_versions": [
+            "6.12.2"
+          ],
+          "aliases": [
+            "CVE-2026-49460",
+            "GHSA-5hgr-hg42-57jg"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3015",
+          "fix_versions": [
+            "6.7.1"
+          ],
+          "aliases": [
+            "GHSA-9mvc-8737-8j8h",
+            "CVE-2026-27026"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3025",
+          "fix_versions": [
+            "6.12.1"
+          ],
+          "aliases": [
+            "CVE-2026-48735",
+            "GHSA-wjqc-6w8f-h24c"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3013",
+          "fix_versions": [
+            "6.7.1"
+          ],
+          "aliases": [
+            "CVE-2026-27024",
+            "GHSA-996q-pr4m-cvgq"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3009",
+          "fix_versions": [
+            "6.13.0"
+          ],
+          "aliases": [
+            "GHSA-52x6-gq3r-vpf4",
+            "CVE-2026-54530"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3012",
+          "fix_versions": [
+            "6.9.2"
+          ],
+          "aliases": [
+            "CVE-2026-33699",
+            "GHSA-87mj-5ggw-8qc3"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3027",
+          "fix_versions": [
+            "6.7.3"
+          ],
+          "aliases": [
+            "GHSA-x7hp-r3qg-r3cj",
+            "CVE-2026-27888"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3611",
+          "fix_versions": [
+            "6.14.0"
+          ],
+          "aliases": [
+            "CVE-2026-59938",
+            "GHSA-5qjq-93h5-hrgp"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3610",
+          "fix_versions": [
+            "6.14.0"
+          ],
+          "aliases": [
+            "GHSA-55h5-xmcq-c37v",
+            "CVE-2026-59937"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3613",
+          "fix_versions": [
+            "6.14.2"
+          ],
+          "aliases": [
+            "CVE-2026-59935",
+            "GHSA-g867-7843-wf8q"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3612",
+          "fix_versions": [
+            "6.14.1"
+          ],
+          "aliases": [
+            "CVE-2026-59936",
+            "GHSA-5xf7-4p34-54qr"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3613",
+          "fix_versions": [
+            "6.14.2"
+          ],
+          "aliases": [
+            "CVE-2026-59935",
+            "GHSA-g867-7843-wf8q"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3610",
+          "fix_versions": [
+            "6.14.0"
+          ],
+          "aliases": [
+            "GHSA-55h5-xmcq-c37v",
+            "CVE-2026-59937"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3612",
+          "fix_versions": [
+            "6.14.1"
+          ],
+          "aliases": [
+            "CVE-2026-59936",
+            "GHSA-5xf7-4p34-54qr"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3611",
+          "fix_versions": [
+            "6.14.0"
+          ],
+          "aliases": [
+            "CVE-2026-59938",
+            "GHSA-5qjq-93h5-hrgp"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3656",
+          "fix_versions": [
+            "6.15.0"
+          ],
+          "aliases": [
+            "CVE-2026-71852",
+            "GHSA-fwg2-594c-jp42"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3655",
+          "fix_versions": [
+            "6.15.0"
+          ],
+          "aliases": [
+            "CVE-2026-71870",
+            "GHSA-fp3f-mc75-235c"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3655",
+          "fix_versions": [
+            "6.15.0"
+          ],
+          "aliases": [
+            "CVE-2026-71870",
+            "GHSA-fp3f-mc75-235c"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3656",
+          "fix_versions": [
+            "6.15.0"
+          ],
+          "aliases": [
+            "CVE-2026-71852",
+            "GHSA-fwg2-594c-jp42"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3910",
+          "fix_versions": [
+            "6.16.1"
+          ],
+          "aliases": [
+            "CVE-2026-84310",
+            "GHSA-23w6-3w8w-8484"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3912",
+          "fix_versions": [
+            "6.15.0"
+          ],
+          "aliases": [
+            "CVE-2026-82398",
+            "GHSA-fc8x-2rww-xw9m"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3911",
+          "fix_versions": [
+            "6.16.1"
+          ],
+          "aliases": [
+            "GHSA-763m-79hh-57f2",
+            "CVE-2026-84311"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3913",
+          "fix_versions": [
+            "6.16.0"
+          ],
+          "aliases": [
+            "CVE-2026-84309",
+            "GHSA-jp53-mhqp-8xcg"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4153",
+          "fix_versions": [
+            "6.18.0"
+          ],
+          "aliases": [
+            "CVE-2026-102994",
+            "GHSA-5jq2-8x83-x246"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4160",
+          "fix_versions": [
+            "6.19.0"
+          ],
+          "aliases": [
+            "GHSA-w23x-9jrw-r45c",
+            "CVE-2026-103000"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4154",
+          "fix_versions": [
+            "6.18.1"
+          ],
+          "aliases": [
+            "CVE-2026-102995",
+            "GHSA-fp3h-c4fm-7vvf"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4159",
+          "fix_versions": [
+            "6.19.0"
+          ],
+          "aliases": [
+            "GHSA-v247-6f48-mgcj",
+            "CVE-2026-102999"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4156",
+          "fix_versions": [
+            "6.18.1"
+          ],
+          "aliases": [
+            "CVE-2026-102997",
+            "GHSA-jw7q-gvrg-4vj3"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4158",
+          "fix_versions": [
+            "6.17.0"
+          ],
+          "aliases": [
+            "CVE-2026-102993",
+            "GHSA-qv6h-rv94-w285"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4155",
+          "fix_versions": [
+            "6.18.1"
+          ],
+          "aliases": [
+            "CVE-2026-102996",
+            "GHSA-g9cg-prrw-2r8q"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-4157",
+          "fix_versions": [
+            "6.19.0"
+          ],
+          "aliases": [
+            "GHSA-php9-fj8v-98fj",
+            "CVE-2026-102998"
+          ]
+        },
+        {
+          "id": "CVE-2026-57204",
+          "fix_versions": [
+            "6.13.3"
+          ],
+          "aliases": [
+            "GHSA-jm82-fx9c-mx94"
+          ]
+        },
+        {
+          "id": "CVE-2026-113792",
+          "fix_versions": [
+            "6.20.1"
+          ],
+          "aliases": [
+            "GHSA-qfv9-64jg-mh7p"
+          ]
+        },
+        {
+          "id": "CVE-2026-113795",
+          "fix_versions": [
+            "6.20.0"
+          ],
+          "aliases": [
+            "GHSA-7mh2-4gg2-979f"
+          ]
+        },
+        {
+          "id": "CVE-2026-113793",
+          "fix_versions": [
+            "6.20.1"
+          ],
+          "aliases": [
+            "GHSA-9mx8-4j7g-633p"
+          ]
+        },
+        {
+          "id": "CVE-2026-113794",
+          "fix_versions": [
+            "6.20.0"
+          ],
+          "aliases": [
+            "GHSA-39mj-jf6j-2qj3"
+          ]
+        },
+        {
+          "id": "CVE-2026-113786",
+          "fix_versions": [
+            "6.21.1"
+          ],
+          "aliases": [
+            "GHSA-5hx5-vpf9-5wcv"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "python-dotenv",
+      "version": "1.1.0",
+      "license_metadata": "BSD License",
+      "advisories": [
+        {
+          "id": "PYSEC-2026-2270",
+          "fix_versions": [
+            "1.2.2"
+          ],
+          "aliases": [
+            "CVE-2026-28684",
+            "GHSA-mf9w-mj56-hr94"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-2270",
+          "fix_versions": [
+            "1.2.2"
+          ],
+          "aliases": [
+            "CVE-2026-28684",
+            "GHSA-mf9w-mj56-hr94"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "python-multipart",
+      "version": "0.0.20",
+      "license_metadata": "Apache-2.0",
+      "advisories": [
+        {
+          "id": "PYSEC-2026-1852",
+          "fix_versions": [
+            "0.0.22"
+          ],
+          "aliases": [
+            "CVE-2026-24486",
+            "GHSA-wp53-j4wj-2cfg"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3038",
+          "fix_versions": [
+            "0.0.26"
+          ],
+          "aliases": [
+            "GHSA-mj87-hwqh-73pj",
+            "CVE-2026-40347"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3039",
+          "fix_versions": [
+            "0.0.27"
+          ],
+          "aliases": [
+            "GHSA-pp6c-gr5w-3c5g",
+            "CVE-2026-42561"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3040",
+          "fix_versions": [
+            "0.0.31"
+          ],
+          "aliases": [
+            "CVE-2026-53540",
+            "GHSA-v9pg-7xvm-68hf"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3036",
+          "fix_versions": [
+            "0.0.30"
+          ],
+          "aliases": [
+            "GHSA-5rvq-cxj2-64vf",
+            "CVE-2026-53539"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3037",
+          "fix_versions": [
+            "0.0.30"
+          ],
+          "aliases": [
+            "CVE-2026-53538",
+            "GHSA-6jv3-5f52-599m"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1852",
+          "fix_versions": [
+            "0.0.22"
+          ],
+          "aliases": [
+            "CVE-2026-24486",
+            "GHSA-wp53-j4wj-2cfg"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3038",
+          "fix_versions": [
+            "0.0.26"
+          ],
+          "aliases": [
+            "GHSA-mj87-hwqh-73pj",
+            "CVE-2026-40347"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3037",
+          "fix_versions": [
+            "0.0.30"
+          ],
+          "aliases": [
+            "CVE-2026-53538",
+            "GHSA-6jv3-5f52-599m"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3036",
+          "fix_versions": [
+            "0.0.30"
+          ],
+          "aliases": [
+            "GHSA-5rvq-cxj2-64vf",
+            "CVE-2026-53539"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3040",
+          "fix_versions": [
+            "0.0.31"
+          ],
+          "aliases": [
+            "CVE-2026-53540",
+            "GHSA-v9pg-7xvm-68hf"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3039",
+          "fix_versions": [
+            "0.0.27"
+          ],
+          "aliases": [
+            "GHSA-pp6c-gr5w-3c5g",
+            "CVE-2026-42561"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pyyaml",
+      "version": "6.0.3",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "regex",
+      "version": "2026.9.29",
+      "license_metadata": "Apache-2.0 AND CNRI-Python",
+      "advisories": []
+    },
+    {
+      "name": "requests",
+      "version": "2.32.3",
+      "license_metadata": "Apache Software License",
+      "advisories": [
+        {
+          "id": "PYSEC-2026-1872",
+          "fix_versions": [
+            "2.32.4"
+          ],
+          "aliases": [
+            "CVE-2024-47081",
+            "GHSA-9hjg-9r4m-mvj7"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-2275",
+          "fix_versions": [
+            "2.33.0"
+          ],
+          "aliases": [
+            "GHSA-gc5v-m9x4-r6x2",
+            "CVE-2026-25645"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1872",
+          "fix_versions": [
+            "2.32.4"
+          ],
+          "aliases": [
+            "CVE-2024-47081",
+            "GHSA-9hjg-9r4m-mvj7"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-2275",
+          "fix_versions": [
+            "2.33.0"
+          ],
+          "aliases": [
+            "GHSA-gc5v-m9x4-r6x2",
+            "CVE-2026-25645"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "requests-toolbelt",
+      "version": "1.0.0",
+      "license_metadata": "Apache Software License",
+      "advisories": []
+    },
+    {
+      "name": "sniffio",
+      "version": "1.3.1",
+      "license_metadata": "Apache Software License; MIT License",
+      "advisories": []
+    },
+    {
+      "name": "soupsieve",
+      "version": "3.0.4",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "sqlalchemy",
+      "version": "2.1.6",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "sse-starlette",
+      "version": "2.2.1",
+      "license_metadata": "BSD License",
+      "advisories": []
+    },
+    {
+      "name": "starlette",
+      "version": "0.46.2",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": [
+        {
+          "id": "PYSEC-2026-1941",
+          "fix_versions": [
+            "0.47.2"
+          ],
+          "aliases": [
+            "CVE-2025-54121",
+            "GHSA-2c2j-9gv5-cj73"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1942",
+          "fix_versions": [
+            "0.49.1"
+          ],
+          "aliases": [
+            "CVE-2025-62727",
+            "GHSA-7f5h-v6xp-fcq8"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-161",
+          "fix_versions": [
+            "1.0.1"
+          ],
+          "aliases": [
+            "X41-2026-002",
+            "CVE-2026-48710",
+            "GHSA-86qp-5c8j-p5mr"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-161",
+          "fix_versions": [
+            "1.0.1"
+          ],
+          "aliases": [
+            "X41-2026-002",
+            "CVE-2026-48710",
+            "GHSA-86qp-5c8j-p5mr"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-2281",
+          "fix_versions": [
+            "1.1.0"
+          ],
+          "aliases": [
+            "CVE-2026-48818",
+            "GHSA-wqp7-x3pw-xc5r"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-2280",
+          "fix_versions": [
+            "1.1.0"
+          ],
+          "aliases": [
+            "CVE-2026-48817",
+            "GHSA-x746-7m8f-x49c"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-249",
+          "fix_versions": [
+            "1.3.1"
+          ],
+          "aliases": [
+            "CVE-2026-54283",
+            "GHSA-82w8-qh3p-5jfq"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-248",
+          "fix_versions": [
+            "1.3.0"
+          ],
+          "aliases": [
+            "GHSA-jp82-jpqv-5vv3",
+            "CVE-2026-54282"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-249",
+          "fix_versions": [
+            "1.3.1"
+          ],
+          "aliases": [
+            "CVE-2026-54283",
+            "GHSA-82w8-qh3p-5jfq"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-248",
+          "fix_versions": [
+            "1.3.0"
+          ],
+          "aliases": [
+            "GHSA-jp82-jpqv-5vv3",
+            "CVE-2026-54282"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1942",
+          "fix_versions": [
+            "0.49.1"
+          ],
+          "aliases": [
+            "CVE-2025-62727",
+            "GHSA-7f5h-v6xp-fcq8"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1941",
+          "fix_versions": [
+            "0.47.2"
+          ],
+          "aliases": [
+            "CVE-2025-54121",
+            "GHSA-2c2j-9gv5-cj73"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-2281",
+          "fix_versions": [
+            "1.1.0"
+          ],
+          "aliases": [
+            "CVE-2026-48818",
+            "GHSA-wqp7-x3pw-xc5r"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-2280",
+          "fix_versions": [
+            "1.1.0"
+          ],
+          "aliases": [
+            "CVE-2026-48817",
+            "GHSA-x746-7m8f-x49c"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tavily-python",
+      "version": "0.8.5",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "tenacity",
+      "version": "9.2.1",
+      "license_metadata": "Apache-2.0",
+      "advisories": []
+    },
+    {
+      "name": "tiktoken",
+      "version": "0.9.0",
+      "license_metadata": "MIT License\n\nCopyright (c) 2022 OpenAI, Shantanu Jain\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+      "advisories": []
+    },
+    {
+      "name": "truststore",
+      "version": "0.10.5",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "license_metadata": "unknown",
+      "advisories": []
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "license_metadata": "MIT",
+      "advisories": []
+    },
+    {
+      "name": "uuid-utils",
+      "version": "0.18.0",
+      "license_metadata": "unknown",
+      "advisories": []
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.34.2",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "uvloop",
+      "version": "0.23.0",
+      "license_metadata": "Apache Software License; MIT License",
+      "advisories": []
+    },
+    {
+      "name": "watchfiles",
+      "version": "1.3.0",
+      "license_metadata": "MIT License",
+      "advisories": []
+    },
+    {
+      "name": "websockets",
+      "version": "16.1.1",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    },
+    {
+      "name": "xxhash",
+      "version": "4.0.2",
+      "license_metadata": "BSD-2-Clause",
+      "advisories": []
+    },
+    {
+      "name": "zstandard",
+      "version": "0.25.0",
+      "license_metadata": "BSD-3-Clause",
+      "advisories": []
+    }
+  ],
+  "python_after_pr31_affected": [
+    {
+      "name": "pypdf",
+      "version": "5.4.0"
+    },
+    {
+      "name": "python-multipart",
+      "version": "0.0.20"
+    },
+    {
+      "name": "starlette",
+      "version": "0.46.2"
+    }
+  ],
+  "frontend": {
+    "lock_sha256": "79ebf261da0ad1c7ce1e9141edfe31441e2e8a85af437d54724eb553dd2b216c",
+    "summary": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 9,
+      "critical": 0,
+      "total": 10
+    },
+    "affected_packages": [
+      {
+        "name": "@next/eslint-plugin-next",
+        "severity": "high",
+        "is_direct": false,
+        "range": ">=14.3.0-canary.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "brace-expansion",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=1.1.20",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+          "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+          "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+          "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+          "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+          "https://github.com/advisories/GHSA-rgw5-rvv9-x895"
+        ]
+      },
+      {
+        "name": "braces",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+        ]
+      },
+      {
+        "name": "browserslist",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=4.28.6",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+          "https://github.com/advisories/GHSA-c83g-rgw3-j3cx"
+        ]
+      },
+      {
+        "name": "chokidar",
+        "severity": "high",
+        "is_direct": false,
+        "range": "2.0.0 - 3.6.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "eslint-config-next",
+        "severity": "high",
+        "is_direct": true,
+        "range": ">=14.3.0-canary.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "fast-glob",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": []
+      },
+      {
+        "name": "micromatch",
+        "severity": "high",
+        "is_direct": false,
+        "range": ">=0.2.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "postcss-selector-parser",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=7.1.5",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+          "https://github.com/advisories/GHSA-w9m9-85wc-3x92"
+        ]
+      },
+      {
+        "name": "tailwindcss",
+        "severity": "high",
+        "is_direct": true,
+        "range": "<=0.0.0-oxide-insiders.ff2c25f || 2.1.0-canary.1 - 3.4.19",
+        "advisory_urls": []
+      }
+    ]
+  },
+  "frontend-weapp": {
+    "lock_sha256": "56dc6a310451c1fdf31948ce4a16ea4104697c2e5ba35086e3f281b6c5ebe828",
+    "summary": {
+      "info": 0,
+      "low": 1,
+      "moderate": 23,
+      "high": 51,
+      "critical": 8,
+      "total": 83
+    },
+    "affected_packages": [
+      {
+        "name": "@babel/core",
+        "severity": "low",
+        "is_direct": true,
+        "range": "<=7.29.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8"
+        ]
+      },
+      {
+        "name": "@tarojs/cli",
+        "severity": "high",
+        "is_direct": true,
+        "range": "0.0.0-experimental.2 || >=0.0.56",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/components",
+        "severity": "critical",
+        "is_direct": true,
+        "range": ">=3.3.0-alpha.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/helper",
+        "severity": "high",
+        "is_direct": true,
+        "range": "*",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/plugin-doctor",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/plugin-framework-react",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/plugin-platform-weapp",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/runner-utils",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/service",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/taro",
+        "severity": "critical",
+        "is_direct": true,
+        "range": ">=3.6.23-nightly.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/taro-loader",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/webpack5-prebundle",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=3.5.1 || >=3.6.6-alpha.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@tarojs/webpack5-runner",
+        "severity": "high",
+        "is_direct": true,
+        "range": "*",
+        "advisory_urls": []
+      },
+      {
+        "name": "@typescript-eslint/eslint-plugin",
+        "severity": "high",
+        "is_direct": false,
+        "range": "6.16.0 - 7.5.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@typescript-eslint/parser",
+        "severity": "high",
+        "is_direct": false,
+        "range": "6.16.0 - 7.5.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@typescript-eslint/type-utils",
+        "severity": "high",
+        "is_direct": false,
+        "range": "6.16.0 - 7.5.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "@typescript-eslint/typescript-estree",
+        "severity": "high",
+        "is_direct": false,
+        "range": "3.10.2-alpha.0 - 8.2.1-alpha.25",
+        "advisory_urls": []
+      },
+      {
+        "name": "@typescript-eslint/utils",
+        "severity": "high",
+        "is_direct": false,
+        "range": "6.16.0 - 7.5.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "adm-zip",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=0.6.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-7q85-xj36-vmfc",
+          "https://github.com/advisories/GHSA-8238-w5pm-2374",
+          "https://github.com/advisories/GHSA-c6fg-446q-cg94",
+          "https://github.com/advisories/GHSA-j5f4-cc29-5x44",
+          "https://github.com/advisories/GHSA-p634-w6r4-rjp2",
+          "https://github.com/advisories/GHSA-rcw4-f5rp-g42v",
+          "https://github.com/advisories/GHSA-vwc7-r8mq-g2x9",
+          "https://github.com/advisories/GHSA-xcpc-8h2w-3j85"
+        ]
+      },
+      {
+        "name": "axios",
+        "severity": "high",
+        "is_direct": false,
+        "range": "1.0.0 - 1.19.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-3pq3-5fj3-cg6v",
+          "https://github.com/advisories/GHSA-42h9-826w-cgv3",
+          "https://github.com/advisories/GHSA-44g4-m2mj-wpvx",
+          "https://github.com/advisories/GHSA-4hqw-qxg8-jxx2",
+          "https://github.com/advisories/GHSA-542g-h47m-68v8",
+          "https://github.com/advisories/GHSA-7q8q-rj6j-mhjq",
+          "https://github.com/advisories/GHSA-9fr6-4gfg-395g",
+          "https://github.com/advisories/GHSA-f4gw-2p7v-4548",
+          "https://github.com/advisories/GHSA-gcfj-64vw-6mp9",
+          "https://github.com/advisories/GHSA-hcpx-6fm6-wx23",
+          "https://github.com/advisories/GHSA-j8rh-479h-cp32",
+          "https://github.com/advisories/GHSA-jqh4-m9w3-8hp9",
+          "https://github.com/advisories/GHSA-m8m8-qj5v-23w3",
+          "https://github.com/advisories/GHSA-mghh-pgcx-3jjj",
+          "https://github.com/advisories/GHSA-mmx7-hfxf-jppx",
+          "https://github.com/advisories/GHSA-mwf2-3pr3-8698",
+          "https://github.com/advisories/GHSA-pmv8-rq9r-6j72",
+          "https://github.com/advisories/GHSA-vh66-26gq-q6x8",
+          "https://github.com/advisories/GHSA-x97p-jq2g-jp4f",
+          "https://github.com/advisories/GHSA-xj6q-8x83-jv6g"
+        ]
+      },
+      {
+        "name": "babel-preset-taro",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "3.5.0-alpha.0 - 3.5.0-theta.0 || >=3.6.6-alpha.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "baseline-browser-mapping",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": ">=2.0.0 <2.11.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-w5vr-8v7q-w6rv"
+        ]
+      },
+      {
+        "name": "body-parser",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=1.20.6",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-v422-hmwv-36x6"
+        ]
+      },
+      {
+        "name": "brace-expansion",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=1.1.20 || 2.0.0 - 2.1.6 || 3.0.0 - 5.0.11",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+          "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+          "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+          "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+          "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+          "https://github.com/advisories/GHSA-rgw5-rvv9-x895"
+        ]
+      },
+      {
+        "name": "braces",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+        ]
+      },
+      {
+        "name": "browserslist",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=4.28.6",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+          "https://github.com/advisories/GHSA-c83g-rgw3-j3cx"
+        ]
+      },
+      {
+        "name": "cacheable-request",
+        "severity": "high",
+        "is_direct": false,
+        "range": "0.1.0 - 2.1.4",
+        "advisory_urls": []
+      },
+      {
+        "name": "chokidar",
+        "severity": "high",
+        "is_direct": false,
+        "range": "2.0.0 - 3.6.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "colord",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<2.9.4",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-2wm5-q62r-hmrv"
+        ]
+      },
+      {
+        "name": "compression",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<1.8.2",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-vc2v-76pw-4v95"
+        ]
+      },
+      {
+        "name": "copy-webpack-plugin",
+        "severity": "high",
+        "is_direct": false,
+        "range": "6.0.0 - 13.0.1",
+        "advisory_urls": []
+      },
+      {
+        "name": "css-minimizer-webpack-plugin",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "1.1.4 - 7.0.4",
+        "advisory_urls": []
+      },
+      {
+        "name": "decode-uri-component",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=0.4.2",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-vcc3-ghjq-m6fr"
+        ]
+      },
+      {
+        "name": "decompress",
+        "severity": "critical",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-h39j-r5qq-r9mm",
+          "https://github.com/advisories/GHSA-hrh2-vp3x-79xf",
+          "https://github.com/advisories/GHSA-jwp9-9v96-94mx",
+          "https://github.com/advisories/GHSA-mp2f-45pm-3cg9"
+        ]
+      },
+      {
+        "name": "download",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=2.0.0 || >=4.0.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "download-git-repo",
+        "severity": "high",
+        "is_direct": false,
+        "range": ">=0.1.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "esbuild",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=0.24.2 || 0.27.3 - 0.28.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+          "https://github.com/advisories/GHSA-g7r4-m6w7-qqqr"
+        ]
+      },
+      {
+        "name": "fast-glob",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": []
+      },
+      {
+        "name": "fast-uri",
+        "severity": "high",
+        "is_direct": false,
+        "range": "3.0.0 - 3.1.7",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-4c8g-83qw-93j6",
+          "https://github.com/advisories/GHSA-7p8r-x3mc-p8w7",
+          "https://github.com/advisories/GHSA-f65p-4m7j-42xc",
+          "https://github.com/advisories/GHSA-fph4-wmhf-6fwf",
+          "https://github.com/advisories/GHSA-hrr3-gc8f-f4qj",
+          "https://github.com/advisories/GHSA-jqff-g426-hqxp",
+          "https://github.com/advisories/GHSA-qw65-cvwx-89v3",
+          "https://github.com/advisories/GHSA-v2hh-gcrm-f6hx"
+        ]
+      },
+      {
+        "name": "find-yarn-workspace-root",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": []
+      },
+      {
+        "name": "follow-redirects",
+        "severity": "high",
+        "is_direct": false,
+        "range": "1.16.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-8r9p-f939-6h3c",
+          "https://github.com/advisories/GHSA-q3jh-wrc6-jgq8"
+        ]
+      },
+      {
+        "name": "form-data",
+        "severity": "high",
+        "is_direct": false,
+        "range": "4.0.0 - 4.0.5",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-hmw2-7cc7-3qxx"
+        ]
+      },
+      {
+        "name": "git-clone",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-8jmw-wjr8-2x66"
+        ]
+      },
+      {
+        "name": "glob",
+        "severity": "high",
+        "is_direct": false,
+        "range": "10.2.0 - 10.4.5",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-5j98-mcp5-4vw2"
+        ]
+      },
+      {
+        "name": "globby",
+        "severity": "high",
+        "is_direct": false,
+        "range": ">=8.0.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "got",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=11.8.3",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-pfrx-2q88-qq97"
+        ]
+      },
+      {
+        "name": "html-minifier",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-pfq8-rq6v-vf5m"
+        ]
+      },
+      {
+        "name": "http-cache-semantics",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=4.2.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+          "https://github.com/advisories/GHSA-rc47-6667-2j5j"
+        ]
+      },
+      {
+        "name": "http-proxy-middleware",
+        "severity": "high",
+        "is_direct": false,
+        "range": ">=0.3.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-64mm-vxmg-q3vj"
+        ]
+      },
+      {
+        "name": "immutable",
+        "severity": "high",
+        "is_direct": false,
+        "range": "5.0.0-beta.1 - 5.1.7",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-v56q-mh7h-f735",
+          "https://github.com/advisories/GHSA-xvcm-6775-5m9r"
+        ]
+      },
+      {
+        "name": "joi",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=17.13.7",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-6h2x-m376-mqjq",
+          "https://github.com/advisories/GHSA-6w3j-5fw6-r9vr",
+          "https://github.com/advisories/GHSA-gg4h-3hg2-grpc",
+          "https://github.com/advisories/GHSA-q7cg-457f-vx79",
+          "https://github.com/advisories/GHSA-wr44-6hxh-3jwq"
+        ]
+      },
+      {
+        "name": "js-yaml",
+        "severity": "high",
+        "is_direct": false,
+        "range": "4.0.0 - 4.3.1",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-2883-xcg3-v3hh",
+          "https://github.com/advisories/GHSA-52cp-r559-cp3m",
+          "https://github.com/advisories/GHSA-5p4m-2wfm-xmqj",
+          "https://github.com/advisories/GHSA-h67p-54hq-rp68"
+        ]
+      },
+      {
+        "name": "latest-version",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "0.2.0 - 5.1.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "launch-editor",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=2.14.1",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+          "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
+          "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
+          "https://github.com/advisories/GHSA-v6wh-96g9-6wx3"
+        ]
+      },
+      {
+        "name": "micromatch",
+        "severity": "high",
+        "is_direct": false,
+        "range": ">=0.2.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "minimatch",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=3.1.3 || 9.0.0 - 9.0.6",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+          "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+          "https://github.com/advisories/GHSA-7r86-cg39-jmmj"
+        ]
+      },
+      {
+        "name": "miniprogram-simulate",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": ">=0.1.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "nanoid",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=3.3.17",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-28wg-ghj8-5hjv",
+          "https://github.com/advisories/GHSA-2v37-7h3g-55p8"
+        ]
+      },
+      {
+        "name": "node-forge",
+        "severity": "high",
+        "is_direct": false,
+        "range": "*",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-86w9-cpqp-85rv"
+        ]
+      },
+      {
+        "name": "normalize-url",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "2.0.0 - 2.0.1",
+        "advisory_urls": []
+      },
+      {
+        "name": "package-json",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=6.5.0",
+        "advisory_urls": []
+      },
+      {
+        "name": "postcss",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=8.5.22",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-6g55-p6wh-862q",
+          "https://github.com/advisories/GHSA-7fh5-64p2-3v2j",
+          "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+          "https://github.com/advisories/GHSA-qx2v-qp2m-jg93",
+          "https://github.com/advisories/GHSA-r28c-9q8g-f849"
+        ]
+      },
+      {
+        "name": "postcss-selector-parser",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=7.1.5",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+          "https://github.com/advisories/GHSA-w9m9-85wc-3x92"
+        ]
+      },
+      {
+        "name": "postcss-url",
+        "severity": "high",
+        "is_direct": false,
+        "range": "9.0.0 - 10.1.3",
+        "advisory_urls": []
+      },
+      {
+        "name": "proxy-addr",
+        "severity": "critical",
+        "is_direct": false,
+        "range": "1.1.0 - 2.0.7",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-jqcg-44mw-7w3h"
+        ]
+      },
+      {
+        "name": "qs",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "2.2.5 - 6.15.3",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-4mjr-xmp4-gh2g",
+          "https://github.com/advisories/GHSA-q8mj-m7cp-5q26",
+          "https://github.com/advisories/GHSA-x5fp-wj9c-mxmx"
+        ]
+      },
+      {
+        "name": "query-string",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "5.0.0 - 9.4.1",
+        "advisory_urls": []
+      },
+      {
+        "name": "scss-bundle",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=0.0.0-canary.e3c9a99 || >=2.5.0-beta",
+        "advisory_urls": []
+      },
+      {
+        "name": "selfsigned",
+        "severity": "high",
+        "is_direct": false,
+        "range": "1.1.1 - 4.0.1",
+        "advisory_urls": []
+      },
+      {
+        "name": "serialize-javascript",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=7.0.4",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-5c6j-r48x-rmvq",
+          "https://github.com/advisories/GHSA-qj8w-gfj5-8c6v"
+        ]
+      },
+      {
+        "name": "shell-quote",
+        "severity": "critical",
+        "is_direct": false,
+        "range": "<=1.8.4",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-395f-4hp3-45gv",
+          "https://github.com/advisories/GHSA-w7jw-789q-3m8p"
+        ]
+      },
+      {
+        "name": "sockjs",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": ">=0.3.17",
+        "advisory_urls": []
+      },
+      {
+        "name": "source-map-js",
+        "severity": "high",
+        "is_direct": false,
+        "range": "1.0.0 - 1.2.1",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+        ]
+      },
+      {
+        "name": "stylus-loader",
+        "severity": "high",
+        "is_direct": false,
+        "range": "4.0.0 - 8.1.3",
+        "advisory_urls": []
+      },
+      {
+        "name": "svgo",
+        "severity": "high",
+        "is_direct": false,
+        "range": "3.0.0 - 3.3.4",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-2p49-hgcm-8545",
+          "https://github.com/advisories/GHSA-4vpr-x523-8j87",
+          "https://github.com/advisories/GHSA-w27v-7q3p-w38r"
+        ]
+      },
+      {
+        "name": "swiper",
+        "severity": "critical",
+        "is_direct": false,
+        "range": "6.5.1 - 12.1.1",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-hmx5-qpq5-p643"
+        ]
+      },
+      {
+        "name": "uuid",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<11.1.1",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-w5hq-g745-h8pq"
+        ]
+      },
+      {
+        "name": "vm2",
+        "severity": "critical",
+        "is_direct": false,
+        "range": "<=3.12.1",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-248r-7h7q-cr24",
+          "https://github.com/advisories/GHSA-27g9-p43v-cw3v",
+          "https://github.com/advisories/GHSA-2v2p-6j97-cjg9",
+          "https://github.com/advisories/GHSA-3vgf-8m4q-q4qr",
+          "https://github.com/advisories/GHSA-489w-w794-jq94",
+          "https://github.com/advisories/GHSA-5h3f-q97h-ccvc",
+          "https://github.com/advisories/GHSA-633r-hq9m-c4ff",
+          "https://github.com/advisories/GHSA-6j2x-vhqr-qr7q",
+          "https://github.com/advisories/GHSA-6rh5-qq4q-97xh",
+          "https://github.com/advisories/GHSA-76w7-j9cq-rx2j",
+          "https://github.com/advisories/GHSA-7q3f-wx44-378m",
+          "https://github.com/advisories/GHSA-8686-vhfx-7r3j",
+          "https://github.com/advisories/GHSA-88hf-g992-jg85",
+          "https://github.com/advisories/GHSA-9g8x-92q2-p28f",
+          "https://github.com/advisories/GHSA-c48m-32m9-vx93",
+          "https://github.com/advisories/GHSA-c4cf-2hgv-2qv6",
+          "https://github.com/advisories/GHSA-cfcw-xp6x-25gj",
+          "https://github.com/advisories/GHSA-f8gf-w286-fmq2",
+          "https://github.com/advisories/GHSA-fcqc-726x-5wfc",
+          "https://github.com/advisories/GHSA-gjq8-xm47-88rc",
+          "https://github.com/advisories/GHSA-gmc2-2x9w-cgh9",
+          "https://github.com/advisories/GHSA-j3hm-6rg5-mchv",
+          "https://github.com/advisories/GHSA-jxxv-8r27-vm4p",
+          "https://github.com/advisories/GHSA-m283-3h24-438v",
+          "https://github.com/advisories/GHSA-m4wx-m65x-ghrr",
+          "https://github.com/advisories/GHSA-m5q2-4fm3-vfqp",
+          "https://github.com/advisories/GHSA-m5w8-4gq2-6f8x",
+          "https://github.com/advisories/GHSA-pq68-rvw4-xp4r",
+          "https://github.com/advisories/GHSA-q3fm-4wcw-g57x",
+          "https://github.com/advisories/GHSA-qhwx-74w5-xhxq",
+          "https://github.com/advisories/GHSA-r273-hxvj-fxhp",
+          "https://github.com/advisories/GHSA-r4fx-v8hh-22mv",
+          "https://github.com/advisories/GHSA-r9pm-gxmw-wv6p",
+          "https://github.com/advisories/GHSA-rp36-8xq3-r6c4",
+          "https://github.com/advisories/GHSA-v6mx-mf47-r5wg",
+          "https://github.com/advisories/GHSA-v836-6xw4-9cx3",
+          "https://github.com/advisories/GHSA-wjwh-qqvp-g4p4",
+          "https://github.com/advisories/GHSA-x6m4-chr9-cg97",
+          "https://github.com/advisories/GHSA-x965-fc75-jpqh"
+        ]
+      },
+      {
+        "name": "webpack",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "5.0.0-alpha.0 - 5.104.0",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-38r7-794h-5758",
+          "https://github.com/advisories/GHSA-4vvj-4cpr-p986",
+          "https://github.com/advisories/GHSA-8fgc-7cc6-rx7x"
+        ]
+      },
+      {
+        "name": "webpack-dev-middleware",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<7.4.5",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-g84c-rxfj-3j2c"
+        ]
+      },
+      {
+        "name": "webpack-dev-server",
+        "severity": "high",
+        "is_direct": false,
+        "range": "<=5.2.7",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-4v9v-hfq4-rm2v",
+          "https://github.com/advisories/GHSA-79cf-xcqc-c78w",
+          "https://github.com/advisories/GHSA-9jgg-88mc-972h",
+          "https://github.com/advisories/GHSA-f5vj-f2hx-8m93",
+          "https://github.com/advisories/GHSA-m28w-2pqf-7qgj",
+          "https://github.com/advisories/GHSA-mx8g-39q3-5c79"
+        ]
+      },
+      {
+        "name": "websocket-driver",
+        "severity": "critical",
+        "is_direct": false,
+        "range": "<=0.7.4",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-mp7j-qc5w-4988",
+          "https://github.com/advisories/GHSA-xv26-6w52-cph6"
+        ]
+      },
+      {
+        "name": "ws",
+        "severity": "high",
+        "is_direct": false,
+        "range": "8.0.0 - 8.20.1",
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-58qx-3vcg-4xpx",
+          "https://github.com/advisories/GHSA-96hv-2xvq-fx4p"
+        ]
+      }
+    ]
+  },
+  "frontend_production": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  }
+}

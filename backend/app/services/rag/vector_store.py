@@ -876,9 +876,17 @@ def _record_kb_chunk_mapping(
     metadata: dict[str, Any],
     content: str,
 ) -> None:
+    # Vector IDs are unique within a collection, but kb_chunk has a global key.
+    # Keep vector/citation IDs stable while isolating mapping rows by notebook/owner.
+    identity = json.dumps(
+        [str(metadata.get("subject_id") or ""), str(metadata.get("user_id") or ""), vector_id],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    mapping_id = "chunk:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
     save_kb_chunk_record(
         {
-            "id": vector_id,
+            "id": mapping_id,
             "vector_id": vector_id,
             "subject_id": metadata.get("subject_id") or "",
             "subject_name": metadata.get("subject_name") or "",
