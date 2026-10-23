@@ -13,3 +13,14 @@ for (const path of [null, '', 'https://evil.invalid', '//evil.invalid', '/\\evil
 }
 for (const path of ['/practice?subject=original#question', '/dashboard']) assert.equal(safe(path), path);
 console.log('14 same-origin redirect cases passed');
+
+const panelSource = ts.transpileModule(fs.readFileSync('lib/process-panel-state.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } });
+const panelExports = {};
+vm.runInNewContext(panelSource.outputText, { exports: panelExports });
+const advance = panelExports.advanceProcessPanelState;
+assert.equal(advance({ hasTrace: false, open: false }, true).open, true);
+const manuallyClosed = { hasTrace: true, open: false };
+assert.equal(advance(manuallyClosed, true), manuallyClosed);
+assert.equal(advance(manuallyClosed, false).open, false);
+assert.equal(advance({ hasTrace: true, open: true }, false).open, true);
+console.log('4 reusable process-panel transition cases passed');

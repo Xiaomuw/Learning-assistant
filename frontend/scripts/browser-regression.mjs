@@ -68,11 +68,13 @@ async function setup(browser, name, viewport, authenticated = true) {
       await test.page.waitForURL(`${base}/chat`);
       await test.page.getByPlaceholder('输入你的问题...').fill('Synthetic test request');
       await test.page.getByRole('button', { name: '发送', exact: true }).click();
-      const panel = test.page.getByRole('button', { name: '收起处理过程' });
+      const panel = test.page.locator('details').filter({ hasText: '处理过程' });
       await panel.waitFor();
-      await panel.click();
+      await panel.locator('summary').click();
+      assert.equal(await panel.getAttribute('open'), '', 'Process details must expand');
+      await panel.locator('summary').click();
       await test.page.getByPlaceholder('输入你的问题...').fill('Manual collapse must survive rerenders');
-      await test.page.getByRole('button', { name: '展开处理过程' }).waitFor();
+      assert.equal(await panel.getAttribute('open'), null, 'Manual collapse must survive rerenders');
       await test.page.screenshot({ path: path.join(output, `${size}-chat.png`), fullPage: true });
       const stored = await test.page.evaluate(() => JSON.stringify(localStorage));
       assert.ok(!stored.includes('Synthetic test trace'), 'Ephemeral trace must not persist');
