@@ -16,7 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify checkout did not persist HTTP credentials
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_ci_checkout.py"
       - name: Generate CI-only database and application secrets
         run: |
           python3 - <<'PY'
@@ -53,56 +57,18 @@ jobs:
       - name: Boot disposable stack
         run: docker compose -p la-ci --file docker-compose.yml up --detach --no-build
       - name: Check health, API auth and runtime loopback port bindings
+        run: python3 scripts/check_compose_stack.py
+      - name: Verify migrations and bootstrap on the first boot
         run: |
-          python3 - <<'PY'
-          import json
-          import subprocess
-          import time
-          import urllib.error
-          import urllib.request
-
-          command = ["docker", "compose", "-p", "la-ci", "--file", "docker-compose.yml"]
-          expected = {
-              ("postgres", "5432"): "127.0.0.1:5434",
-              ("backend", "8000"): "127.0.0.1:8003",
-              ("frontend", "3000"): "127.0.0.1:3003",
-          }
-          for (service, internal), binding in expected.items():
-              actual = subprocess.check_output(
-                  command + ["port", service, internal], text=True
-              ).strip()
-              assert actual == binding, f"Unexpected binding for {service}: {actual}"
-              print(f"PASS: {service} host port remains loopback-only", flush=True)
-
-          def request(path):
-              try:
-                  with urllib.request.urlopen(
-                      f"http://127.0.0.1:{path[0]}{path[1]}", timeout=3
-                  ) as response:
-                      return response.status, response.read(2048)
-              except urllib.error.HTTPError as exc:
-                  return exc.code, exc.read(2048)
-
-          deadline = time.monotonic() + 200
-          while time.monotonic() < deadline:
-              try:
-                  b_status, b_body = request((8003, "/health"))
-                  f_status, _ = request((3003, "/login"))
-                  if b_status == 200 and f_status == 200:
-                      assert json.loads(b_body)["status"] == "ok"
-                      print("PASS: new PostgreSQL -> migrated FastAPI health 200", flush=True)
-                      print("PASS: clean Next.js frontend /login 200", flush=True)
-                      break
-              except Exception:
-                  pass
-              time.sleep(3)
-          else:
-              raise SystemExit("Fresh Compose stack did not become ready")
-
-          anonymous_status, _ = request((3003, "/api/auth/me"))
-          assert anonymous_status == 401, f"Unauthorized API expected 401: got {anonymous_status}"
-          print("PASS: frontend API proxy routes to real backend and rejects anonymous access", flush=True)
-          PY
+          docker compose -p la-ci --file docker-compose.yml exec -T backend python scripts/run_migrations_with_diagnostics.py
+          docker compose -p la-ci --file docker-compose.yml exec -T backend python scripts/bootstrap_app_data.py --confirm BOOTSTRAP_APP_DATA
+      - name: Remove disposable volumes and boot again from empty storage
+        run: |
+          docker compose -p la-ci --file docker-compose.yml down --volumes --remove-orphans
+          docker compose -p la-ci --file docker-compose.yml up --detach --no-build
+          python3 scripts/check_compose_stack.py
+          docker compose -p la-ci --file docker-compose.yml exec -T backend python scripts/run_migrations_with_diagnostics.py
+          docker compose -p la-ci --file docker-compose.yml exec -T backend python scripts/bootstrap_app_data.py --confirm BOOTSTRAP_APP_DATA
       - name: Show redacted container status on failure
         if: failure()
         run: |
@@ -111,5 +77,5 @@ jobs:
       - name: Tear down disposable stack and ephemeral volumes
         if: always()
         run: |
-          docker compose -p la-ci --file docker-compose.yml down --volumes --remove-orphans || true
+          docker compose -p la-ci --file docker-compose.yml down --volumes --remove-orphans
           rm -f .env backend/.env

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "smoke:proxy": "node scripts/smoke-proxy.mjs"
+    "smoke:proxy": "node scripts/smoke-proxy.mjs",
+    "test:css": "node --test scripts/test-css-pipeline.mjs"
   },
   "dependencies": {
     "next": "16.4.2",

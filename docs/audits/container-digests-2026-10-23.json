@@ -1,0 +1,151 @@
+{
+  "checked_at": "2026-10-23",
+  "images": [
+    {
+      "image": "python:3.12-slim",
+      "registry": "registry-1.docker.io",
+      "digest": "sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704",
+      "manifest_media_type": "application/vnd.oci.image.index.v1+json",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v5"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v7"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux",
+          "variant": "v8"
+        },
+        {
+          "architecture": "386",
+          "os": "linux"
+        },
+        {
+          "architecture": "ppc64le",
+          "os": "linux"
+        },
+        {
+          "architecture": "riscv64",
+          "os": "linux"
+        },
+        {
+          "architecture": "s390x",
+          "os": "linux"
+        }
+      ]
+    },
+    {
+      "image": "python:3.13-slim",
+      "registry": "registry-1.docker.io",
+      "digest": "sha256:57b29a7c050c4e679e4bea572e14b3965cf4b5839de2da49d55e49ffc4024f39",
+      "manifest_media_type": "application/vnd.oci.image.index.v1+json",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v5"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v7"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux",
+          "variant": "v8"
+        },
+        {
+          "architecture": "386",
+          "os": "linux"
+        },
+        {
+          "architecture": "ppc64le",
+          "os": "linux"
+        },
+        {
+          "architecture": "riscv64",
+          "os": "linux"
+        },
+        {
+          "architecture": "s390x",
+          "os": "linux"
+        }
+      ]
+    },
+    {
+      "image": "node:22-alpine",
+      "registry": "registry-1.docker.io",
+      "digest": "sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914",
+      "manifest_media_type": "application/vnd.oci.image.index.v1+json",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v6"
+        },
+        {
+          "architecture": "arm",
+          "os": "linux",
+          "variant": "v7"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux",
+          "variant": "v8"
+        },
+        {
+          "architecture": "s390x",
+          "os": "linux"
+        }
+      ]
+    },
+    {
+      "image": "pgvector/pgvector:pg16",
+      "registry": "registry-1.docker.io",
+      "digest": "sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a",
+      "manifest_media_type": "application/vnd.oci.image.index.v1+json",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        }
+      ]
+    }
+  ],
+  "baseline": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "verification": "Docker-Content-Digest header equals SHA-256 of fetched OCI index bytes; pins retain multi-platform indices.",
+  "references_by_file": {
+    "backend/Dockerfile": 1,
+    "backend/Dockerfile.prod": 2,
+    "frontend/Dockerfile": 3,
+    "frontend/Dockerfile.prod": 3,
+    "docker-compose.yml": 1,
+    "docker-compose.prod.yml": 1,
+    ".github/workflows/public-data-boundary.yml": 1,
+    ".github/workflows/backend-auth-regression.yml": 2,
+    ".github/workflows/backend-full-suite.yml": 1
+  }
+}

@@ -1,0 +1,51 @@
+name: Browser UI regression (synthetic API)
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: node scripts/test-safe-next.mjs
+      - run: npm run lint -- --max-warnings=0
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+      - run: npm run typecheck
+      - name: Install isolated browser test tool
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ui-tools" --no-save playwright@1.62.1
+          "$RUNNER_TEMP/ui-tools/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Exercise production UI at desktop and mobile widths
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3100 > "$RUNNER_TEMP/ui-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3100/login > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3100/login > /dev/null
+          NODE_PATH="$RUNNER_TEMP/ui-tools/node_modules" UI_TEST_OUTPUT="$RUNNER_TEMP/ui-evidence" node scripts/browser-regression.mjs
+      - name: Retain synthetic UI screenshots and recordings
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: synthetic-browser-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/ui-evidence
+          retention-days: 14

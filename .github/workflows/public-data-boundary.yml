@@ -14,8 +14,12 @@ jobs:
     name: Synthetic data and no bundled web-question bank
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify checkout did not persist HTTP credentials
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_ci_checkout.py"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
       - name: Compile Python sources and tests
@@ -29,7 +33,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_only_password
@@ -48,8 +52,12 @@ jobs:
       GRAPH_EVAL_LANGSMITH: 'false'
       JWT_SECRET_KEY: ci-only-random-string-longer-than-thirty-two-characters
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify checkout did not persist HTTP credentials
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_ci_checkout.py"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
           cache: pip

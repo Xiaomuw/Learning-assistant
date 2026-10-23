@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-23",
+  "baseline": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "ordered_proposals": [
+    {
+      "pr": 30,
+      "head": "a76d36d6740548d6ce6ce759a6bffb077a998c21"
+    },
+    {
+      "pr": 31,
+      "head": "f38876afdea44f4d4fc0cd6dffa9ad889043d69d"
+    },
+    {
+      "pr": 32,
+      "head": "bf29dc5e870514b4a0db7907b99e2287af5e5c8c"
+    },
+    {
+      "pr": 33,
+      "head": "df6aacae5bb3f00b39782c6983ba2f8d9e9263b9"
+    },
+    {
+      "pr": 34,
+      "head": "59b8826c3b9c1222862386b2b35b9afbb6214e51"
+    },
+    {
+      "pr": 35,
+      "head": "2238f3e6f67cda6966891dd961e78ad8ef3b7419"
+    },
+    {
+      "pr": 36,
+      "head": "5c7b992ea290e342649783e5a27a1f31f60a43e2"
+    },
+    {
+      "pr": 37,
+      "head": "02d850ba57fb119f090e0fe53212fed65f305bc6"
+    }
+  ],
+  "method": "Apply each git diff --binary BASE HEAD through git apply --3way --index in a disposable detached worktree; stop on any error.",
+  "conflicts": [],
+  "combined_git_tree": "aeb4a3cfeaacff31dbac87427464fb2440481d75",
+  "candidate_commit_created": false,
+  "remote_candidate_published": false,
+  "prs_merged": false,
+  "checks": {
+    "script_unittests_passed": 15,
+    "architecture_tests_passed": 9,
+    "actionlint": "1.7.12: pass",
+    "compileall": "pass",
+    "git_diff_cached_check": "pass",
+    "all_six_python_security_pins_retained": true,
+    "web_css_and_taro_stream_ci_steps_retained": true,
+    "immutable_action_refs_retained": 24,
+    "credential_free_checkouts_retained": 13
+  },
+  "not_run": [
+    "Combined runtime dependency install",
+    "Combined database tests",
+    "Combined client builds",
+    "Combined hosted CI",
+    "Live providers",
+    "Browser/device/staging acceptance"
+  ],
+  "release_decision": "NO-GO",
+  "supersedes_initial_tree": "cf0a8bde243191d7b6a6f14056e58fd16669e9dc",
+  "follow_up_reason": "PR #37 additionally rejects unscoped repository-local HTTP headers; all eight final heads were reapplied in a fresh detached worktree and scoped checks rerun."
+}

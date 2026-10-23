@@ -19,8 +19,12 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify checkout did not persist HTTP credentials
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_ci_checkout.py"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: npm
@@ -31,6 +35,8 @@ jobs:
         run: npm run lint
       - name: TypeScript
         run: npm run typecheck
+      - name: CSS pipeline regression
+        run: npm run test:css
       - name: Next.js production build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
@@ -52,8 +58,12 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify checkout did not persist HTTP credentials
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_ci_checkout.py"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
       - name: Production dependency audit
@@ -64,7 +74,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify checkout did not persist HTTP credentials
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_ci_checkout.py"
       - name: Build production frontend image
         run: |
           docker build -f frontend/Dockerfile.prod \

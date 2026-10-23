@@ -5,6 +5,13 @@
 
 这套文档的原则是：**先读当前事实源，再读历史背景**。如果文档之间出现冲突，以 `project-current-status.md`、Alembic migration、实际 API route 和代码为准。
 
+## 开源复现与候选版本
+
+- [RC 操作手册](RELEASE_CANDIDATE.md)：版本、安装、迁移、合成数据、备份恢复与 NO-GO 表。
+- [实际验收证据](RELEASE_VERIFICATION.md)：精确提交、CI 链接、验证级别与未运行项目。
+- [依赖及安全复核](DEPENDENCY_SECURITY_REVIEW.md)：真实审计发现与许可/资产待办。
+- [历史暴露核查](GIT_HISTORY_EXPOSURE_REVIEW.md)：只读范围与不可自动执行的操作。
+
 ## 先读这 4 份
 
 1. [AI 交接卡](ai-handoff.md)  

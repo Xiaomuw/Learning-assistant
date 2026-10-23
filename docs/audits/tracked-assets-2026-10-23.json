@@ -1,0 +1,171 @@
+{
+  "baseline": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "scope": "tracked asset filenames and object identities only; no authorship or license inference",
+  "assets": [
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/01-login-redirect.png",
+      "git_blob": "17e453544d13042b923b45b95992ccb1d2740c75",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/02-register-email-step.png",
+      "git_blob": "d78ffb70f8b02a8f771111ee7b38aeeff22366d1",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/03-register-complete-step.png",
+      "git_blob": "736a0d67339519e1e354833f3f492bab8b22d7f2",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/04-chat-empty.png",
+      "git_blob": "20f81779492d7560e0d03ba04e3f730c41655f5c",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/05-chat-simple-answer.png",
+      "git_blob": "6b7a2e4356f84621230c27da7bcc2942d441e592",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/06-chat-history.png",
+      "git_blob": "fafb2028e9495b02827b739acdea4b8e2f3cc7a7",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/07-chat-quiz-pack.png",
+      "git_blob": "94b1e9d23ac35a73cb6610621b3989349e09c75f",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/08-practice-feedback.png",
+      "git_blob": "2a8205c25d15f399721ea6ebbb5b2e1fdd2add89",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/09-practice-after-ai-supplement.png",
+      "git_blob": "1915b8ad13f0ef673b66674b3f41bb9af7815d32",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/10-dashboard.png",
+      "git_blob": "260ecd72eea0eac553ef107278e39d8a9f7f41e0",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/11-practice-learning-center-target.png",
+      "git_blob": "810d3a23d41071549d6c7bfd66d7e7b9d1db8abc",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/12-practice-learning-center-generated.png",
+      "git_blob": "e14c16a5a5b48732cf4eb1ea30efab0cb3645763",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/13-profile.png",
+      "git_blob": "b1727a622387e0e50216a2f0568b91c2b7cbf648",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/14-profile-after-edit.png",
+      "git_blob": "732025e7e88ad26e4dff8d8ebe851722c07c245a",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/15-help.png",
+      "git_blob": "5a43d4c2f51efcb140ac3cb4c6e8e6742373d605",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/16-after-logout.png",
+      "git_blob": "222defb27266f4e23c0f0703756b5e95b80e928b",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "docs/test-reports/h5-screenshots-2026-06-02/17-register-reset-retest.png",
+      "git_blob": "f151632876eed02a2b5ea180c8756b0d1219b399",
+      "status": "historical_report_excluded_from_git_archive"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/chat-active.png",
+      "git_blob": "c8174beea9006749c68007235e00fbee61266741",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/chat.png",
+      "git_blob": "0d1f6e85c09ac62442bd1b65e9aa746cc6e0a4bb",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/dashboard-active.png",
+      "git_blob": "46960369fd0b210b71ccbc36aee211fe4f4ec8b4",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/dashboard.png",
+      "git_blob": "0d21a7b49cfcd28bba358c32e3054ff531a1387d",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/practice-active.png",
+      "git_blob": "0d83bde5e7b1d2cb99dbd2da65d54f4f48a979ce",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/practice.png",
+      "git_blob": "9942ca31af1a91b4f95b80d7129aa7e9508edd41",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/profile-active.png",
+      "git_blob": "04cb124930b2391e53382b50194d13713bd959b2",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend-weapp/src/assets/icons/profile.png",
+      "git_blob": "aecb24b68f282798a09f71007b9e18223df88131",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/chat-active.png",
+      "git_blob": "c8174beea9006749c68007235e00fbee61266741",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/chat.png",
+      "git_blob": "0d1f6e85c09ac62442bd1b65e9aa746cc6e0a4bb",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/dashboard-active.png",
+      "git_blob": "46960369fd0b210b71ccbc36aee211fe4f4ec8b4",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/dashboard.png",
+      "git_blob": "0d21a7b49cfcd28bba358c32e3054ff531a1387d",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/practice-active.png",
+      "git_blob": "0d83bde5e7b1d2cb99dbd2da65d54f4f48a979ce",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/practice.png",
+      "git_blob": "9942ca31af1a91b4f95b80d7129aa7e9508edd41",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/profile-active.png",
+      "git_blob": "04cb124930b2391e53382b50194d13713bd959b2",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    },
+    {
+      "path": "frontend/public/weapp-icons/profile.png",
+      "git_blob": "aecb24b68f282798a09f71007b9e18223df88131",
+      "status": "unverified_baseline_navigation_asset_replacement_proposed_in_PR_39"
+    }
+  ]
+}

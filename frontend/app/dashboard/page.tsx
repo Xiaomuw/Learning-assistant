@@ -9,7 +9,7 @@ import {
   fetchLearningCenter,
   fetchUserMemory,
   type KnowledgeMastery,
-  type LearningCenterConcept,
+  type AuthUser,
   type LearningCenterResponse,
   type LearningCenterSubject,
   type Memory,
@@ -77,9 +77,15 @@ function preferredConcepts(concepts: ConceptWithPath[]) {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { user, isLoading } = useAuth();
-  const userId = user?.id ?? "";
+  const [attempt, setAttempt] = useState(0);
+  if (isLoading || !user) return <p role="status">正在加载...</p>;
+  return <DashboardContent key={`${user.id}:${attempt}`} user={user} onRetry={() => setAttempt((n) => n + 1)} />;
+}
+
+function DashboardContent({ user, onRetry }: { user: AuthUser; onRetry: () => void }) {
+  const router = useRouter();
+  const userId = user.id;
   const [memory, setMemory] = useState<Memory>(EMPTY_MEMORY);
   const [masteryItems, setMasteryItems] = useState<KnowledgeMastery[]>([]);
   const [learningCenter, setLearningCenter] = useState<LearningCenterResponse | null>(null);
@@ -100,20 +106,14 @@ export default function DashboardPage() {
   const untestedCount = concepts.filter((c) => c.test_status === "untested").length;
 
   useEffect(() => {
-    if (isLoading || !userId) return;
+    let active = true;
     setLearningStoreUser(userId);
-    void loadDashboard();
-  }, [isLoading, userId]);
-
-  async function loadDashboard() {
-    setLoading(true);
-    setError("");
-    try {
+    async function loadDashboard() {
       const [memResult, masteryResult, lcResult] = await Promise.allSettled([
-        fetchUserMemory(userId),
-        fetchKnowledgeMastery(userId, loadStoredNotebookId()),
+        fetchUserMemory(userId), fetchKnowledgeMastery(userId, loadStoredNotebookId()),
         fetchLearningCenter(userId),
       ]);
+      if (!active) return;
       if (memResult.status === "fulfilled") setMemory(memResult.value || EMPTY_MEMORY);
       if (masteryResult.status === "fulfilled") {
         const payload = masteryResult.value as { items?: KnowledgeMastery[] };
@@ -121,12 +121,11 @@ export default function DashboardPage() {
       }
       if (lcResult.status === "fulfilled") setLearningCenter(lcResult.value || null);
       if (lcResult.status === "rejected") setError((lcResult.reason as Error)?.message || "学习中心加载失败");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "加载失败");
-    } finally {
       setLoading(false);
     }
-  }
+    void loadDashboard();
+    return () => { active = false; };
+  }, [userId]);
 
   function startPractice(c: ConceptWithPath) {
     const params = new URLSearchParams({ subject: c.subjectId, concept: c.concept_id, concept_name: c.concept_name });
@@ -137,15 +136,6 @@ export default function DashboardPage() {
     setter((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  if (isLoading || !user) {
-    return (
-      <div className="flex h-full items-center justify-center bg-neo-bg">
-        <div className="neo-card-secondary p-5 text-center">
-          <p className="text-lg font-black">正在加载...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full flex-col bg-neo-bg">
@@ -159,7 +149,7 @@ export default function DashboardPage() {
         {error ? (
           <div className="neo-card-accent border-2 sm:border-[3px] border-neo-ink shadow-neo-xs sm:shadow-neo-sm p-3 sm:p-4">
             <p className="text-[13px] sm:text-sm font-bold">{error}</p>
-            <button type="button" className="neo-button mt-2 sm:mt-3 w-full justify-center text-xs" onClick={loadDashboard}>重试</button>
+            <button type="button" className="neo-button mt-2 sm:mt-3 w-full justify-center text-xs" onClick={onRetry}>重试</button>
           </div>
         ) : null}
 

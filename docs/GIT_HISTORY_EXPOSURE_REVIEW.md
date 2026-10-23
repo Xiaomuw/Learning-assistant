@@ -1,6 +1,6 @@
 # Historic Git Exposure — decision record (not a remediation execution)
 
-**Review state: PARTIALLY MITIGATED, NOT RESOLVED (checked 2026-10-22).** PRs #6, #3 and #7 are merged into main. The five original question JSONs are absent from the current default tree, but historical commits and other active branches still contain unreviewed question-bank material. This document records evidence and options; it does not rewrite history or delete private data.
+**Review state: PARTIALLY MITIGATED, NOT RESOLVED (checked 2026-10-22).** PRs #6, #3 and #7 are merged into main. The five original question JSONs are absent from the current default tree, but historical commits still contain unreviewed question-bank material; all 30 remote branch heads in the initial inventory were clear in the affected directory. This document records evidence and options; it does not rewrite history or delete private data.
 
 ## What can be verified
 
@@ -12,7 +12,7 @@
 
 ## Public branch inventory — checked 2026-10-22
 
-This is a current-file-tree listing, not a complete Git history scan or legal-content review. The repository had 26 branch heads at the time of review. After PRs #23–#25 merged, all checked current branch heads have **zero JSON files** under data/practice_questions/.
+This is a current-file-tree listing, not a complete Git history scan or legal-content review. The initial full clone had 30 remote branch heads at the time of review (before the new test/security branches). After PRs #23–#25 merged, all checked current branch heads have **zero JSON files** under data/practice_questions/.
 
 | Branch / group | JSON files in current directory | Notes |
 | --- | ---: | --- |
@@ -29,7 +29,17 @@ This is a current-file-tree listing, not a complete Git history scan or legal-co
 
 Before cleanup, mian contained 42 JSON files (approximately 2.2 MB according to GitHub metadata), including all_408_v2.json, batch files and a cleanup report containing deleted question records. The two older codex branches each had five question-bank JSON files. PRs #23, #24 and #25 removed these files from their current branch heads.
 
-GitHub repository metadata previously showed 0 recorded forks and no published Releases at the time checked. These observations cannot establish that third-party clones, downloaded ZIPs, cached copies or older commits do not exist. No comprehensive historical path/blob scan has yet been completed.
+GitHub repository metadata previously showed 0 recorded forks and no published Releases at the time checked. These observations cannot establish that third-party clones, downloaded ZIPs, cached copies or older commits do not exist. A read-only reachable-object inventory was completed in this task; its scope and exclusions are recorded below. It is not a rights clearance or proof that external copies do not exist.
+
+### Read-only reachable history inventory
+
+Baseline `712c0538571d01129c0f8b1fb5488b35c9df6058`, full-clone local refs at review time: 162 commits and 1,718 unique blobs. The count includes locally prepared test commits and the fetched PR #29 branch, not just main ancestry. `git rev-list --objects --all` and `git cat-file --batch` were used without changing Git objects. All 30 initial `refs/remotes/origin/*` branch heads (excluding the symbolic HEAD) had zero JSON files under `data/practice_questions/`; no tags or Releases were present.
+
+The reachable object set still contains **42 distinct JSON blobs under the historical question-bank path, totaling 2,202,071 bytes**. This is a blob/file inventory, not a count of unique questions or an ownership finding. It includes historical batch/combined files; the old 530-question ledger is still unresolved. Neither old JSON text nor question wording was copied into this report or a new commit.
+
+Text secret scanning used detect-secrets 1.5.0 in memory without network credential verification. Binary blobs (91) were inventoried but not OCR/text-scanned. The [security review](DEPENDENCY_SECURITY_REVIEW.md) records candidate counts, false-positive limits and owner confirmation needs. No confirmed live-provider credential is asserted and no clean-history certification is given.
+
+Excluded: GitHub PR-only refs not fetched as branches, unreachable server objects, deleted branches not present in the clone, GitHub caches, external mirrors/clones, and image-content inspection. Broader access/inventory and maintainer decisions are required to resolve those boundaries. All changes in this task are ordinary fast-forward branch updates; there was no force push, history rewrite, branch deletion or repository visibility change.
 
 ### Impact on remediation
 
@@ -39,7 +49,7 @@ GitHub repository metadata previously showed 0 recorded forks and no published R
 
 | Route | Result | Limitation / risk |
 | --- | --- | --- |
-| **A. Merge ordinary deletion first (recommended immediate review path)** | The default source tree stops shipping the five JSON files and future source archives omit them | Old Git commit history and copies may still expose them |
+| **A. Retain completed current-tree deletion** | Already completed by #6/#23–#25; current source archives omit the affected files | Old Git commit history and copies may still expose them |
 | **B. Later coordinate history rewrite** | May remove references from the rewritten repository if done comprehensively | Rewrites SHAs, can invalidate signatures and open PR review links, and cannot unilaterally alter third-party forks/clones or guarantees of cached erasure |
 | **C. Start a separately created clean repository** | New distribution with only reviewed source can avoid importing the old commit chain | Old repo/links/copies still need independent handling; adoption, links and issue history may be fragmented |
 
@@ -55,4 +65,4 @@ GitHub's [official guidance on removing sensitive data](https://docs.github.com/
 - [ ] Obtain a separate deliberate owner decision on changing history, repo visibility or the legacy repository's fate.
 - [ ] After any authorized change, verify branch/tag refs and historical accessibility, and update publicly stated limitations honestly.
 
-**No force-push, history rewrite, visibility change, repository deletion or GitHub Support ticket has been performed by PRs #3, #6 or #7.** Current-tree cleanup is not historical erasure.
+**No force-push, history rewrite, visibility change, repository deletion or GitHub Support ticket was performed in this review.** Current-tree cleanup is not historical erasure.

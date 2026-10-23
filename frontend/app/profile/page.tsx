@@ -10,6 +10,7 @@ import {
   fetchPracticeRecommendations,
   fetchUserProfile,
   updateUserProfile,
+  type AuthUser,
   type Notebook,
   type NotebookKnowledgeStatus,
   type QuizItem,
@@ -26,9 +27,15 @@ function buildNotebookStatusLabel(notebook: Notebook, status?: NotebookKnowledge
 }
 
 export default function ProfilePage() {
+  const { user, isLoading } = useAuth();
+  if (isLoading || !user) return <p role="status">正在加载...</p>;
+  return <ProfileContent key={user.id} user={user} />;
+}
+
+function ProfileContent({ user }: { user: AuthUser }) {
   const router = useRouter();
-  const { user, isLoading, logout } = useAuth();
-  const userId = user?.id ?? "";
+  const { logout } = useAuth();
+  const userId = user.id;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -41,35 +48,33 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadProfile() {
-    setLoading(true);
-    setError("");
-    try {
-      const [notebookList] = await Promise.all([fetchNotebooks()]);
-      setNotebooks(notebookList);
-      // Load knowledge statuses
-      const entries = await Promise.allSettled(
-        notebookList.map(async (nb): Promise<[string, NotebookKnowledgeStatus] | null> => {
-          try { return [nb.id, await fetchNotebookKnowledgeStatus(nb.id)]; } catch { return null; }
-        })
-      );
-      const nextStatus: Record<string, NotebookKnowledgeStatus> = {};
-      entries.forEach((r) => { if (r.status === "fulfilled" && r.value) nextStatus[r.value[0]] = r.value[1]; });
-      setNotebookStatusById(nextStatus);
-
-      fetchUserProfile(userId).then(setProfile).catch(() => {});
-      fetchPracticeRecommendations(userId).then((r) => setRecommendedPractice(r.items)).catch(() => setRecommendedPractice([]));
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "加载失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    if (isLoading || !userId) return;
+    let active = true;
+    async function loadProfile() {
+      try {
+        const [notebookList, nextProfile, recommendations] = await Promise.all([
+          fetchNotebooks(), fetchUserProfile(userId).catch(() => null),
+          fetchPracticeRecommendations(userId).catch(() => ({ items: [] })),
+        ]);
+        if (!active) return;
+        setNotebooks(notebookList);
+        setProfile(nextProfile);
+        setRecommendedPractice(recommendations.items);
+        const entries = await Promise.all(notebookList.map(async (nb) => {
+          try { return [nb.id, await fetchNotebookKnowledgeStatus(nb.id)] as const; }
+          catch { return null; }
+        }));
+        if (!active) return;
+        setNotebookStatusById(Object.fromEntries(entries.filter((entry) => entry !== null)));
+      } catch (err: unknown) {
+        if (active) setError(err instanceof Error ? err.message : "加载失败");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
     void loadProfile();
-  }, [isLoading, userId]);
+    return () => { active = false; };
+  }, [userId]);
 
   async function handleSaveDisplayName() {
     const nextName = draftName.trim();
@@ -86,16 +91,6 @@ export default function ProfilePage() {
     if (!confirm("退出后需要重新登录才能使用问答、刷题和学习中心。确认退出？")) return;
     await logout();
     router.push("/login");
-  }
-
-  if (isLoading || !user) {
-    return (
-      <div className="flex h-full items-center justify-center bg-neo-bg px-3 sm:px-4">
-        <div className="neo-card-secondary w-full p-4 sm:p-5 text-center animate-fade-in">
-          <p className="text-base sm:text-lg font-black">正在加载...</p>
-        </div>
-      </div>
-    );
   }
 
   const displayName = profile?.display_name?.trim() || user.display_name || "学习者";

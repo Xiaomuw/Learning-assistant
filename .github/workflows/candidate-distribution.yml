@@ -1,0 +1,64 @@
+name: Candidate production images and distribution audit
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  production-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build local candidate images without publishing
+        run: |
+          docker build --file backend/Dockerfile.prod --tag la-candidate-backend:ci backend
+          docker build --file frontend/Dockerfile.prod --tag la-candidate-frontend:ci frontend
+      - name: Create disposable configuration
+        run: |
+          python3 - <<'PY'
+          import secrets
+          from pathlib import Path
+          password = secrets.token_hex(24)
+          values = {
+              'POSTGRES_USER': 'la_ci', 'POSTGRES_DB': 'la_release_ci', 'POSTGRES_PASSWORD': password,
+              'DATABASE_URL': f'postgresql+psycopg://la_ci:{password}@postgres:5432/la_release_ci',
+              'LANGGRAPH_POSTGRES_URL': f'postgresql://la_ci:{password}@postgres:5432/la_release_ci',
+              'JWT_SECRET_KEY': secrets.token_hex(32), 'POSTGRES_PORT': '55432', 'BACKEND_PORT': '58000',
+              'FRONTEND_PORT': '53000', 'BACKEND_IMAGE': 'la-candidate-backend:ci',
+              'FRONTEND_IMAGE': 'la-candidate-frontend:ci', 'RUN_ALEMBIC_UPGRADE': 'false',
+              'RUN_BOOTSTRAP_APP_DATA': 'true', 'RUN_BUILTIN_NOTEBOOK_SEED': 'false',
+              'ENABLE_PRACTICE_FINALIZER_WORKER': 'false', 'MCP_ENABLED': 'false',
+              'LANGSMITH_TRACING': 'false', 'LANGCHAIN_TRACING_V2': 'false', 'GRAPH_EVAL_LANGSMITH': 'false',
+          }
+          Path('.env').write_text(''.join(f'{key}={value}\n' for key, value in values.items()))
+          Path('.env').chmod(0o600)
+          PY
+      - name: Start isolated production-image stack
+        run: docker compose -p la-prod-ci -f docker-compose.prod.yml up --detach
+      - name: Verify migrations, proxy and synthetic backup/restore
+        run: python3 scripts/check_production_stack.py
+      - name: Install verified Trivy
+        run: |
+          cd "$RUNNER_TEMP"
+          curl --fail --location --retry 3 --output trivy.tar.gz https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz
+          echo 'c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  trivy.tar.gz' | sha256sum --check --strict
+          tar -xzf trivy.tar.gz trivy
+      - name: Scan exact locally built images and inventory licenses
+        env:
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-candidate-cache
+        run: python3 scripts/scan_built_images.py --trivy "$RUNNER_TEMP/trivy" --output-dir "$RUNNER_TEMP/distribution-audit"
+      - name: Preserve findings, license inventory and SBOM
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-distribution-${{ github.sha }}
+          path: ${{ runner.temp }}/distribution-audit/*.json
+          retention-days: 14
+      - name: Remove disposable databases and secrets
+        if: always()
+        run: |
+          docker compose -p la-prod-ci -f docker-compose.prod.yml down --volumes --remove-orphans
+          rm -f .env

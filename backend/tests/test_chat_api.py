@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+import threading
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -877,7 +878,19 @@ class ChatApiTest(unittest.TestCase):
             ]
             return result, state
 
+        completed = threading.Event()
+        original_mark_completed = chat_module.mark_chat_async_job_completed
+
+        def record_completion(**kwargs):
+            original_mark_completed(**kwargs)
+            if kwargs["job_id"] == "weapp-grace-1":
+                completed.set()
+
+        # Keep the event loop alive for deliberately nonblocking persistence.
+        # A one-request TestClient portal can cancel it as soon as HTTP returns.
         with (
+            self.client,
+            patch("app.interfaces.api.chat.mark_chat_async_job_completed", side_effect=record_completion),
             patch("app.interfaces.api.chat.run_chat_once_with_state", side_effect=_nearly_slow_chat_once),
             patch("app.interfaces.api.chat.get_chat_sync_inline_budget_seconds", return_value=0.01),
             patch("app.interfaces.api.chat._get_chat_sync_completion_grace_seconds", return_value=0.2),
@@ -892,6 +905,7 @@ class ChatApiTest(unittest.TestCase):
                     "subject_id": "general",
                 },
             )
+            self.assertTrue(completed.wait(timeout=5), "background job completion was not persisted")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()

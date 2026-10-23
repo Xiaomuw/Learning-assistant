@@ -1,0 +1,270 @@
+{
+  "review_date": "2026-10-22",
+  "scope": "frontend npm lockfile",
+  "tool": "npm 11.9.0",
+  "environment": "Linux / Node 24.19.0; fresh worktree and npm cache, npm ci and build completed",
+  "base_sha": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "proposed_sha": "2238f3e6f67cda6966891dd961e78ad8ef3b7419",
+  "release_decision": "NO-GO",
+  "lockfile_sha256": {
+    "before": "79ebf261da0ad1c7ce1e9141edfe31441e2e8a85af437d54724eb553dd2b216c",
+    "after": "59a3d428a27e932e6c78dac09318799ce25d5db9df3eabc6d6f3df080b784df9"
+  },
+  "version_changes": [
+    {
+      "path": "node_modules/brace-expansion",
+      "before": "1.1.14",
+      "after": "1.1.21",
+      "license": "MIT"
+    },
+    {
+      "path": "node_modules/browserslist",
+      "before": "4.28.2",
+      "after": "4.29.4",
+      "license": "MIT"
+    },
+    {
+      "path": "node_modules/caniuse-lite",
+      "before": "1.0.30001787",
+      "after": "1.0.30001819",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "path": "node_modules/electron-to-chromium",
+      "before": "1.5.335",
+      "after": "1.5.463",
+      "license": "ISC"
+    },
+    {
+      "path": "node_modules/node-releases",
+      "before": "2.0.37",
+      "after": "2.0.60",
+      "license": "MIT"
+    },
+    {
+      "path": "node_modules/postcss-selector-parser",
+      "before": "6.1.2",
+      "after": "6.1.5",
+      "license": "MIT"
+    },
+    {
+      "path": "node_modules/update-browserslist-db",
+      "before": "1.2.3",
+      "after": "1.3.4",
+      "license": "MIT"
+    }
+  ],
+  "notes": [
+    "Counts are affected package nodes and distinct advisory URLs, not proven exploitable paths.",
+    "Full audit exits 1 before and after; no advisories are suppressed.",
+    "License metadata and selected installed license files are inputs to review, not distribution clearance."
+  ],
+  "before": {
+    "exit_code": 1,
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 9,
+      "critical": 0,
+      "total": 10
+    },
+    "distinct_direct_advisory_count": 11,
+    "direct_advisory_ids": [
+      "GHSA-3jxr-9vmj-r5cp",
+      "GHSA-6j4f-fj2g-mc7p",
+      "GHSA-73wf-gq98-2v4g",
+      "GHSA-c83g-rgw3-j3cx",
+      "GHSA-mh99-v99m-4gvg",
+      "GHSA-q2hr-2g5m-vwhr",
+      "GHSA-qhr7-859c-m2p7",
+      "GHSA-rgw5-rvv9-x895",
+      "GHSA-rj75-hqrm-r3gf",
+      "GHSA-vfj7-8cjw-p6xm",
+      "GHSA-w9m9-85wc-3x92"
+    ]
+  },
+  "after": {
+    "exit_code": 1,
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 2,
+      "high": 7,
+      "critical": 0,
+      "total": 9
+    },
+    "distinct_direct_advisory_count": 2,
+    "direct_advisory_ids": [
+      "GHSA-rj75-hqrm-r3gf",
+      "GHSA-vfj7-8cjw-p6xm"
+    ],
+    "affected_packages": [
+      {
+        "name": "@next/eslint-plugin-next",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": ">=14.3.0-canary.0",
+        "via": [
+          "fast-glob"
+        ],
+        "fix_available": {
+          "name": "eslint-config-next",
+          "version": "14.2.35",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@next/eslint-plugin-next"
+        ]
+      },
+      {
+        "name": "braces",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "GHSA-vfj7-8cjw-p6xm"
+        ],
+        "fix_available": {
+          "name": "tailwindcss",
+          "version": "4.3.3",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/braces"
+        ]
+      },
+      {
+        "name": "chokidar",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "2.0.0 - 3.6.0",
+        "via": [
+          "braces"
+        ],
+        "fix_available": {
+          "name": "tailwindcss",
+          "version": "4.3.3",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/chokidar"
+        ]
+      },
+      {
+        "name": "eslint-config-next",
+        "severity": "high",
+        "is_direct_dependency": true,
+        "range": ">=14.3.0-canary.0",
+        "via": [
+          "@next/eslint-plugin-next"
+        ],
+        "fix_available": {
+          "name": "eslint-config-next",
+          "version": "14.2.35",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/eslint-config-next"
+        ]
+      },
+      {
+        "name": "fast-glob",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": "*",
+        "via": [
+          "micromatch"
+        ],
+        "fix_available": {
+          "name": "eslint-config-next",
+          "version": "14.2.35",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/@next/eslint-plugin-next/node_modules/fast-glob",
+          "node_modules/fast-glob"
+        ]
+      },
+      {
+        "name": "micromatch",
+        "severity": "high",
+        "is_direct_dependency": false,
+        "range": ">=0.2.0",
+        "via": [
+          "braces"
+        ],
+        "fix_available": {
+          "name": "tailwindcss",
+          "version": "4.3.3",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/micromatch"
+        ]
+      },
+      {
+        "name": "postcss-nested",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "2.0.3 - 6.2.0",
+        "via": [
+          "postcss-selector-parser"
+        ],
+        "fix_available": true,
+        "nodes": [
+          "node_modules/postcss-nested"
+        ]
+      },
+      {
+        "name": "postcss-selector-parser",
+        "severity": "moderate",
+        "is_direct_dependency": false,
+        "range": "<7.1.6",
+        "via": [
+          "GHSA-rj75-hqrm-r3gf"
+        ],
+        "fix_available": {
+          "name": "tailwindcss",
+          "version": "4.3.3",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/postcss-selector-parser"
+        ]
+      },
+      {
+        "name": "tailwindcss",
+        "severity": "high",
+        "is_direct_dependency": true,
+        "range": "<=0.0.0-oxide-insiders.ff2c25f || 0.5.0 - 3.4.19",
+        "via": [
+          "chokidar",
+          "fast-glob",
+          "micromatch",
+          "postcss-nested",
+          "postcss-selector-parser"
+        ],
+        "fix_available": {
+          "name": "tailwindcss",
+          "version": "4.3.3",
+          "isSemVerMajor": true
+        },
+        "nodes": [
+          "node_modules/tailwindcss"
+        ]
+      }
+    ]
+  },
+  "production": {
+    "exit_code": 0,
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  }
+}
