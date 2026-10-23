@@ -2,6 +2,11 @@
 
 This checklist tracks readiness for sustainable public maintenance of **Learning-assistant**. It is not an OpenAI approval checklist and does not establish any eligibility or acceptance.
 
+See the [2026-10-23 standards assessment](OPEN_SOURCE_STANDARDS_ASSESSMENT.md) for
+the distinction between open-source licensing, distribution clearance and release
+readiness. P0/P2 are not all closed; #38 exposes real container findings and #39
+proposes a scoped replacement of unverified current navigation assets.
+
 **Release decision: NO-GO.** See [current verification ledger](RELEASE_VERIFICATION.md), [candidate runbook](RELEASE_CANDIDATE.md), and [dependency/security evidence](DEPENDENCY_SECURITY_REVIEW.md). Checked items below are scoped observations, not full release clearance.
 
 ## 1. Intellectual-property and security review (release blockers)

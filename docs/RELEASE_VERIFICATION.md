@@ -396,3 +396,45 @@ The subsequent documentation correction records #37's final header-check fix and
 recomputed combination tree; its own checks are tracked on the PR, not inferred
 from these prior results. Local Markdown links/JSON validation and whitespace
 checks pass. No release gate was relaxed.
+
+## Container/asset and standards follow-up — 2026-10-23
+
+Main remains `712c0538571d01129c0f8b1fb5488b35c9df6058`. New independent
+Drafts #38/#39 do not change that baseline or extend the earlier combination
+preflight. The [standards assessment](OPEN_SOURCE_STANDARDS_ASSESSMENT.md) records
+unresolved P0/P2 evidence and separates OSD licensing from release acceptance.
+
+At #38 head `9c9993a5b510a9d623410c4678148757e82558e4`, local commands:
+
+```bash
+python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+/tmp/la-actionlint-1.7.12
+TRIVY_CACHE_DIR=/tmp/la-trivy-cache-r6 python scripts/scan_container_bases.py --trivy /tmp/la-trivy-0.76.1 --output-dir /tmp/la-container-gate-r6
+git diff --check
+```
+
+17 tests and static checks pass. The real scanner wrapper exits **1**, with all
+four images reporting findings. [Hosted gate](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546818)
+fails for the same reason; artifact 12485681942 uploaded with 14-day retention.
+Seven existing workflows pass: [auth](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546534),
+[Next](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546963),
+[quality](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546576),
+[Compose](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546415),
+[backend](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546434),
+[isolation](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546174),
+[public data](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546173).
+
+At #39 head `6e521f5033e4deededbd4c7afc175b0b5f28727b`, the same unittest
+discovery command passes 14 tests, including two new asset-integrity/notice tests;
+actionlint and whitespace checks pass. Four active PNGs were visually inspected.
+Fresh client attempts used `npm ci --cache /tmp/la-icons-web-cache-r6` and
+`npm ci --cache /tmp/la-icons-taro-cache-r6`, followed conditionally by the
+respective lint/typecheck/build scripts. Local execution was blocked by network
+policy for registry.npmjs.org / taro.jd.com; no successful local build is claimed.
+Hosted results are recorded on #39. CI additionally runs
+`cmp src/assets/icons/NOTICE.txt dist/assets/icons/NOTICE.txt` after Taro build.
+No complete browser/device acceptance, external-provider test, final application
+image scan or new historical-secret scan was performed in this follow-up.
+
+**NO-GO:** surfaced vulnerabilities, rights/history, final distribution and live
+acceptance remain open. Neither #38 nor #39 is merged.

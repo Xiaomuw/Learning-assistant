@@ -17,7 +17,7 @@
 | Web with proposed #35 lockfile | 9 affected nodes: 7 high, 2 moderate; distinct direct advisory IDs 11 → 2 | Full audit still exits 1; production audit remains 0 |
 | Taro full `npm audit` | 83 findings: 8 critical, 51 high, 23 moderate, 1 low | Separate compatible upgrade work and bundle reachability review |
 | Taro with proposed #36 lockfile | 79 affected nodes: 4 critical, 51 high, 23 moderate, 1 low; distinct direct advisory IDs 162 → 118 | Four compatible transitive patches; full audit still exits 1 |
-| Docker images / OS packages | Not scanned | Resolve image digests, scan actual built images and evaluate deployed reachability |
+| Docker base images / OS packages, #38 | Four pinned linux/amd64 bases scanned on 2026-10-23; all report HIGH findings, PGVector also CRITICAL | Gate fails; final built application images and runtime reachability remain unreviewed |
 
 Taro's eight critical affected package nodes include `@tarojs/components`, `@tarojs/taro`, `decompress`, `proxy-addr`, `shell-quote`, `swiper`, `vm2` and `websocket-driver`. These are package/advisory propagation counts, not eight independently confirmed runtime vulnerabilities. Investigate bundled components such as Swiper separately from build tooling. Some automatic npm suggestions would downgrade Taro to 3.x; do not run `npm audit fix --force` as a release strategy.
 
@@ -100,3 +100,26 @@ Current tracked files were scanned with `detect-secrets scan --no-verify` (110 h
 Manual spot-checks found test/example database credentials, validation fixtures, code references and a test-report password assignment. No provider-specific live API key was confirmed. This is **not** a clean-bill assertion: the historical fixture/password candidates have not all been owner-validated for non-reuse, binary images were not OCR-scanned, and unreachable/PR-only refs, external clones and caches were not covered. See the [history scope](GIT_HISTORY_EXPOSURE_REVIEW.md).
 
 Candidate locations requiring owner confirmation include `docs/test-reports/h5-user-e2e-2026-06-02.md:90` (test-account password assignment) and historical `docker-compose.yml` (database/JWT example values). Do not publish their values. Confirm whether any were used on an accessible service or reused elsewhere; if so, rotate/revoke through the relevant owner account, invalidate sessions where applicable, then assess historical removal separately. No credential was tried against an external service, rotated or revoked, and no history was rewritten.
+
+## Container and current-asset follow-up — 2026-10-23
+
+Draft [#38](https://github.com/Xiaomuw/Learning-assistant/pull/38) at
+`9c9993a5b510a9d623410c4678148757e82558e4` pins 15 references to four
+registry-verified multi-platform image digests. Trivy 0.76.1 with vulnerability DB
+updated `2026-10-23T01:18:09.482141619Z` scanned linux/amd64 only.
+Python 3.12, Python 3.13, Node 22 Alpine and PGVector/PostgreSQL 16 report
+44/0, 48/0, 11/0 and 113/16 HIGH/CRITICAL package-advisory pairs.
+These are not unique exploit counts. All scanners exit 10; the wrapper exits 1.
+The [hosted security gate](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39917546818)
+reproduces the findings and uploads reports. No unfixed findings are filtered.
+Seven application/Compose compatibility workflows pass. Pinning does not patch
+these findings, and final built images, arm64 runtime and distribution licenses
+still need review. Evidence JSON and reproduction commands are in that PR.
+
+Draft [#39](https://github.com/Xiaomuw/Learning-assistant/pull/39) at
+`6e521f5033e4deededbd4c7afc175b0b5f28727b` replaces the 16 current
+navigation PNGs with traceable Lucide 0.475.0 derivatives, unmodified SVG sources
+and complete ISC/Feather MIT notices. Source Git blob hashes match upstream.
+This addresses only those current assets after review/merge; historical PNGs,
+other media, original code and final distributed bundle obligations are not
+cleared. See the [standards assessment](OPEN_SOURCE_STANDARDS_ASSESSMENT.md).
