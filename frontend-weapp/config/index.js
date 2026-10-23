@@ -35,7 +35,7 @@ const config = {
   },
   copy: {
     patterns: [
-      { from: "LICENSE", to: "dist/LICENSE" },
+      { from: "LICENSE", to: "dist/LICENSE.txt" },
       { from: "LICENSE-SCOPE.md", to: "dist/LICENSE-SCOPE.md" }
     ],
     options: {}

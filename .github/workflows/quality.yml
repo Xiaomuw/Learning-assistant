@@ -69,5 +69,5 @@ jobs:
           TARO_APP_ID: touristappid
       - name: Preserve project license and scope in Taro output
         run: |
-          cmp LICENSE dist/LICENSE
+          cmp LICENSE dist/LICENSE.txt
           cmp LICENSE-SCOPE.md dist/LICENSE-SCOPE.md
