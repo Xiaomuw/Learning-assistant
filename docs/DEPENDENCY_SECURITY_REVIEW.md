@@ -67,7 +67,7 @@ Tooling: pip-audit 2.10.1, pip-licenses 5.5.5, detect-secrets 1.5.0, npm 11.9.0.
 
 The web layout uses system font families; no remotely loaded font was identified in that layout. This does not replace a final built-asset inventory. A complete copied-code ownership review and distribution-specific NOTICE bundle remain outstanding. No old question data is covered by the project license.
 
-GitHub Actions use version tags (`checkout@v4`, `setup-python@v5`, `setup-node@v4`), not immutable commit pins. Existing Dependabot major-version PRs need compatibility review, including runtime deprecation notices. Docker uses mutable `python:*‑slim`, `node:22-alpine` and `pgvector/pgvector:pg16` tags. Neither tag review nor dependency-only audit substitutes for image scanning.
+Main still uses mutable Action version tags. Draft [#37](https://github.com/Xiaomuw/Learning-assistant/pull/37) pins all 24 calls to verified official commits and disables credential persistence on all 13 checkouts, with redacted runtime checks and synthetic regressions. See its [scoped CI review](https://github.com/Xiaomuw/Learning-assistant/blob/security/pin-ci-actions-2026-10/docs/CI_SECURITY.md); the proposal remains unmerged. Existing Dependabot major-version PRs need compatibility review, including runtime deprecation notices. Docker uses mutable `python:*‑slim`, `node:22-alpine` and `pgvector/pgvector:pg16` tags. Neither tag review nor dependency-only audit substitutes for image scanning.
 
 ## Reproduce the dependency inventory
 

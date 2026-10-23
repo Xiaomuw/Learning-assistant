@@ -53,6 +53,10 @@ The project is early-stage, with no verified external adoption. Apache-2.0 cover
 - Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The project still has no published Release and no verified external adoption metrics.
 - Drafts #35/#36 reduce compatible Web/Taro transitive dependency findings and extend existing CI with project CSS-pipeline and stream-client regressions. Both full JavaScript audits still fail; these proposed mitigations are maintenance evidence, not a completed security audit.
 
+### Maintenance follow-up — 2026-10-23
+
+Draft [#37](https://github.com/Xiaomuw/Learning-assistant/pull/37) adds verified Action commit pins, credential-free checkout and three synthetic Git-config regressions. A local composition preflight of #30–#37 passes scoped checks without merging or publishing a combined candidate. This is additional maintenance evidence; the official-form and adoption snapshot above remains dated 2026-10-22 and must still be refreshed before submission.
+
 ## Mandatory accuracy checks before using these draft answers
 
 - [ ] Refresh the real repository license, release, usage and maintainer evidence (including any changed numbers).
