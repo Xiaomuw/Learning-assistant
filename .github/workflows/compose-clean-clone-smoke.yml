@@ -16,7 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify checkout did not persist HTTP credentials
+        run: python3 "$GITHUB_WORKSPACE/scripts/check_ci_checkout.py"
       - name: Generate CI-only database and application secrets
         run: |
           python3 - <<'PY'
