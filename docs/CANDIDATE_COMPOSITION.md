@@ -29,3 +29,10 @@ recordings show the actual UI against explicitly synthetic API responses.
 
 **Release remains NO-GO** while vulnerability, ownership and external acceptance
 gates are open, even if every application compatibility workflow passes.
+
+The initial APP_ENV=production startup was blocked by missing required production
+configuration (including WeChat credentials). No fake provider credentials are
+supplied. The disposable packaging/backup smoke therefore explicitly uses
+APP_ENV=development with production Dockerfiles/Compose. This does not validate
+production startup requirements, TLS or real WeChat login; those remain blocked.
+Image scans run after a successful build even if runtime acceptance fails.

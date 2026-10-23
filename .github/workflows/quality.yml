@@ -83,3 +83,7 @@ jobs:
           TARO_APP_ID: touristappid
       - name: Preserve navigation-icon license notices in build output
         run: cmp src/assets/icons/NOTICE.txt dist/assets/icons/NOTICE.txt
+      - name: Preserve project license and scope in Taro output
+        run: |
+          cmp LICENSE dist/LICENSE.txt
+          cmp LICENSE-SCOPE.md dist/LICENSE-SCOPE.md

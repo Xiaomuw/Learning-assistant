@@ -35,7 +35,9 @@ const config = {
   },
   copy: {
     patterns: [
-      { from: "src/assets/icons/NOTICE.txt", to: "dist/assets/icons/NOTICE.txt" }
+      { from: "src/assets/icons/NOTICE.txt", to: "dist/assets/icons/NOTICE.txt" },
+      { from: "LICENSE", to: "dist/LICENSE.txt" },
+      { from: "LICENSE-SCOPE.md", to: "dist/LICENSE-SCOPE.md" }
     ],
     options: {}
   },

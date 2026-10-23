@@ -27,3 +27,13 @@ Original-code/contributor authority, historical 530-question rights, dependency
 source/notice obligations and remaining media still require evidence. The owner
 has not supplied an authorship attestation in this task. Exclusion from an archive
 is exposure reduction, not a legal determination or a complete release clearance.
+
+## Project license in built distributions
+
+Both Docker build contexts and the Taro project carry byte-identical copies of
+the root LICENSE and LICENSE-SCOPE.md. Production frontend explicitly copies them
+to /app; backend COPY includes them. Taro copies both into dist, with CI comparing
+the output bytes. These copies must change together with the root files. They do
+not replace dependency-specific notices or license texts and do not assert rights
+the maintainers have not established. Final WeChat upload retention still needs
+physical-device/package acceptance.
