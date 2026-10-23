@@ -6,8 +6,10 @@ workflow set on one SHA. Main remains unchanged; no PR is automatically merged.
 The integration PR is **validation only**, not a request to bypass the individual
 reviews or publish a release.
 
-The only composition conflict was THIRD_PARTY.md: retain both #29's dated dependency
-inventory disclosure and #39's traceable navigation-source/notices paragraph.
+Composition conflicts were resolved in THIRD_PARTY.md, the quality workflow and
+Taro copy patterns: retain #29's dated inventory, #39's full upstream notices, and
+#41's project-license copies/assertions together. #43's runtime-only package-manager
+removal preserves #38's image digests and #41's frontend license copies.
 All Action pins, CSS/stream checks, Taro notice checks and full Hooks rules remain.
 
 Additional candidate checks build both production Dockerfiles locally, initialize

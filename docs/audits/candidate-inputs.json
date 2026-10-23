@@ -1,1 +1,63 @@
-{"base":"712c0538571d01129c0f8b1fb5488b35c9df6058","date":"2026-10-23","purpose":"combined validation only; no GitHub PR merges","inputs":[{"pr":39,"sha":"6e521f5033e4deededbd4c7afc175b0b5f28727b"},{"pr":38,"sha":"9c9993a5b510a9d623410c4678148757e82558e4"},{"pr":37,"sha":"02d850ba57fb119f090e0fe53212fed65f305bc6"},{"pr":36,"sha":"5c7b992ea290e342649783e5a27a1f31f60a43e2"},{"pr":35,"sha":"2238f3e6f67cda6966891dd961e78ad8ef3b7419"},{"pr":34,"sha":"59b8826c3b9c1222862386b2b35b9afbb6214e51"},{"pr":33,"sha":"df6aacae5bb3f00b39782c6983ba2f8d9e9263b9"},{"pr":32,"sha":"bf29dc5e870514b4a0db7907b99e2287af5e5c8c"},{"pr":31,"sha":"f38876afdea44f4d4fc0cd6dffa9ad889043d69d"},{"pr":30,"sha":"a76d36d6740548d6ce6ce759a6bffb077a998c21"},{"pr":29,"sha":"669706330f5ec8a1c904875a9505c281c8edd654"},{"pr":40,"sha":"f2db8abcff37b5d1e895d471c23ebfdbd1ed6b7a"},{"pr":41,"sha":"e9f81f342dfa9b1edb84a9714a79c367fdc51839"}]}
+{
+  "base": "712c0538571d01129c0f8b1fb5488b35c9df6058",
+  "date": "2026-10-23",
+  "purpose": "combined validation only; no GitHub PR merges",
+  "inputs": [
+    {
+      "pr": 39,
+      "sha": "6e521f5033e4deededbd4c7afc175b0b5f28727b"
+    },
+    {
+      "pr": 38,
+      "sha": "9c9993a5b510a9d623410c4678148757e82558e4"
+    },
+    {
+      "pr": 37,
+      "sha": "02d850ba57fb119f090e0fe53212fed65f305bc6"
+    },
+    {
+      "pr": 36,
+      "sha": "5c7b992ea290e342649783e5a27a1f31f60a43e2"
+    },
+    {
+      "pr": 35,
+      "sha": "2238f3e6f67cda6966891dd961e78ad8ef3b7419"
+    },
+    {
+      "pr": 34,
+      "sha": "59b8826c3b9c1222862386b2b35b9afbb6214e51"
+    },
+    {
+      "pr": 33,
+      "sha": "df6aacae5bb3f00b39782c6983ba2f8d9e9263b9"
+    },
+    {
+      "pr": 32,
+      "sha": "bf29dc5e870514b4a0db7907b99e2287af5e5c8c"
+    },
+    {
+      "pr": 31,
+      "sha": "f38876afdea44f4d4fc0cd6dffa9ad889043d69d"
+    },
+    {
+      "pr": 30,
+      "sha": "a76d36d6740548d6ce6ce759a6bffb077a998c21"
+    },
+    {
+      "pr": 29,
+      "sha": "669706330f5ec8a1c904875a9505c281c8edd654"
+    },
+    {
+      "pr": 40,
+      "sha": "f2db8abcff37b5d1e895d471c23ebfdbd1ed6b7a"
+    },
+    {
+      "pr": 41,
+      "sha": "e9f81f342dfa9b1edb84a9714a79c367fdc51839"
+    },
+    {
+      "pr": 43,
+      "sha": "d173bdfb66ba3253ece2bbc67d9ce26d24f005c1"
+    }
+  ]
+}

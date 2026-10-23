@@ -1,5 +1,6 @@
 """Exercise only the disposable la-prod-ci Compose project, including dump/restore."""
 import json
+from pathlib import Path
 import subprocess
 import time
 import urllib.error
@@ -17,6 +18,10 @@ def request(port, path):
 
 
 def main():
+    for image in ("la-candidate-backend:ci", "la-candidate-frontend:ci"):
+        for filename in ("LICENSE", "LICENSE-SCOPE.md"):
+            packaged = subprocess.check_output(["docker", "run", "--rm", "--entrypoint", "cat", image, f"/app/{filename}"])
+            assert packaged == Path(filename).read_bytes(), (image, filename)
     expected = {("postgres", "5432"): "127.0.0.1:55432",
                 ("backend", "8000"): "127.0.0.1:58000",
                 ("frontend", "3000"): "127.0.0.1:53000"}
@@ -44,7 +49,7 @@ def main():
     restored = subprocess.check_output(postgres + ["psql", "-U", "la_ci", "-d", "la_restore_ci", "-Atc",
         "SELECT count(*) FROM release_restore_fixture WHERE value='original synthetic arithmetic';"], text=True)
     assert restored.strip() == "1"
-    print("PASS: production Dockerfiles, migration, health, proxy auth, loopback ports and synthetic pg_dump/restore")
+    print("PASS: production Dockerfiles, packaged licenses, migration, health, proxy auth, loopback ports and synthetic pg_dump/restore")
 
 
 if __name__ == "__main__":
