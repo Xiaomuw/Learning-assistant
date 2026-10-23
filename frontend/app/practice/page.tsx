@@ -22,6 +22,7 @@ import {
   submitPracticeAttempt,
   type MasteryEvaluationResult,
   type QuizItem,
+  type AuthUser,
 } from "@/lib/api";
 import {
   appendStoredQuiz,
@@ -132,167 +133,169 @@ function parseLearningCenterPracticeTarget(): LearningCenterPracticeTarget | nul
   };
 }
 
+function restorePracticeSnapshot(nextQuizList: QuizItem[], fallbackSessionId = "", fallbackNotebookId = DEFAULT_NOTEBOOK_ID) {
+  const state = {
+    currentIndex: 0, selectedOption: null as OptionKey | null,
+    feedback: null as AttemptFeedback | null, showHint: false,
+    currentSessionId: fallbackSessionId, currentNotebookId: fallbackNotebookId,
+    isPracticeCompleted: false, practiceCompletedAt: null as number | null,
+  };
+
+  if (nextQuizList.length === 0) {
+    state.currentIndex = 0;
+    state.selectedOption = null;
+    state.feedback = null;
+    state.showHint = false;
+    state.currentSessionId = fallbackSessionId;
+    state.currentNotebookId = fallbackNotebookId || DEFAULT_NOTEBOOK_ID;
+    state.isPracticeCompleted = false;
+    state.practiceCompletedAt = null;
+
+    return state;
+  }
+
+  const quizSignature = buildQuizSignature(nextQuizList);
+  const quizMeta = loadStoredQuizMeta();
+  const storedState = loadStoredPracticeState();
+  const metaTopic = quizMeta?.topic?.trim() || "";
+  const stateTopic = storedState?.topic?.trim() || "";
+  const metaSubjectId = quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID;
+  const stateSubjectId = storedState?.subjectId || storedState?.notebookId || DEFAULT_NOTEBOOK_ID;
+  const metaTopics = quizMeta?.topics || (metaTopic ? [metaTopic] : []);
+  const metaSubjectIds = quizMeta?.subjectIds || (metaSubjectId ? [metaSubjectId] : []);
+  const metaSessionIds = quizMeta?.sessionIds || (quizMeta?.sessionId ? [quizMeta.sessionId] : []);
+  const metaMatchesState =
+    !storedState ||
+    ((!metaTopic ||
+      !stateTopic ||
+      metaTopic === stateTopic ||
+      metaTopic === "混合练习" ||
+      metaTopics.includes(stateTopic)) &&
+      (!metaSubjectId ||
+        !stateSubjectId ||
+        metaSubjectId === stateSubjectId ||
+        metaSubjectIds.includes(stateSubjectId)) &&
+      (!storedState.sessionId ||
+        !quizMeta?.sessionId ||
+        storedState.sessionId === quizMeta.sessionId ||
+        metaSessionIds.includes(storedState.sessionId)));
+  const restoredQuizItemCount =
+    storedState?.quizItemCount || countQuizSignatureItems(storedState?.quizSignature);
+  const appendedToStoredQuiz = Boolean(
+    storedState &&
+      restoredQuizItemCount > 0 &&
+      restoredQuizItemCount < nextQuizList.length &&
+      buildQuizSignature(nextQuizList.slice(0, restoredQuizItemCount)) === storedState.quizSignature
+  );
+  if (
+    storedState &&
+    ((storedState.quizSignature === quizSignature && metaMatchesState) ||
+      (appendedToStoredQuiz && metaMatchesState))
+  ) {
+    const shouldJumpToAppendedItems = Boolean(
+      appendedToStoredQuiz &&
+        storedState.isCompleted &&
+        restoredQuizItemCount < nextQuizList.length
+    );
+    const restoredIndex = Math.max(
+      0,
+      Math.min(
+        shouldJumpToAppendedItems ? restoredQuizItemCount : storedState.currentIndex,
+        nextQuizList.length - 1
+      )
+    );
+    state.currentIndex = restoredIndex;
+    state.selectedOption = shouldJumpToAppendedItems ? null : storedState.selectedOption;
+    state.feedback = shouldJumpToAppendedItems ? null : storedState.feedback;
+    state.showHint = shouldJumpToAppendedItems ? false : storedState.showHint;
+    state.currentSessionId = storedState.sessionId || quizMeta?.sessionId || fallbackSessionId;
+    state.currentNotebookId =
+      getQuizItemNotebookId(
+        nextQuizList[restoredIndex],
+        storedState.notebookId || quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID
+      )
+    ;
+    state.isPracticeCompleted = shouldJumpToAppendedItems ? false : Boolean(storedState.isCompleted);
+    state.practiceCompletedAt = shouldJumpToAppendedItems ? null : storedState.completedAt ?? null;
+  } else {
+    state.currentIndex = 0;
+    state.selectedOption = null;
+    state.feedback = null;
+    state.showHint = false;
+    state.currentSessionId = quizMeta?.sessionId || fallbackSessionId;
+    state.currentNotebookId = getQuizItemNotebookId(nextQuizList[0], quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID);
+    state.isPracticeCompleted = false;
+    state.practiceCompletedAt = null;
+  }
+
+
+  return state;
+}
+
 export default function PracticePage() {
-  const router = useRouter();
   const { user, isLoading } = useAuth();
-  const hasLoadedPracticeStateRef = useRef(false);
-  const [quizList, setQuizList] = useState<QuizItem[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedOption, setSelectedOption] = useState<OptionKey | null>(null);
-  const [showHint, setShowHint] = useState(false);
+  if (isLoading || !user) return <p role="status">正在加载练习...</p>;
+  return <PracticeSession key={user.id} user={user} />;
+}
+
+function PracticeSession({ user }: { user: AuthUser }) {
+  const router = useRouter();
+  const isLoading = false;
+  const [initial] = useState(() => {
+    const quiz = loadStoredQuiz();
+    return { quiz, ...restorePracticeSnapshot(quiz) };
+  });
+  const hasLoadedPracticeStateRef = useRef(initial.quiz.length > 0);
+  const [quizList, setQuizList] = useState<QuizItem[]>(initial.quiz);
+  const [currentIndex, setCurrentIndex] = useState(initial.currentIndex);
+  const [selectedOption, setSelectedOption] = useState<OptionKey | null>(initial.selectedOption);
+  const [showHint, setShowHint] = useState(initial.showHint);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingPack, setIsGeneratingPack] = useState(false);
-  const [feedback, setFeedback] = useState<AttemptFeedback | null>(null);
+  const [feedback, setFeedback] = useState<AttemptFeedback | null>(initial.feedback);
   const [submitError, setSubmitError] = useState("");
   const [packError, setPackError] = useState("");
-  const [currentSessionId, setCurrentSessionId] = useState("");
-  const [currentNotebookId, setCurrentNotebookId] = useState(DEFAULT_NOTEBOOK_ID);
-  const [learningCenterTarget, setLearningCenterTarget] =
-    useState<LearningCenterPracticeTarget | null>(null);
-  const [isPracticeCompleted, setIsPracticeCompleted] = useState(false);
-  const [practiceCompletedAt, setPracticeCompletedAt] = useState<number | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState(initial.currentSessionId);
+  const [currentNotebookId, setCurrentNotebookId] = useState(initial.currentNotebookId);
+  const [learningCenterTarget] =
+    useState<LearningCenterPracticeTarget | null>(parseLearningCenterPracticeTarget);
+  const [isPracticeCompleted, setIsPracticeCompleted] = useState(initial.isPracticeCompleted);
+  const [practiceCompletedAt, setPracticeCompletedAt] = useState<number | null>(initial.practiceCompletedAt);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const submitInFlightRef = useRef(false);
 
-  useEffect(() => {
-    setLearningCenterTarget(parseLearningCenterPracticeTarget());
-  }, []);
 
   useEffect(() => {
-    if (isLoading || !user) {
-      return;
-    }
-
-    hasLoadedPracticeStateRef.current = false;
-
-    const restorePracticeState = (
-      nextQuizList: QuizItem[],
-      fallbackSessionId = "",
-      fallbackNotebookId = DEFAULT_NOTEBOOK_ID
-    ) => {
-      if (nextQuizList.length === 0) {
-        setCurrentIndex(0);
-        setSelectedOption(null);
-        setFeedback(null);
-        setShowHint(false);
-        setCurrentSessionId(fallbackSessionId);
-        setCurrentNotebookId(fallbackNotebookId || DEFAULT_NOTEBOOK_ID);
-        setIsPracticeCompleted(false);
-        setPracticeCompletedAt(null);
-        hasLoadedPracticeStateRef.current = true;
-        return;
-      }
-
-      const quizSignature = buildQuizSignature(nextQuizList);
-      const quizMeta = loadStoredQuizMeta();
-      const storedState = loadStoredPracticeState();
-      const metaTopic = quizMeta?.topic?.trim() || "";
-      const stateTopic = storedState?.topic?.trim() || "";
-      const metaSubjectId = quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID;
-      const stateSubjectId = storedState?.subjectId || storedState?.notebookId || DEFAULT_NOTEBOOK_ID;
-      const metaTopics = quizMeta?.topics || (metaTopic ? [metaTopic] : []);
-      const metaSubjectIds = quizMeta?.subjectIds || (metaSubjectId ? [metaSubjectId] : []);
-      const metaSessionIds = quizMeta?.sessionIds || (quizMeta?.sessionId ? [quizMeta.sessionId] : []);
-      const metaMatchesState =
-        !storedState ||
-        ((!metaTopic ||
-          !stateTopic ||
-          metaTopic === stateTopic ||
-          metaTopic === "混合练习" ||
-          metaTopics.includes(stateTopic)) &&
-          (!metaSubjectId ||
-            !stateSubjectId ||
-            metaSubjectId === stateSubjectId ||
-            metaSubjectIds.includes(stateSubjectId)) &&
-          (!storedState.sessionId ||
-            !quizMeta?.sessionId ||
-            storedState.sessionId === quizMeta.sessionId ||
-            metaSessionIds.includes(storedState.sessionId)));
-      const restoredQuizItemCount =
-        storedState?.quizItemCount || countQuizSignatureItems(storedState?.quizSignature);
-      const appendedToStoredQuiz = Boolean(
-        storedState &&
-          restoredQuizItemCount > 0 &&
-          restoredQuizItemCount < nextQuizList.length &&
-          buildQuizSignature(nextQuizList.slice(0, restoredQuizItemCount)) === storedState.quizSignature
-      );
-      if (
-        storedState &&
-        ((storedState.quizSignature === quizSignature && metaMatchesState) ||
-          (appendedToStoredQuiz && metaMatchesState))
-      ) {
-        const shouldJumpToAppendedItems = Boolean(
-          appendedToStoredQuiz &&
-            storedState.isCompleted &&
-            restoredQuizItemCount < nextQuizList.length
-        );
-        const restoredIndex = Math.max(
-          0,
-          Math.min(
-            shouldJumpToAppendedItems ? restoredQuizItemCount : storedState.currentIndex,
-            nextQuizList.length - 1
-          )
-        );
-        setCurrentIndex(restoredIndex);
-        setSelectedOption(shouldJumpToAppendedItems ? null : storedState.selectedOption);
-        setFeedback(shouldJumpToAppendedItems ? null : storedState.feedback);
-        setShowHint(shouldJumpToAppendedItems ? false : storedState.showHint);
-        setCurrentSessionId(storedState.sessionId || quizMeta?.sessionId || fallbackSessionId);
-        setCurrentNotebookId(
-          getQuizItemNotebookId(
-            nextQuizList[restoredIndex],
-            storedState.notebookId || quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID
-          )
-        );
-        setIsPracticeCompleted(shouldJumpToAppendedItems ? false : Boolean(storedState.isCompleted));
-        setPracticeCompletedAt(shouldJumpToAppendedItems ? null : storedState.completedAt ?? null);
-      } else {
-        if (storedState) {
-          clearStoredPracticeState();
-        }
-        setCurrentIndex(0);
-        setSelectedOption(null);
-        setFeedback(null);
-        setShowHint(false);
-        setCurrentSessionId(quizMeta?.sessionId || fallbackSessionId);
-        setCurrentNotebookId(getQuizItemNotebookId(nextQuizList[0], quizMeta?.subjectId || fallbackNotebookId || DEFAULT_NOTEBOOK_ID));
-        setIsPracticeCompleted(false);
-        setPracticeCompletedAt(null);
-      }
-      hasLoadedPracticeStateRef.current = true;
-    };
-
-    const userId = user.id;
-    setLearningStoreUser(userId);
-    const cachedQuiz = loadStoredQuiz();
-    setQuizList(cachedQuiz);
-
-    if (cachedQuiz.length > 0) {
-      restorePracticeState(cachedQuiz);
-      return;
-    }
-
-    void fetchLatestQuizBundle(userId)
+    if (initial.quiz.length > 0) return;
+    let active = true;
+    void fetchLatestQuizBundle(user.id)
       .then((remoteBundle) => {
+        if (!active) return;
+        const restored = restorePracticeSnapshot(remoteBundle.quizItems, remoteBundle.sessionId, remoteBundle.notebookId);
         setQuizList(remoteBundle.quizItems);
-        restorePracticeState(
-          remoteBundle.quizItems,
-          remoteBundle.sessionId,
-          remoteBundle.notebookId
-        );
+        setCurrentIndex(restored.currentIndex);
+        setSelectedOption(restored.selectedOption);
+        setShowHint(restored.showHint);
+        setFeedback(restored.feedback);
+        setCurrentSessionId(restored.currentSessionId);
+        setCurrentNotebookId(restored.currentNotebookId);
+        setIsPracticeCompleted(restored.isPracticeCompleted);
+        setPracticeCompletedAt(restored.practiceCompletedAt);
+        hasLoadedPracticeStateRef.current = true;
         if (remoteBundle.quizItems.length > 0) {
           persistQuiz(remoteBundle.quizItems, {
             topic: remoteBundle.quizItems[0]?.knowledge_point,
-            subjectId: remoteBundle.notebookId,
-            sessionId: remoteBundle.sessionId,
+            subjectId: remoteBundle.notebookId, sessionId: remoteBundle.sessionId,
           });
         }
       })
       .catch((error) => {
+        if (!active) return;
         console.error("加载最新题包失败:", error);
         hasLoadedPracticeStateRef.current = true;
       });
-  }, [isLoading, user]);
+    return () => { active = false; };
+  }, [initial.quiz.length, user.id]);
 
   useEffect(() => {
     if (isLoading || !user || !hasLoadedPracticeStateRef.current || quizList.length === 0) {

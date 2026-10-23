@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { getSafeNextPath } from "@/lib/safe-next-path";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -18,18 +19,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
-function getSafeNextPath(nextPath: string | null): string {
-  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
-    return "/chat";
-  }
-
-  const [pathname] = nextPath.split("?");
-  if (pathname === "/login" || pathname === "/register") {
-    return "/chat";
-  }
-
-  return nextPath;
-}
 
 function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
   let score = 0;
@@ -76,10 +65,10 @@ function passwordPolicyError(pw: string): string {
   return "";
 }
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const { sendRegisterCode, register, isLoading, user } = useAuth();
-  const [nextPath, setNextPath] = useState<string | null>(null);
+  const nextPath = useSearchParams().get("next");
   const [step, setStep] = useState<"email" | "complete">("email");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -94,9 +83,6 @@ export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
-  useEffect(() => {
-    setNextPath(new URLSearchParams(window.location.search).get("next"));
-  }, []);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) {
@@ -519,4 +505,8 @@ export default function RegisterPage() {
       </section>
     </main>
   );
+}
+
+export default function RegisterPage() {
+  return <Suspense fallback={<p role="status">正在加载…</p>}><RegisterForm /></Suspense>;
 }

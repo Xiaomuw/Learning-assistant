@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bot,
   BrainCircuit,
@@ -11,6 +11,7 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
+import { advanceProcessPanelState } from "@/lib/process-panel-state";
 import type { MessageProcess, MessageProcessStage } from "@/lib/api";
 
 interface MessageProcessPanelProps {
@@ -68,18 +69,19 @@ function fallbackReasonLabel(reason?: string) {
 export default function MessageProcessPanel({
   process,
 }: MessageProcessPanelProps) {
-  const [isOpen, setIsOpen] = useState(() => Boolean(process.reasoningTrace?.trim()));
+  const [panelState, setPanelState] = useState(() => ({
+    hasTrace: Boolean(process.reasoningTrace?.trim()),
+    open: Boolean(process.reasoningTrace?.trim()),
+  }));
+  const isOpen = panelState.open;
 
   const stageCount = process.stages.length;
   const toolCount = process.toolCalls?.length ?? 0;
   const reasoningTrace = process.reasoningTrace ?? "";
   const hasReasoningTrace = reasoningTrace.trim().length > 0;
 
-  useEffect(() => {
-    if (hasReasoningTrace) {
-      setIsOpen(true);
-    }
-  }, [hasReasoningTrace]);
+  const nextPanelState = advanceProcessPanelState(panelState, hasReasoningTrace);
+  if (nextPanelState !== panelState) setPanelState(nextPanelState);
 
   const summary = useMemo(() => {
     if (process.currentStage?.trim()) {
@@ -95,7 +97,7 @@ export default function MessageProcessPanel({
     <div className="mt-4 animate-stamp-in">
       <button
         type="button"
-        onClick={() => setIsOpen((value) => !value)}
+        onClick={() => setPanelState((value) => ({ ...value, open: !value.open }))}
         aria-expanded={isOpen}
         aria-label={isOpen ? "收起处理过程" : "展开处理过程"}
         className="flex w-full items-center justify-between gap-4 border-[3px] border-neo-ink bg-neo-bg px-4 py-3 text-left shadow-neo-sm"
