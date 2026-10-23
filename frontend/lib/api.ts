@@ -798,35 +798,6 @@ function buildChatConnectionFailureMessage(error: unknown, attempts: number): st
   return `${retryText}${message ? `原因：${message}` : ""} 请检查后端服务或稍后重试。`;
 }
 
-function buildChatStreamFailure(error: unknown, receivedAnyEvent: boolean): ChatConnectionError {
-  const payload =
-    error && typeof error === "object" && !Array.isArray(error)
-      ? (error as Record<string, unknown>)
-      : {};
-  const reason = typeof payload.reason === "string" ? payload.reason : "workflow_error";
-  const retryable =
-    typeof payload.retryable === "boolean" ? payload.retryable : true;
-  const rawMessage = normalizeErrorMessage(error);
-  let message: string;
-
-  if (reason === "timeout") {
-    message = `处理超时：学习引擎处理时间较长，本轮请求已经中断。你可以稍后重试，或换一种更具体的问法。${rawMessage ? `原因：${rawMessage}` : ""}`;
-  } else if (reason === "model_unavailable") {
-    message = `模型服务暂时不可用：${rawMessage} 请稍后再试。`;
-  } else if (reason === "stream_cancelled") {
-    message = "连接已中断：当前回答没有完整返回，你可以直接手动重试。";
-  } else {
-    message = `处理失败：${rawMessage} 你可以直接手动重试。`;
-  }
-
-  return new ChatConnectionError(message, {
-    attempts: 1,
-    retryable,
-    receivedAnyEvent,
-    reason,
-  });
-}
-
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

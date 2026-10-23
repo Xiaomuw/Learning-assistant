@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bot,
   BrainCircuit,
@@ -69,17 +69,18 @@ export default function MessageProcessPanel({
   process,
 }: MessageProcessPanelProps) {
   const [isOpen, setIsOpen] = useState(() => Boolean(process.reasoningTrace?.trim()));
+  const [previousHasTrace, setPreviousHasTrace] = useState(() => Boolean(process.reasoningTrace?.trim()));
 
   const stageCount = process.stages.length;
   const toolCount = process.toolCalls?.length ?? 0;
   const reasoningTrace = process.reasoningTrace ?? "";
   const hasReasoningTrace = reasoningTrace.trim().length > 0;
 
-  useEffect(() => {
-    if (hasReasoningTrace) {
-      setIsOpen(true);
-    }
-  }, [hasReasoningTrace]);
+  // Adjust on the transition only; later chunks must respect a manual collapse.
+  if (previousHasTrace !== hasReasoningTrace) {
+    setPreviousHasTrace(hasReasoningTrace);
+    if (hasReasoningTrace) setIsOpen(true);
+  }
 
   const summary = useMemo(() => {
     if (process.currentStage?.trim()) {

@@ -1,11 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import { useAuth } from "@/components/AuthProvider";
 import {
   deleteSession as deleteSessionRemote,
-  fetchNotebookKnowledgeStatus,
   fetchModelConfig,
   fetchNotebooks,
   fetchSessions,
@@ -14,7 +14,6 @@ import {
   normalizeMemoryPayload,
   sendChatSSE,
   stripMarkdownArtifacts,
-  uploadPDFToNotebook,
   type Memory,
   type Message,
   type MessageProcess,
@@ -23,7 +22,6 @@ import {
   type MessageProcessToolCall,
   type ModelConfig,
   type Notebook,
-  type NotebookKnowledgeStatus,
   type QuizClarificationPanel,
   type QuizItem,
   type QuizRequestResolution,
@@ -133,13 +131,6 @@ const PROCESS_STAGE_ORDER: Record<string, number> = {
   stream_status: 8.75,
   answer: 9,
   error: 10,
-};
-
-const COVERAGE_LABELS: Record<NotebookKnowledgeStatus["coverage_level"], string> = {
-  empty: "知识库为空",
-  sparse: "资料较少",
-  partial: "资料部分可用",
-  ready: "知识库可用",
 };
 
 function createInitialProcess(message = "已连接学习引擎，正在准备处理。"): MessageProcess {
@@ -796,17 +787,15 @@ function normalizeQualityFailureSummary(summary: string) {
 }
 
 export default function ChatPage() {
+  const router = useRouter();
   const { user, isLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [thinkingModeEnabled, setThinkingModeEnabled] = useState(false);
+  const [thinkingModeEnabled] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [, setMemory] = useState<Memory>(EMPTY_MEMORY);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState(DEFAULT_NOTEBOOK_ID);
-  const [selectedKnowledgeStatus, setSelectedKnowledgeStatus] =
-    useState<NotebookKnowledgeStatus | null>(null);
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -948,9 +937,9 @@ export default function ChatPage() {
           }
         } else {
           const latestDraft = loadLatestStoredChatDraft();
-          restoreExistingSession(cachedSessions, requestedSessionId) ||
+          void (restoreExistingSession(cachedSessions, requestedSessionId) ||
             restoreExistingSession(cachedSessions, activeSession?.sessionId) ||
-            restoreDraftSession(latestDraft);
+            restoreDraftSession(latestDraft));
         }
 
         if (remoteModelConfig) {
@@ -973,63 +962,21 @@ export default function ChatPage() {
   }, [isLoading, user]);
 
   useEffect(() => {
-    if (isLoading || !user || !selectedNotebookId) {
-      return;
-    }
-
-    const activeNotebookId = notebooks.some((notebook) => notebook.id === selectedNotebookId)
-      ? selectedNotebookId
-      : "";
-    if (!activeNotebookId) {
-      setSelectedKnowledgeStatus(null);
-      return;
-    }
-
-    let isMounted = true;
-    fetchNotebookKnowledgeStatus(activeNotebookId)
-      .then((status) => {
-        if (isMounted) {
-          setSelectedKnowledgeStatus(status);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setSelectedKnowledgeStatus(null);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isLoading, notebooks, selectedNotebookId, user]);
-
-  function persistDraftMessages(
-    draftMessages: Message[],
-    sessionId = currentSessionId || activeDraftSessionRef.current,
-    notebookId = selectedNotebookId
-  ) {
-    if (!sessionId) {
-      return;
-    }
-
-    if (draftMessages.length === 0) {
+    const sessionId = currentSessionId || activeDraftSessionRef.current;
+    if (!user || !sessionId) return;
+    if (messages.length === 0) {
       clearStoredChatDraft(sessionId);
       return;
     }
-
-    if (!user) {
-      return;
-    }
-
     persistStoredChatDraft({
       sessionId,
-      notebookId: resolveNotebookId(notebooks, notebookId),
-      messages: stripEphemeralReasoningDebug(draftMessages),
+      notebookId: resolveNotebookId(notebooks, selectedNotebookId),
+      messages: stripEphemeralReasoningDebug(messages),
       updatedAt: Date.now(),
     });
-  }
+  }, [currentSessionId, messages, notebooks, selectedNotebookId, user]);
 
-  function rememberActiveSession(sessionId: string, notebookId = selectedNotebookId) {
+  function rememberActiveSession(sessionId: string, notebookId: string, timestamp: number) {
     if (!user || !sessionId) {
       return;
     }
@@ -1038,7 +985,7 @@ export default function ChatPage() {
       userId: user.id,
       sessionId,
       notebookId: resolveNotebookId(notebooks, notebookId),
-      updatedAt: Date.now(),
+      updatedAt: timestamp,
     });
   }
 
@@ -1062,19 +1009,8 @@ export default function ChatPage() {
         }
       }
 
-      persistDraftMessages(next);
       return next;
     });
-  }
-
-  async function refreshNotebooks() {
-    const data = notebookListOrFallback(await fetchNotebooks().catch(() => []));
-    setNotebooks(data);
-    const nextNotebookId = resolveNotebookId(data, selectedNotebookId);
-    if (nextNotebookId !== selectedNotebookId) {
-      setSelectedNotebookId(nextNotebookId);
-      persistStoredNotebookId(nextNotebookId);
-    }
   }
 
   async function refreshSessions() {
@@ -1093,22 +1029,6 @@ export default function ChatPage() {
     }
   }
 
-  function handleNotebookSelect(notebookId: string) {
-    activeStreamRef.current?.abort();
-    activeStreamRef.current = null;
-    clearCurrentTransientDraft();
-    activeDraftSessionRef.current = "";
-    setIsStreaming(false);
-    if (user) {
-      clearStoredActiveChatSession(user.id);
-    }
-    const nextNotebookId = resolveNotebookId(notebooks, notebookId);
-    setSelectedNotebookId(nextNotebookId);
-    persistStoredNotebookId(nextNotebookId);
-    setMessages([]);
-    setCurrentSessionId("");
-  }
-
   function handleNewSession() {
     activeStreamRef.current?.abort();
     activeStreamRef.current = null;
@@ -1124,42 +1044,7 @@ export default function ChatPage() {
     setShowHistory(false);
   }
 
-  async function handleUpload(file: File) {
-    setIsUploading(true);
-
-    try {
-      const result = await uploadPDFToNotebook(file, selectedNotebookId);
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: `资料已加入“我的补充资料”：${result.filename}，共 ${result.total_pages} 页，切成 ${result.total_chunks} 个个人知识块。`,
-          timestamp: Date.now(),
-        },
-      ]);
-
-      await refreshNotebooks();
-      fetchNotebookKnowledgeStatus(selectedNotebookId)
-        .then(setSelectedKnowledgeStatus)
-        .catch(() => undefined);
-    } catch (error) {
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: `上传失败：${
-            error instanceof Error ? error.message : "未知错误"
-          }`,
-          timestamp: Date.now(),
-        },
-      ]);
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
-  function handleSend(question: string) {
+  function handleSend(question: string, timestamp: number) {
     if (!user) {
       return;
     }
@@ -1179,13 +1064,13 @@ export default function ChatPage() {
     const userMessage: Message = {
       role: "user",
       content: question,
-      timestamp: Date.now(),
+      timestamp: timestamp,
     };
 
     const assistantMessage: Message = {
       role: "assistant",
       content: "",
-      timestamp: Date.now() + 1,
+      timestamp: timestamp + 1,
       process: createInitialProcess(initialProcessMessage),
     };
 
@@ -1193,11 +1078,10 @@ export default function ChatPage() {
       setCurrentSessionId(sessionId);
     }
     activeDraftSessionRef.current = sessionId;
-    rememberActiveSession(sessionId, selectedNotebookId);
+    rememberActiveSession(sessionId, selectedNotebookId, timestamp);
 
     setMessages((previous) => {
       const next = [...previous, userMessage, assistantMessage];
-      persistDraftMessages(next, sessionId, selectedNotebookId);
       return next;
     });
     setIsStreaming(true);
@@ -1959,14 +1843,14 @@ export default function ChatPage() {
     return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
 
-  function handleInputSend() {
+  function handleInputSend(timestamp: number) {
     const q = inputValue.trim();
     if (!q || isStreaming) return;
     setInputValue("");
-    handleSend(q);
+    handleSend(q, timestamp);
   }
 
-  function handleSelectSession(session: ChatSession) {
+  function handleSelectSession(session: ChatSession, timestamp: number) {
     activeStreamRef.current?.abort();
     activeStreamRef.current = null;
     setIsStreaming(false);
@@ -1975,7 +1859,7 @@ export default function ChatPage() {
     persistStoredNotebookId(sessionNotebookId);
     setCurrentSessionId(session.id);
     activeDraftSessionRef.current = session.id;
-    rememberActiveSession(session.id, sessionNotebookId);
+    rememberActiveSession(session.id, sessionNotebookId, timestamp);
     setMessages(session.messages);
     setShowHistory(false);
   }
@@ -2053,7 +1937,7 @@ export default function ChatPage() {
                   type="button"
                   className="rounded-full border-[3px] border-neo-ink bg-white px-3 py-2 text-xs font-black shadow-neo-sm transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50"
                   disabled={isStreaming}
-                  onClick={() => handleSend(prompt)}
+                  onClick={() => handleSend(prompt, Date.now())}
                 >
                   {prompt}
                 </button>
@@ -2090,7 +1974,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     className="neo-button mt-2 w-full justify-center text-xs"
-                    onClick={() => window.location.href = "/practice"}
+                    onClick={() => router.push("/practice")}
                   >
                     去刷题
                   </button>
@@ -2110,7 +1994,7 @@ export default function ChatPage() {
                       type="button"
                       className="neo-badge mr-2 mt-2 bg-white"
                       disabled={isStreaming}
-                      onClick={() => handleSend(`围绕 ${opt.value} 出 5 道单选题`)}
+                      onClick={() => handleSend(`围绕 ${opt.value} 出 5 道单选题`, Date.now())}
                     >
                       {opt.label || opt.value}
                     </button>
@@ -2171,7 +2055,7 @@ export default function ChatPage() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                handleInputSend();
+                handleInputSend(Date.now());
               }
             }}
           />
@@ -2179,7 +2063,7 @@ export default function ChatPage() {
             type="button"
             className="h-14 shrink-0 rounded-full border-[3px] border-neo-ink bg-neo-accent px-4 text-sm font-black text-neo-ink shadow-neo-sm transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!inputValue.trim() || isStreaming}
-            onClick={handleInputSend}
+            onClick={() => handleInputSend(Date.now())}
           >
             {isStreaming ? "生成中" : "发送"}
           </button>
@@ -2228,7 +2112,7 @@ export default function ChatPage() {
                       session.id === currentSessionId ? "bg-neo-secondary" : "bg-white"
                     }`}
                   >
-                    <div className="cursor-pointer" onClick={() => handleSelectSession(session)}>
+                    <div className="cursor-pointer" onClick={() => handleSelectSession(session, Date.now())}>
                       <p className="truncate text-sm font-black">{session.title}</p>
                       <p className="mt-1 text-[10px] font-bold text-neo-ink/50">
                         {nb?.name || "未知"} · {formatDate(session.updatedAt)} · {session.messages?.length || 0}条
