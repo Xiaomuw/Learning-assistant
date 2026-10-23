@@ -1,6 +1,6 @@
 # Proposed v0.1.0-rc.1 — release candidate runbook
 
-**Decision: NO-GO for publication (2026-10-22).** This is preparation, not a tagged or published release. No existing Git tags or GitHub Releases were found. `v0.1.0-rc.1` is a proposal for maintainer approval; individual frontend package versions are not evidence of a repository release.
+**Decision: NO-GO for publication (2026-10-23).** This is preparation, not a tagged or published release. No existing Git tags or GitHub Releases were found. `v0.1.0-rc.1` is a proposal for maintainer approval; individual frontend package versions are not evidence of a repository release.
 
 Use the [verification ledger](RELEASE_VERIFICATION.md), [dependency review](DEPENDENCY_SECURITY_REVIEW.md), [history review](GIT_HISTORY_EXPOSURE_REVIEW.md), and [draft notes](../CHANGELOG.md) together. Evidence on separate PR heads does not validate their future merged combination. Re-run all gates on the exact final commit before tagging.
 
@@ -22,7 +22,7 @@ This is an experimental developer project. It has no verified external adoption 
 | Database | PostgreSQL 16 + pgvector (`pgvector/pgvector:pg16`) |
 | Containers | Docker Engine with Compose v2; free loopback ports 5434, 8003, 3003 |
 
-Python requirements contain version ranges and do not provide a complete transitive, hash-locked environment. Docker tags are mutable. Successful fresh installs are evidence for the recorded date, not bit-for-bit future reproducibility. Resolve and test a lock/digest policy before distributing release images.
+Python requirements contain version ranges and do not provide a complete transitive, hash-locked environment. Main Docker tags are mutable; Draft #38 and combined #42 pin base-image digests, while apt/Python transitives remain unresolved ranges. Successful fresh installs are evidence for the recorded date, not bit-for-bit future reproducibility. Resolve and test a lock/digest policy before distributing release images.
 
 ## Fresh, isolated Docker installation without paid APIs
 
@@ -32,7 +32,8 @@ Use a new directory and a host without another Learning-assistant Compose stack.
 git clone https://github.com/Xiaomuw/Learning-assistant.git learning-assistant-rc-check
 cd learning-assistant-rc-check
 git rev-parse HEAD
-# Use the exact reviewed candidate commit once it exists; there is no rc tag yet.
+# Validation-only candidate SHAs and limits: docs/RELEASE_CLOSURE_STATUS.md.
+# Check out the explicitly reviewed SHA; there is no rc tag or release approval.
 python3 - <<'ENV'
 import secrets
 from pathlib import Path
@@ -157,15 +158,26 @@ Record the starting Alembic revision and candidate SHA. Inspect every revision b
 | Gate | Decision / evidence |
 | --- | --- |
 | Governance, code license, current-tree data boundary | GO for foundation only; merged #3/#6, CI and current-tree inventory |
-| Fresh dependency installs and client builds | PASS for recorded environments; Python transitive lock and image digests pending |
-| Database migration, bootstrap, auth and service smoke | Baseline and #30 exact-head CI PASS; maintainer review and combined candidate run remain |
+| Fresh dependency installs and client builds | Combined #42 PASS for recorded environment; image digests pinned; complete Python/apt locks remain open |
+| Database migration, bootstrap, auth and service smoke | Combined candidate PASS; exact SHAs, workflow URLs and limitations in [closure report](RELEASE_CLOSURE_STATUS.md); maintainer review remains |
 | Real question persistence and learning-cycle regression | PR #30 fixes reproduced question JSON corruption; strict PostgreSQL exact-head suite PASS, review pending |
-| Python / JS / image vulnerabilities | NO-GO: Python fixes proposed in #31/#32/#34 have a clean combined local audit but remain unmerged; Web/Taro findings and image OS scanning remain open |
+| Python / JS / image vulnerabilities | NO-GO: Python fixes proposed in #31/#32/#34 have a clean combined local audit but remain unmerged; Web/Taro and scanned OS/image findings remain open |
 | Third-party licenses and embedded assets | NO-GO: inventory prepared; redistribution obligations/asset provenance not fully closed |
 | Historical question-bank rights/exposure | NO-GO: rights unresolved; ordinary branch heads clear, old blobs still reachable |
 | Secret scan / historical test-account reuse | Partial review; owner must confirm candidate fixture credentials were never reused |
 | Live model / real embedding RAG | Not run; owner-provided sandbox credentials and explicit spend approval needed |
-| Browser, real WeChat, external SMTP, TLS/CORS staging, restore | Not run; staging resources/credentials and manual acceptance needed |
+| Chromium UI / synthetic restore | Scoped PASS in #40/#42; intercepted browser APIs and disposable dump/restore do not validate live services or existing data |
+| Other browsers, physical devices, real WeChat/SMTP, production-mode HTTPS staging | Not run; sandbox resources/configuration and manual acceptance needed |
 | Published tag/release/image/deployment | Not authorized in this task; none created |
 
 A public-source repository, green CI, or an Apache-2.0 file alone does not satisfy these gates.
+
+## Current browser and distribution evidence
+
+See [closure status](RELEASE_CLOSURE_STATUS.md) for the actual browser recordings,
+combined SHA and final-image findings. Reproduce `frontend/scripts/test-safe-next.mjs`
+and the pinned Playwright workflow on #40/#42. The candidate production workflow
+builds Dockerfiles, verifies packaged project licenses byte-for-byte, migrates a
+fresh database, exercises loopback APIs and restores a synthetic backup. It uses
+APP_ENV=development: the real production guard requires owner service settings.
+No paid provider, real account, live database or public deployment is used.

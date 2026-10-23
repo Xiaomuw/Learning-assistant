@@ -26,7 +26,7 @@ The auth test set includes 22 regression tests and 18 HTTP assertions through Ne
 - [ ] Finish full third-party dependency/license, embedded-asset, code ownership and authorized secret/history review.
 - [x] PR #28 merged: development ports are loopback-only; clean-clone Compose smoke checks backend `/health`, frontend `/login`, anonymous auth rejection and port bindings.
 - [ ] Test real LLM/RAG answers, browser/mobile flows, external email delivery, HTTPS/TLS, CORS/proxy and staging deployment. Real deterministic FastAPI→Next SSE is added separately in #30; it is not external-model acceptance.
-- [ ] Address React Hooks lint exceptions and warnings tracked in [issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
+- [ ] Review/merge tested Draft #40, which removes Hooks exceptions and passes strict lint; then verify final main before closing [issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
 - [ ] Publish a reproducible, owner-reviewed release only after these checks; no Release has been published yet.
 
 Related trackers: [question-bank rights #5](https://github.com/Xiaomuw/Learning-assistant/issues/5), [Next.js/release follow-up #4](https://github.com/Xiaomuw/Learning-assistant/issues/4), [React Hooks debt #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
@@ -51,3 +51,11 @@ Related trackers: [question-bank rights #5](https://github.com/Xiaomuw/Learning-
 Use the [verification ledger](RELEASE_VERIFICATION.md) for baseline/head SHAs, current CI runs, local failures/skips and validation levels, rather than treating the older links above as current-head evidence. The [candidate runbook](RELEASE_CANDIDATE.md) proposes `v0.1.0-rc.1` but authorizes no tag, Release, image publication or deployment.
 
 **Status: NO-GO.** Dependency findings, license/asset review, historical rights/exposure and live/staging acceptance remain unresolved.
+
+## Latest combined review evidence
+
+- Review #40 for Hooks/authenticated-state behavior and synthetic-API browser regressions.
+- Review #41 for historical-report archive boundaries and canonical license files in component outputs. Preserve #39's Taro icon notices alongside its LICENSE.txt/scope copies.
+- Review #43 for runtime installer removal, preserving #38's image digests, #37's Action safeguards and #41's license copies. Builders still need their installers.
+- #42 is a **validation-only** composition, not a proposal to bypass those reviews. THIRD_PARTY.md, shared workflow edits and Taro copy patterns were reconciled. Exact inputs and conflicts are recorded on that branch; the final [closure report](RELEASE_CLOSURE_STATUS.md) supersedes the earlier local-only preflight limitation.
+- #29's updated evidence documentation may be newer than the docs snapshot inside #42. No functional proposal may change after combined testing without retesting the new composition. Do not auto-merge any PR.

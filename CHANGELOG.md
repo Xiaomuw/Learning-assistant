@@ -27,6 +27,14 @@ Additional proposals: [#35](https://github.com/Xiaomuw/Learning-assistant/pull/3
 ### Known limitations and migration notes
 
 
-Live LLM/embedding quality, browser/device acceptance and production deployment remain unverified. RAG unit/fake tests do not demonstrate real retrieval quality. Python requirements are not fully transitively locked. Dependency alerts, license/asset review and historical question-bank rights remain open. The old question bank is outside the Apache-2.0 grant. React Hooks lint debt remains in issue #8.
+Live LLM/embedding quality, physical-device/other-browser acceptance and production deployment remain unverified. Chromium UI against synthetic APIs and isolated production-image packaging now have scoped evidence in #40/#42. RAG unit/fake tests do not demonstrate real retrieval quality. Python requirements are not fully transitively locked. Dependency alerts, license/asset review and historical question-bank rights remain open. The old question bank is outside the Apache-2.0 grant. Draft #40 removes scoped Hooks exceptions and passes strict lint; issue #8 remains open until review/merge and verification on main.
 
 Use a fresh isolated database, migrate to the current Alembic head and bootstrap canonical metadata before importing the synthetic examples. Take and restore-test backups before any future non-disposable upgrade. A code downgrade cannot undo lost or transformed data. See the runbook for environment versions, commands and restore limitations.
+
+### Additional release-preparation proposals
+
+- #37/#38: immutable Action/image references, checkout credential checks and failing vulnerability gates that preserve actual findings.
+- #39/#41: attributable current navigation icons, source-archive exclusion for historical reports, and project licenses in component/container/Taro outputs. Historical rights are not cleared.
+- #40: authenticated-state/redirect/trace fixes, strict Hooks lint and recorded Chromium regression with synthetic APIs.
+- #42: validation-only combination, production-image scanning/license inventories/SBOM and isolated migration/proxy/synthetic backup restoration.
+- #43: remove unused production-runtime installation toolchains and exercise the real image entrypoints/imports; remaining advisories stay visible.

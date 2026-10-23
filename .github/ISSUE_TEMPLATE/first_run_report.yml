@@ -1,0 +1,46 @@
+name: First-run experience
+description: Share an actual installation or reuse attempt, successful or unsuccessful
+title: "[First run] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please report only an attempt you actually made. Success and failure are both useful.
+        Do not post credentials, private learner data, email addresses, private course material or historical question text.
+        Follow SECURITY.md for security reports. Maintainer CI and synthetic demos are not external adoption.
+  - type: input
+    id: revision
+    attributes:
+      label: Exact commit or PR head tested
+      placeholder: Full Git SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and commands actually run
+      placeholder: OS, architecture, Docker/Python/Node versions, client, commands, fresh or existing environment
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Observed outcome
+      options:
+        - Completed the documented flow
+        - Partially completed
+        - Blocked during installation or use
+    validations:
+      required: true
+  - type: textarea
+    id: observation
+    attributes:
+      label: What worked, what failed, and the first unclear step
+      placeholder: Include expected/actual behavior and sanitized evidence; distinguish synthetic from external-service tests.
+    validations:
+      required: true
+  - type: textarea
+    id: reuse
+    attributes:
+      label: Optional actual reuse and suggestions
+      placeholder: Which component did you use or extend? Share public links only if you are allowed to do so. Leave blank if there is no reuse yet.

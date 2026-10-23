@@ -4,8 +4,9 @@ This checklist tracks readiness for sustainable public maintenance of **Learning
 
 See the [2026-10-23 standards assessment](OPEN_SOURCE_STANDARDS_ASSESSMENT.md) for
 the distinction between open-source licensing, distribution clearance and release
-readiness. P0/P2 are not all closed; #38 exposes real container findings and #39
-proposes a scoped replacement of unverified current navigation assets.
+readiness. P0/P1/P2 are not all closed. The [current closure report](RELEASE_CLOSURE_STATUS.md)
+records tested Hooks/browser changes, combined-candidate checks, runtime-tooling
+reductions and remaining rights/security/external-service blockers.
 
 **Release decision: NO-GO.** See [current verification ledger](RELEASE_VERIFICATION.md), [candidate runbook](RELEASE_CANDIDATE.md), and [dependency/security evidence](DEPENDENCY_SECURITY_REVIEW.md). Checked items below are scoped observations, not full release clearance.
 
@@ -44,7 +45,8 @@ proposes a scoped replacement of unverified current navigation assets.
 ## 3. Developer experience and adoption
 
 - [x] Add code-based Mermaid architecture diagrams in both READMEs.
-- [ ] Capture current UI screenshots/video only after manual acceptance and privacy review; none fabricated.
+- [x] Capture actual Chromium screenshots/WebM using synthetic API fixtures in #40/#42; scope, visual spot-check and expiry are in the [closure report](RELEASE_CLOSURE_STATUS.md).
+- [ ] Complete human-operated, real-provider demo acceptance; synthetic UI recordings do not satisfy this gate.
 - [x] Provide two newly drafted synthetic example questions (not a replacement for the 408 bank)
 - [x] Add 530-ID provenance ledger and a structure/review-status audit (all 530 remain REVIEW_REQUIRED)
 - [x] Current heads of checked branches have no question-bank JSON; historical commits and external copies remain unresolved ([history review](GIT_HISTORY_EXPOSURE_REVIEW.md)).
@@ -82,7 +84,8 @@ See [MERGE_SEQUENCE.md](MERGE_SEQUENCE.md) for the completed merge sequence and 
 
 - [x] Merged [PR #7](https://github.com/Xiaomuw/Learning-assistant/pull/7): Next.js 16.4.2 / React 19.3.0, production Docker login-route smoke, dependency audit, and real auth regression workflow passed before merge.
 - [ ] Complete real-model RAG/chat/SSE, browser/mobile acceptance, external email delivery, public TLS/CORS/proxy and staging checks. CI is not a full production acceptance test.
-- [ ] Remove scoped React Hooks migration exceptions and review remaining lint warnings when safe ([issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8)).
+- [x] Implement and test removal of five scoped React Hooks exceptions in Draft #40; strict lint reports zero warnings.
+- [ ] Review/merge #40 and verify final main before closing [issue #8](https://github.com/Xiaomuw/Learning-assistant/issues/8).
 
 ## 5. OpenAI Codex for Open Source application
 

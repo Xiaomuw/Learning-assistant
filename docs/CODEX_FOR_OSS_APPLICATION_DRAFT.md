@@ -1,12 +1,12 @@
 # Codex for Open Source — truthful application draft
 
-**Current status (2026-10-22): DRAFT FOR OWNER REVIEW; NOT SUBMITTED.** This is a template for the actual maintainer to review and update, not an application, admission claim, or guarantee. The maintainer should review the evidence and disclose unresolved licensing/security work before deciding whether to apply. Our release NO-GO is a project decision, not an additional official eligibility rule.
+**Current status (2026-10-23): DRAFT FOR OWNER REVIEW; NOT SUBMITTED.** This is a template for the actual maintainer to review and update, not an application, admission claim, or guarantee. The maintainer should review the evidence and disclose unresolved licensing/security work before deciding whether to apply. Our release NO-GO is a project decision, not an additional official eligibility rule.
 
 Official application: https://openai.com/form/codex-for-oss/
 
-## Official conditions checked on 2026-10-22
+## Official conditions checked on 2026-10-23
 
-The [current official form](https://openai.com/form/codex-for-oss/) invites active maintainers of open-source projects with meaningful usage, broad adoption or clear importance to the ecosystem. It looks for maintenance signals such as reviewing PRs, triaging issues and managing releases. It does not state a universal minimum star count. Selected maintainers may receive six months of ChatGPT Pro; Codex Security access and API credits are assessed for qualifying needs. Review is rolling and selection is not guaranteed.
+The [official program page](https://developers.openai.com/community/codex-for-oss) invites core maintainers and widely used public projects, and also asks projects with ecosystem importance to explain their case. The [current official form](https://openai.com/form/codex-for-oss/) requests the maintainer role and evidence such as stars, downloads or ecosystem value. It looks for maintenance signals such as reviewing PRs, triaging issues and managing releases. It does not state a universal minimum star count. Selected maintainers may receive six months of ChatGPT Pro; Codex Security access and API credits are assessed for qualifying needs. Review is rolling and selection is not guaranteed.
 
 The form currently limits each of the three narrative answers below to 500 characters. API credits should support maintainer coding/review/release work; do not describe them as a subsidy for this application's end-user tutoring traffic. The owner must reconfirm the live form and program terms before submitting. No application was submitted here.
 
@@ -33,14 +33,14 @@ Use credits for maintainer coding, review and release work: reproduce issues, im
 
 ## Draft response: Anything else we should know? (max 500 characters)
 
-The project is early-stage, with no verified external adoption. Apache-2.0 covers the code; two independent examples replace the unverified question bank in current trees. Historical data rights, dependency findings and live-model/browser/staging acceptance remain open. Release materials explicitly say NO-GO. We do not claim download counts, external contributors, production readiness or a completed security audit.
+The project is early-stage, with no verified external adoption. Apache-2.0 and explicit scope are present; two original examples replace the unverified question bank in current trees. Combined CI and recorded Chromium tests use isolated databases and synthetic APIs. Historical rights, dependency findings and live-service/device acceptance remain open. Release materials say NO-GO; we claim no production readiness or completed security audit.
 
-**Characters:** 418/500.
+**Characters:** 444/500.
 
-## Evidence snapshot (2026-10-22, must refresh before submission)
+## Evidence snapshot (2026-10-23, must refresh before submission)
 
 - Public GitHub repo with owner/maintainer write access: **yes**.
-- Stars: **0**; forks: **0**; published Releases: **0** according to a fresh GitHub API check on 2026-10-22. No verified external usage/download metrics were available; do **not** invent them.
+- Stars: **0**; forks: **0**; published Releases: **0** according to a fresh GitHub API check on 2026-10-23. No verified external usage/download metrics were available; do **not** invent them.
 - PR #6 merged: the five original question JSONs are absent from the current main tree; generic import and AI practice remain.
 - PR #3 merged: Apache-2.0, license scope, English README, governance templates, Dependabot, CI and historical provenance ledger are on main.
 - PR #7 merged: Next.js 16.4.2 / React 19.3.0 migration, Docker login-route smoke and real auth regression CI are on main.
@@ -50,12 +50,22 @@ The project is early-stage, with no verified external adoption. Apache-2.0 cover
 - Draft PR #30 adds a real PostgreSQL graph round-trip regression and fixes the discovered question JSON corruption, extends actual HTTP SSE coverage and verifies empty-volume restart. Draft #31 narrows two Python dependency alerts with focused tests. These are proposed work, not merged or released changes.
 - Draft #32 adds parser security updates and real multipart/PDF regressions; Draft #33 adds controlled-embedding PostgreSQL retrieval tests and fixes two reproduced mapping-isolation defects. Exact-head outcomes and test limitations are in the verification ledger; these are maintenance evidence, not adoption or release claims.
 - Draft #34 adds a coordinated FastAPI/Starlette security update, reproduced form-limit regressions and actual loopback HTTP SSE disconnect cleanup. A fresh local combination of #31/#32/#34 requirements passes 103 focused tests and reports no known Python dependency vulnerabilities; this is scoped evidence, not a comprehensive audit or merged release.
-- Next steps: assess historical exposure and third-party rights, complete real-model/browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The project still has no published Release and no verified external adoption metrics.
+- Next steps: assess historical exposure and third-party rights, complete real-model/physical-device/other-browser/staging tests, publish an accurate version, and collect genuine third-party adoption/feedback. The project still has no published Release and no verified external adoption metrics.
 - Drafts #35/#36 reduce compatible Web/Taro transitive dependency findings and extend existing CI with project CSS-pipeline and stream-client regressions. Both full JavaScript audits still fail; these proposed mitigations are maintenance evidence, not a completed security audit.
 
 ### Maintenance follow-up — 2026-10-23
 
-Draft [#37](https://github.com/Xiaomuw/Learning-assistant/pull/37) adds verified Action commit pins, credential-free checkout and three synthetic Git-config regressions. A local composition preflight of #30–#37 passes scoped checks without merging or publishing a combined candidate. This is additional maintenance evidence; the official-form and adoption snapshot above remains dated 2026-10-22 and must still be refreshed before submission.
+Draft [#37](https://github.com/Xiaomuw/Learning-assistant/pull/37) adds verified Action commit pins, credential-free checkout and three synthetic Git-config regressions. A local composition preflight of #30–#37 passes scoped checks without merging or publishing a combined candidate. This is historical maintenance evidence; a later combined branch now runs hosted acceptance. The official form and zero-star/zero-fork/zero-release snapshot were refreshed on 2026-10-23. Refresh again before any submission.
+
+### Additional reviewed evidence — 2026-10-23
+
+Drafts #40/#41 add tested Hooks fixes, recorded real Chromium UI with synthetic
+APIs, archive boundaries and packaged project licenses. #42 runs the combined
+proposal set through hosted DB/HTTP/client/Compose tests and final-image scans;
+#43 reduces unnecessary runtime installer tooling. The [closure report](RELEASE_CLOSURE_STATUS.md)
+links exact results and remaining rights/security/device/service limits. These are
+maintainer activities, not external adoption or merged/released functionality.
+The first-run issue form enables real reports but no user report is invented.
 
 ## Mandatory accuracy checks before using these draft answers
 

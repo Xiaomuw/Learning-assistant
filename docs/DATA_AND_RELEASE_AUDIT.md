@@ -2,7 +2,7 @@
 
 **Status: BLOCKED for public release.** This is an evidence and action register, not a completed legal/security audit.
 
-See the [2026-10-22 verification ledger](RELEASE_VERIFICATION.md) for the latest scoped test results and [security review](DEPENDENCY_SECURITY_REVIEW.md) for actual audit findings. This older register preserves provenance evidence.
+See the [current verification ledger](RELEASE_VERIFICATION.md) for the latest scoped test results and [security review](DEPENDENCY_SECURITY_REVIEW.md) for actual audit findings. This older register preserves provenance evidence.
 
 ## Verified observations
 
@@ -76,3 +76,12 @@ Excluding a dataset from the repository Apache-2.0 scope does **not** authorize 
 - [ ] Publish owner-approved changelog, limitations, source notices and release tag.
 
 See [open-source readiness](OPEN_SOURCE_READINESS.md); a successful static check is not release approval.
+
+## 2026-10-23 scoped additions
+
+#41 inventories 33 baseline assets by path/blob ID and excludes historical reports
+from `git archive`; #39 replaces the 16 current navigation PNGs with attributed
+sources. Neither action clears old Git data or proves rights to original code.
+#42 adds final-image inventories and scoped combined acceptance. See the
+[closure report](RELEASE_CLOSURE_STATUS.md); the unresolved owner/rights and real
+service gates above remain unchecked. No old question text was reintroduced.

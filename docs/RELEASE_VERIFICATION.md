@@ -2,6 +2,10 @@
 
 **Overall: NO-GO.** This ledger records observations, including failures and skipped checks. A checked documentation box is not test evidence. New work stays in Draft PRs for maintainer review; nothing was merged, released or deployed by this task.
 
+The latest follow-up is in the [closure report](RELEASE_CLOSURE_STATUS.md), including
+combined candidate CI, recorded browser evidence and final-image scans. Older dated
+entries below remain historical evidence, not current-head clearance.
+
 ## Baseline and existing work
 
 The initial fresh clone was clean at main `712c0538571d01129c0f8b1fb5488b35c9df6058` (merge of #27). There were 30 remote branch heads, no Git tags, no published GitHub Releases, and 14 open PRs: docs #2/#29 plus Dependabot #9–#16 and #18–#21. #17 was not an open upgrade. Issues #4 (deployment/live acceptance), #5 (question rights/history) and #8 (Hooks lint debt) remain open.
@@ -20,7 +24,7 @@ PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seve
 | Third-party vulnerabilities | Partial mitigation in #31/#32/#34/#35/#36 | Six Python pins have a clean combined local audit; compatible Web/Taro fixes reduce findings. All remain unmerged; unresolved JS/image issues remain |
 | Complete RAG upload→parse→embed→retrieve→citation pipeline | Controlled-embedding PGVector integration proposed in #33 | Actual URL parsing, chunking, vector storage/search and source metadata; real-provider quality and browser citation rendering remain unverified |
 | Immutable Actions / credential-free checkout | Proposed and CI verified in #37 | 24 pinned calls, 13 runner checks; main still unmodified |
-| Python transitive lock / immutable images / image scanning | Not complete | Fresh installation success is date/environment-specific |
+| Python transitive lock / immutable images / image scanning | Partial | #38 pins bases; #42 scans final images; complete Python/apt locking and advisory remediation remain open |
 | Licenses, copied assets and history | Partial inventory, unresolved | See dedicated reviews; not lawful-redistribution clearance |
 | Live model/embedding, SMTP, WeChat and staging | Credentials/resources needed; not run | Owner sandbox keys, explicit spending authorization, real app configuration and disposable deployment target |
 | Key rotation, history rewrite, legal remediation | Owner decision; not suitable for automatic action | No force push, remote deletion, credential revocation or legal conclusion |
@@ -30,7 +34,7 @@ PR #29 was already Draft at `bc1cf3ac2fb3a0b4b2b517a3131cddc4bf7a6d46`; its seve
 1. **Unit/Fake/SQLite:** deterministic models/retrievers, framework mocks, in-memory repositories or SQLite. These verify logic/contracts, not provider behavior.
 2. **Isolated PostgreSQL / real HTTP:** disposable database/schema, actual FastAPI/Next HTTP processes and local SMTP sink. In #30 deterministic SSE uses the real graph and transport, but no LLM.
 3. **Real external model/services:** not run. No paid model, embedding, web-search or external mail API was called.
-4. **Full browser/device/deployment:** not run in this task. Historical screenshots do not validate current code or target deployment.
+4. **Browser/device/deployment:** real Chromium against synthetic API fixtures and isolated production-image packaging were added in #40/#42; see the [closure report](RELEASE_CLOSURE_STATUS.md). Physical devices, external providers, production-mode configuration and HTTPS staging remain unverified. Historical screenshots do not validate current code.
 
 ## Previously completed hosted runs, read and checked
 

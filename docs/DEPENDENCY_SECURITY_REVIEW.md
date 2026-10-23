@@ -17,7 +17,7 @@
 | Web with proposed #35 lockfile | 9 affected nodes: 7 high, 2 moderate; distinct direct advisory IDs 11 → 2 | Full audit still exits 1; production audit remains 0 |
 | Taro full `npm audit` | 83 findings: 8 critical, 51 high, 23 moderate, 1 low | Separate compatible upgrade work and bundle reachability review |
 | Taro with proposed #36 lockfile | 79 affected nodes: 4 critical, 51 high, 23 moderate, 1 low; distinct direct advisory IDs 162 → 118 | Four compatible transitive patches; full audit still exits 1 |
-| Docker base images / OS packages, #38 | Four pinned linux/amd64 bases scanned on 2026-10-23; all report HIGH findings, PGVector also CRITICAL | Gate fails; final built application images and runtime reachability remain unreviewed |
+| Docker base images / OS packages, #38 | Four pinned linux/amd64 bases scanned on 2026-10-23; all report HIGH findings, PGVector also CRITICAL | Gate fails; final built application images are now scanned in #42; runtime reachability/remaining remediation still need review |
 
 Taro's eight critical affected package nodes include `@tarojs/components`, `@tarojs/taro`, `decompress`, `proxy-addr`, `shell-quote`, `swiper`, `vm2` and `websocket-driver`. These are package/advisory propagation counts, not eight independently confirmed runtime vulnerabilities. Investigate bundled components such as Swiper separately from build tooling. Some automatic npm suggestions would downgrade Taro to 3.x; do not run `npm audit fix --force` as a release strategy.
 
@@ -123,3 +123,53 @@ and complete ISC/Feather MIT notices. Source Git blob hashes match upstream.
 This addresses only those current assets after review/merge; historical PNGs,
 other media, original code and final distributed bundle obligations are not
 cleared. See the [standards assessment](OPEN_SOURCE_STANDARDS_ASSESSMENT.md).
+
+
+## Final-image runtime reduction and upstream checks — 2026-10-23
+
+The final #42 candidate `13805cb8f5102acdaf4fae03a8c9ab4d75f65843` incorporates
+#43's tested runtime installer reduction. Trivy 0.76.1 scans exact local linux/amd64
+image IDs with HIGH/CRITICAL filtering only. Before/after comparison:
+
+| Final application filesystem | Before | After | Cause / remaining boundary |
+| --- | --- | --- | --- |
+| Frontend | 11 HIGH, 0 CRITICAL | 0 HIGH, 0 CRITICAL | Remove unused global npm/Corepack/Yarn; use Node directly for Next startup; application npm dependencies retained |
+| Backend | 52 HIGH, 0 CRITICAL | 48 HIGH, 0 CRITICAL | Remove pip and ensurepip installer bundles after dependency installation; application urllib3 was already 2.8.0; all remaining 48 OS matches have no FixedVersion in this report |
+
+The four removed backend matches concern installer-bundled msgpack 1.1.2,
+setuptools 70.3.0 and urllib3 2.7.0 (two advisories). Production imports, migrations,
+API proxy checks and synthetic dump/restore pass after removal. Builder images and
+lower OCI layers still require separate distribution/security treatment; final
+filesystem absence is not erasure of prior image layers. No production image was
+pushed. Both security workflows remain failing because other findings are real.
+
+[Exact workflow](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39924777395),
+[raw final-image reports / license inventories / CycloneDX SBOM](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39924777395/artifacts/12489430896)
+and [sanitized snapshot](audits/candidate-verification-2026-10-23.json) preserve the
+results. The ZIP digest was verified after downloading. License detection covers
+OS, language packages and loose files, including LGPL/GPL/MPL and custom labels;
+these require component-specific review, not blanket rejection or automatic
+approval. Project LICENSE/scope copies are byte-verified inside both containers;
+Taro also verifies LICENSE.txt, scope and icon NOTICE. This does not fulfill every
+third-party source, notice or relinking obligation by itself.
+
+Read-only upstream checks also found:
+
+- `npm view @tarojs/components@4.3.0 dependencies --json` still specifies Swiper
+  11.1.15. A blind Taro major/minor upgrade is not evidence that its critical
+  advisory chain disappears.
+- `npm view braces versions --json` ends at 3.0.3; no newer published version
+  resolves the recorded GHSA-vfj7-8cjw-p6xm in this review. Compatible patches in
+  #35/#36 remain useful, but full npm audits stay failing (Web: 9 affected nodes,
+  7 HIGH / 2 MODERATE; Taro: 79 nodes, 4 CRITICAL / 51 HIGH / 23 MODERATE / 1 LOW,
+  from the separately dated lockfile audits).
+- Trivy evaluated `pgvector/pgvector:pg16-trixie@sha256:40d828eda66737aaacb934387a337babf1455ebd56e9bdd13fc08e211257c972`
+  as a possible alternative: 87 HIGH / 2 CRITICAL, exit 10. It was **not adopted**:
+  findings remain, and changing database OS family needs volume/collation and
+  backup/restore compatibility review. The actual candidate keeps the tested
+  pg16 digest and its 113 HIGH / 16 CRITICAL findings visible.
+
+No signed VEX, exception approval, paid provider call or complete security/legal
+clearance was issued. The [closure report](RELEASE_CLOSURE_STATUS.md) assigns
+remaining evidence requirements without pretending that unpatched upstream code,
+owner rights, physical devices or external user feedback have been supplied.
