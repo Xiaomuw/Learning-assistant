@@ -11,7 +11,7 @@ import sys
 
 def check_checkout(repository: Path) -> int:
     result = subprocess.run(
-        ["git", "config", "--local", "--get-regexp", r"^http\..*\.extraheader$"],
+        ["git", "config", "--local", "--get-regexp", r"^http(\..*)?\.extraheader$"],
         cwd=repository,
         capture_output=True,
         check=False,

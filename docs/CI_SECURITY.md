@@ -47,8 +47,11 @@ python scripts/check_ci_checkout.py
 git diff --check
 ```
 
-The three new tests cover a clean checkout, redacted rejection of a stored header,
-and an inspection error. Local validation passed all 15 script tests. Workflow
+The three new tests cover a clean checkout, redacted rejection of stored headers
+(both URL-scoped and unscoped), and an inspection error. An additional synthetic
+check reproduced a missed unscoped `http.extraheader` in the initial guard; its
+pattern was corrected and both forms now run as subtests. Local validation passed
+all 15 script tests. Workflow
 syntax/expressions were checked with upstream actionlint 1.7.12; its downloaded
 Linux amd64 archive matched the GitHub release asset SHA-256
 `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8`.

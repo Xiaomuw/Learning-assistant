@@ -38,15 +38,21 @@ class CheckoutCredentialTests(unittest.TestCase):
     def test_persisted_header_fails_without_disclosing_value(self) -> None:
         self.initialize()
         fake_header = "AUTHORIZATION: basic synthetic-ci-test-only"
-        subprocess.run(
-            ["git", "config", "--local", "http.https://github.com/.extraheader", fake_header],
-            cwd=self.repository, check=True, capture_output=True,
-        )
-        code, output = self.inspect()
-        self.assertEqual(code, 1)
-        self.assertNotIn(fake_header, output)
-        self.assertNotIn("synthetic-ci-test-only", output)
-        self.assertIn("values withheld", output)
+        for key in ("http.https://github.com/.extraheader", "http.extraheader"):
+            with self.subTest(key=key):
+                subprocess.run(
+                    ["git", "config", "--local", key, fake_header],
+                    cwd=self.repository, check=True, capture_output=True,
+                )
+                code, output = self.inspect()
+                self.assertEqual(code, 1)
+                self.assertNotIn(fake_header, output)
+                self.assertNotIn("synthetic-ci-test-only", output)
+                self.assertIn("values withheld", output)
+                subprocess.run(
+                    ["git", "config", "--local", "--unset-all", key],
+                    cwd=self.repository, check=True, capture_output=True,
+                )
 
     def test_inspection_failure_does_not_pass(self) -> None:
         code, output = self.inspect()
