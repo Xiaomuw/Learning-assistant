@@ -71,6 +71,20 @@ jobs:
             --build-arg INTERNAL_API_BASE=http://127.0.0.1:18080/api \
             --build-arg NEXT_PUBLIC_API_BASE=/api \
             -t learning-assistant-frontend:review frontend
+      - name: Verify runtime does not expose global package managers
+        run: |
+          docker run --rm --entrypoint sh learning-assistant-frontend:review -ec '
+            for tool in npm npx corepack yarn yarnpkg pnpm pnpx; do
+              if command -v "$tool" >/dev/null 2>&1; then
+                echo "Unexpected runtime package manager: $tool" >&2
+                exit 1
+              fi
+            done
+            test ! -d /usr/local/lib/node_modules/npm
+            test ! -d /usr/local/lib/node_modules/corepack
+            node --version
+            test -f node_modules/next/dist/bin/next
+          '
       - name: Verify container can serve the public login route
         run: |
           set -eu

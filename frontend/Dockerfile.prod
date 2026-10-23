@@ -37,7 +37,10 @@ RUN addgroup -S nextjs \
 
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev \
-    && npm cache clean --force
+    && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+       /opt/yarn-v* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+       /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/pnpm /usr/local/bin/pnpx
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
@@ -49,4 +52,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+CMD ["node", "node_modules/next/dist/bin/next", "start", "--hostname", "0.0.0.0", "--port", "3000"]
