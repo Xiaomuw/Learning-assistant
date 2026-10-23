@@ -32,12 +32,12 @@
     },
     {
       "pr": 37,
-      "head": "169baf1bc7e98c52858a4a6c83b27cacc770162f"
+      "head": "02d850ba57fb119f090e0fe53212fed65f305bc6"
     }
   ],
   "method": "Apply each git diff --binary BASE HEAD through git apply --3way --index in a disposable detached worktree; stop on any error.",
   "conflicts": [],
-  "combined_git_tree": "cf0a8bde243191d7b6a6f14056e58fd16669e9dc",
+  "combined_git_tree": "aeb4a3cfeaacff31dbac87427464fb2440481d75",
   "candidate_commit_created": false,
   "remote_candidate_published": false,
   "prs_merged": false,
@@ -60,5 +60,7 @@
     "Live providers",
     "Browser/device/staging acceptance"
   ],
-  "release_decision": "NO-GO"
+  "release_decision": "NO-GO",
+  "supersedes_initial_tree": "cf0a8bde243191d7b6a6f14056e58fd16669e9dc",
+  "follow_up_reason": "PR #37 additionally rejects unscoped repository-local HTTP headers; all eight final heads were reapplied in a fresh detached worktree and scoped checks rerun."
 }

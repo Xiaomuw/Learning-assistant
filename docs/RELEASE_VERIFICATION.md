@@ -314,12 +314,17 @@ confirms 69/69 modules. Those are prior-head results, not this documentation upd
 
 ### CI hardening #37
 
-Head: `169baf1bc7e98c52858a4a6c83b27cacc770162f`. All 24 Action calls now use
+Final head: `02d850ba57fb119f090e0fe53212fed65f305bc6`. All 24 Action calls now use
 full official commit SHAs, resolved independently through GitHub's refs API and
 `git ls-remote`. Existing major versions remain. All 13 checkout steps disable
 credential persistence and immediately check repository-local Git HTTP headers.
 Three regressions use fresh temporary Git repositories and synthetic values;
-they reject a persisted header without logging it and fail on inspection errors.
+they reject both URL-scoped and unscoped persisted headers without logging values
+and fail on inspection errors. A follow-up synthetic check reproduced an omission
+in initial head `169baf1`: unscoped `http.extraheader` incorrectly returned success.
+The corrected pattern covers both forms and the same test runs both as subtests.
+The initial head's seven green workflows did not detect that missing case; the
+results below belong to the corrected head.
 
 ```bash
 python -m unittest discover -s scripts/tests -p 'test_*.py' -v
@@ -344,13 +349,13 @@ PR isolation are outside this check's scope.
 
 | Workflow | Run |
 | --- | --- |
-| Backend full suite | [39912718896](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39912718896) |
-| Quality | [39912718895](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39912718895) |
-| Clean Compose | [39912718819](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39912718819) |
-| Public data | [39912718914](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39912718914) |
-| Next verification | [39912718863](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39912718863) |
-| Authentication | [39912718926](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39912718926) |
-| Compose isolation | [39912718868](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39912718868) |
+| Backend full suite | [39913307233](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913307233) |
+| Quality | [39913307192](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913307192) |
+| Clean Compose | [39913307182](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913307182) |
+| Public data | [39913307205](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913307205) |
+| Next verification | [39913307183](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913307183) |
+| Authentication | [39913307163](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913307163) |
+| Compose isolation | [39913307167](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913307167) |
 
 ### Local combination preflight (not a released or hosted candidate)
 
@@ -361,7 +366,9 @@ detached worktree on the baseline, each proposal's binary diff was applied with
 without conflicts. No GitHub PR was merged, no candidate commit was created and
 no combined branch was pushed.
 
-The resulting tree is `cf0a8bde243191d7b6a6f14056e58fd16669e9dc`. It retains all
+The final preflight tree is `aeb4a3cfeaacff31dbac87427464fb2440481d75` (superseding
+initial tree `cf0a8bde243191d7b6a6f14056e58fd16669e9dc` after #37's header-check
+correction). All eight final heads were reapplied in a fresh detached worktree. It retains all
 six Python security pins, both npm-generated lockfiles, the CSS/stream CI additions
 and all Action pins/checkout checks. On this combined local tree:
 
@@ -382,3 +389,10 @@ existing workflows on the final reviewed candidate commit before release.
 Main still lacks these unmerged fixes. Image digests/OS scanning, unresolved
 JavaScript findings, content/license/history review and live-model/browser/device/
 staging acceptance remain open. **Release remains NO-GO.**
+
+Documentation follow-up: #29 at `b85e20556dc97a3d7e931964914e5d7ddc12ed8f`
+passed all seven workflows, including [backend](https://github.com/Xiaomuw/Learning-assistant/actions/runs/39913141327).
+The subsequent documentation correction records #37's final header-check fix and
+recomputed combination tree; its own checks are tracked on the PR, not inferred
+from these prior results. Local Markdown links/JSON validation and whitespace
+checks pass. No release gate was relaxed.
