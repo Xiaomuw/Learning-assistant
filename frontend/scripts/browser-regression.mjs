@@ -18,6 +18,8 @@ const results = [];
 
 async function setup(browser, name, viewport, authenticated = true) {
   const context = await browser.newContext({ viewport, recordVideo: { dir: path.join(output, 'videos') } });
+  const setSyntheticCookie = () => context.addCookies([{ name: 'la_access_token', value: 'synthetic-ui-only-not-a-jwt', url: base, httpOnly: true, sameSite: 'Lax' }]);
+  if (authenticated) await setSyntheticCookie();
   let signedIn = authenticated;
   let dashboardCalls = 0;
   let latestCalls = 0;
@@ -26,8 +28,8 @@ async function setup(browser, name, viewport, authenticated = true) {
     let body;
     let status = 200;
     if (pathname.endsWith('/auth/me')) { status = signedIn ? 200 : 401; body = signedIn ? { user } : { detail: 'Synthetic signed-out fixture' }; }
-    else if (pathname.endsWith('/auth/login')) { signedIn = true; body = { user }; }
-    else if (pathname.endsWith('/auth/logout')) { signedIn = false; body = {}; }
+    else if (pathname.endsWith('/auth/login')) { signedIn = true; await setSyntheticCookie(); body = { user }; }
+    else if (pathname.endsWith('/auth/logout')) { signedIn = false; await context.clearCookies(); body = {}; }
     else if (pathname.endsWith('/auth/refresh')) { status = 401; body = {}; }
     else if (pathname.endsWith('/subjects')) body = [];
     else if (pathname.endsWith('/profile')) body = { ...user, display_name: 'Synthetic Profile' };
